@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: s2poc-db
+    environment:
+      POSTGRES_USER: poc
+      POSTGRES_PASSWORD: poc
+      POSTGRES_DB: poc
+    ports:
+      - "5433:5432"          # 5433 to avoid clashing with a local Postgres on 5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U poc"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

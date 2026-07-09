@@ -1,0 +1,18 @@
+{
+  "name": "s2-poc",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Ratio 3.0 — S2 Multi-tenancy & Routing proof of concept",
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down -v",
+    "db:init": "psql postgres://poc:poc@localhost:5433/poc -v ON_ERROR_STOP=1 -f db/schema.sql -f db/seed.sql",
+    "start": "node src/server.js",
+    "prove": "node test/prove.js",
+    "prove:s1": "node test/prove-s1.js",
+    "onboard": "node scripts/onboard.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1"
+  }
+}
