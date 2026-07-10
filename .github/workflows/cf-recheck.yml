@@ -1,0 +1,19 @@
+name: CF recheck custom hostname
+on:
+  workflow_dispatch:
+    inputs:
+      zone: { required: true, default: ratiodev.in }
+      hostname: { required: true }
+jobs:
+  r:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-trigger validation + status
+        run: |
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.zone }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          CHID=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames?hostname=${{ inputs.hostname }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          echo "custom hostname id: $CHID"
+          curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames/$CHID" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
+            --data '{"ssl":{"method":"txt","type":"dv"}}' \
+            | jq '.result | {hostname, status, ssl_status:.ssl.status, verification_errors}'
