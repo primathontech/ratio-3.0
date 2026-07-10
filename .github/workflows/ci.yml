@@ -58,6 +58,13 @@ jobs:
         run: npx wrangler deploy
       - name: Set Worker DATABASE_URL secret
         run: echo "${{ secrets.DATABASE_URL }}" | npx wrangler secret put DATABASE_URL
+      # Path B: point the edge Worker at the container origin. Dormant until you set
+      # repo var PATH_B=true and add ORIGIN_URL + EDGE_SECRET secrets.
+      - name: Point Worker at container origin (path B)
+        if: vars.PATH_B == 'true'
+        run: |
+          echo "${{ secrets.ORIGIN_URL }}"  | npx wrangler secret put ORIGIN_URL
+          echo "${{ secrets.EDGE_SECRET }}" | npx wrangler secret put EDGE_SECRET
 
   # Path B (origin on AWS). Dormant until you set repo variable DEPLOY_AWS=true and
   # add the AWS secrets/vars. Builds the origin image and pushes to ECR; App Runner
