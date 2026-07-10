@@ -73,11 +73,14 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ vars.AWS_REGION }}
-      - name: Login to Amazon ECR
-        run: aws ecr get-login-password --region "${{ vars.AWS_REGION }}" | docker login --username AWS --password-stdin "${{ vars.ECR_REGISTRY }}"
-      - name: Build & push origin image
+      - name: Build & push origin image to ECR
         run: |
-          IMG="${{ vars.ECR_REGISTRY }}/ratio-3-0-origin"
+          set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          IMG="$REGISTRY/ratio-3-0-origin"
           docker build -t "$IMG:${{ github.sha }}" -t "$IMG:latest" .
           docker push "$IMG:${{ github.sha }}"
           docker push "$IMG:latest"
+          echo "pushed $IMG:latest"
