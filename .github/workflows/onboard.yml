@@ -1,0 +1,33 @@
+name: Onboard merchant
+
+# Manual: onboard a store as DATA (tenant + host mapping + home route) into Neon.
+# "Merchant = data" — no deploy, no code change.
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: tenant id (e.g. t_techalchemist)
+        required: true
+      name:
+        description: store name
+        required: true
+      host:
+        description: hostname (e.g. techalchemist.in)
+        required: true
+      color:
+        description: theme hex
+        required: true
+        default: '#333333'
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Onboard into Neon
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/onboard.ts "${{ inputs.id }}" "${{ inputs.name }}" "${{ inputs.host }}" "${{ inputs.color }}"
