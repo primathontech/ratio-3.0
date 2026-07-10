@@ -75,9 +75,9 @@ apps/edge/worker.ts       DATA PLANE — Cloudflare Worker (host→tenant, injec
 apps/origin/index.ts      DATA PLANE — Hono app (shared host)
 apps/origin/server.ts     DATA PLANE — container entrypoint
 apps/admin/               CONTROL PLANE — Ratio merchant dashboard (planned, OFCE-362)
-services/control-plane/   CONTROL PLANE — authed onboarding/content API (planned, OFCE-362)
+services/admin-api/   CONTROL PLANE — authed onboarding/content API (planned, OFCE-362)
 packages/repo/            tenant-scoped repository — the one gate (deny-by-default)
-packages/provisioning/    onboardStore() / deleteStore()  (→ moves into control-plane)
+packages/provisioning/    onboardStore() / deleteStore()  (→ moves into services/admin-api)
 packages/shared/          db · metrics · ratelimit
 dev/                      local two-server simulator (edge-sim + server) — dev only
 db/migrations/            schema migrations + runner (scripts/migrate.ts)
@@ -85,5 +85,5 @@ db/migrations/            schema migrations + runner (scripts/migrate.ts)
 ```
 
 > Data plane (shopper runtime) is built + live. Control plane (`apps/admin` +
-> `services/control-plane`) is the next build — onboarding/editing move there as an
+> `services/admin-api`) is the next build — onboarding/editing move there as an
 > authenticated product, off the ops workflows.

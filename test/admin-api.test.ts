@@ -2,7 +2,7 @@
 // The admin UI + the AI agent both call this. In-process via app.fetch(), real test DB.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { app } from '../services/control-plane/app';
+import { app } from '../services/admin-api/app';
 import { forTenant } from '../packages/repo/index';
 import { pool } from '../packages/shared/db';
 
