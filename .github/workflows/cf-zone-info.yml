@@ -1,0 +1,20 @@
+name: CF zone info
+
+# Manual: prints a zone's status + assigned Cloudflare nameservers.
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain
+        required: true
+        default: ratiodev.in
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Zone info
+        run: |
+          resp=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.domain }}" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}")
+          echo "$resp" | jq '{success, errors, name: .result[0].name, status: .result[0].status, name_servers: .result[0].name_servers, original_name_servers: .result[0].original_name_servers}'
