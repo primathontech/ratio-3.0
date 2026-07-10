@@ -1,0 +1,14 @@
+name: CF DCV delegation id
+on:
+  workflow_dispatch:
+    inputs:
+      zone: { required: true, default: ratiodev.in }
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get DCV delegation UUID
+        run: |
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.zone }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          echo "zone $ZID"
+          curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/dcv_delegation/uuid" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq '{success, errors:(.errors|map(.message)), uuid:.result.uuid}'
