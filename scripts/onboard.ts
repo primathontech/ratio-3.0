@@ -1,12 +1,12 @@
 // Onboard a new store in seconds — it's just rows (no repo, no build, no restart).
-// usage: node scripts/onboard.js <tenantId> <Name> <host> [hexColor]
-const { onboardStore } = require('../src/onboard');
-const { pool } = require('../src/db');
+// usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]
+import { onboardStore } from '../src/onboard';
+import { pool } from '../src/db';
 
 const [, , id, name, host, color = '#333333'] = process.argv;
 if (!id || !name || !host) {
-  console.error('usage: node scripts/onboard.js <tenantId> <Name> <host> [hexColor]');
-  console.error('example: node scripts/onboard.js t_gamma Gamma gamma.localhost "#27ae60"');
+  console.error('usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]');
+  console.error('example: tsx scripts/onboard.ts t_gamma Gamma gamma.localhost "#27ae60"');
   process.exit(1);
 }
 
@@ -15,7 +15,7 @@ if (!id || !name || !host) {
   console.log(`onboarded "${name}" (${id}) → http://${host}:8080/`);
   console.log('(no restart needed; the edge host-cache TTL is ~5s, so give it a moment)');
   await pool.end();
-})().catch((e) => {
-  console.error('onboard failed:', e.message);
+})().catch((e: unknown) => {
+  console.error('onboard failed:', (e as Error).message);
   process.exit(1);
 });

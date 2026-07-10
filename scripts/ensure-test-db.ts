@@ -1,5 +1,5 @@
 // Ensures the test database exists (dep-free; uses pg). Idempotent.
-const { Client } = require('pg');
+import { Client } from 'pg';
 
 const ADMIN_URL = process.env.ADMIN_URL || 'postgres://localhost:5432/postgres';
 const TEST_DB = process.env.TEST_DB || 's2poc_test';
@@ -15,7 +15,7 @@ const TEST_DB = process.env.TEST_DB || 's2poc_test';
     console.log(TEST_DB, 'exists');
   }
   await admin.end();
-})().catch((e) => {
-  console.error('ensure-test-db failed:', e.message);
+})().catch((e: unknown) => {
+  console.error('ensure-test-db failed:', (e as Error).message);
   process.exit(1);
 });

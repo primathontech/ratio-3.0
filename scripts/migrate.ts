@@ -1,8 +1,8 @@
-// Tiny forward-only migration runner (no dependency). Applies db/migrations/*.sql
+// Tiny forward-only migration runner (no external dep). Applies db/migrations/*.sql
 // in filename order, each in a transaction, recorded in schema_migrations.
-const fs = require('fs');
-const path = require('path');
-const { pool } = require('../src/db');
+import fs from 'fs';
+import path from 'path';
+import { pool } from '../src/db';
 
 (async () => {
   await pool.query(
@@ -29,7 +29,7 @@ const { pool } = require('../src/db');
     }
   }
   await pool.end();
-})().catch((e) => {
-  console.error('migrate failed:', e.message);
+})().catch((e: unknown) => {
+  console.error('migrate failed:', (e as Error).message);
   process.exit(1);
 });

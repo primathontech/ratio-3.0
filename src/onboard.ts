@@ -1,9 +1,18 @@
-const { pool } = require('./db');
+import { pool } from './db';
 
-// Provisioning (crosses tenant boundaries, so NOT a forTenant op): create a tenant,
-// its host→tenant mapping, and an initial home route — atomically, in one transaction.
-// A merchant is data: no fork, no server, no deploy. Idempotent (re-onboard = update).
-async function onboardStore({ id, name, host, color = '#333333' }) {
+// Provisioning (crosses tenant boundaries): create a tenant + host mapping + home
+// route atomically. A merchant is data: no fork, no server, no deploy. Idempotent.
+export async function onboardStore({
+  id,
+  name,
+  host,
+  color = '#333333',
+}: {
+  id?: string;
+  name?: string;
+  host?: string;
+  color?: string;
+}): Promise<void> {
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
   }
@@ -32,11 +41,15 @@ async function onboardStore({ id, name, host, color = '#333333' }) {
   }
 }
 
-// Tenant hard-delete (ADR-010 D-SEC4): purge the tenant's data, then a verification
-// pass asserts zero residual — "provably complete" is part of the op, not a hope.
-// Today that's DB (routes + domain + tenant); cache/blob/secret purge joins here
-// when those layers exist. Atomic + idempotent.
-async function deleteStore(id) {
+export interface DeleteProof {
+  deleted: boolean;
+  removed: { routes: number; domains: number; tenants: number };
+  residual: number;
+}
+
+// Tenant hard-delete (ADR-010 D-SEC4): purge + an in-txn verification pass asserting
+// zero residual. DB-scoped today; cache/blob/secret purge joins here when they exist.
+export async function deleteStore(id?: string): Promise<DeleteProof> {
   if (!id || typeof id !== 'string') {
     throw new Error('deleteStore requires a tenant id');
   }
@@ -46,7 +59,7 @@ async function deleteStore(id) {
     const routes = await client.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
     const domains = await client.query('DELETE FROM domains WHERE tenant_id = $1', [id]);
     const tenants = await client.query('DELETE FROM tenants WHERE id = $1', [id]);
-    const { rows } = await client.query(
+    const { rows } = await client.query<{ residual: string }>(
       `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
             + (SELECT count(*) FROM domains WHERE tenant_id=$1)
             + (SELECT count(*) FROM routes WHERE tenant_id=$1) AS residual`,
@@ -56,8 +69,12 @@ async function deleteStore(id) {
     if (residual !== 0) throw new Error('hard-delete incomplete: residual=' + residual);
     await client.query('COMMIT');
     return {
-      deleted: tenants.rowCount > 0,
-      removed: { routes: routes.rowCount, domains: domains.rowCount, tenants: tenants.rowCount },
+      deleted: (tenants.rowCount ?? 0) > 0,
+      removed: {
+        routes: routes.rowCount ?? 0,
+        domains: domains.rowCount ?? 0,
+        tenants: tenants.rowCount ?? 0,
+      },
       residual,
     };
   } catch (e) {
@@ -67,5 +84,3 @@ async function deleteStore(id) {
     client.release();
   }
 }
-
-module.exports = { onboardStore, deleteStore };

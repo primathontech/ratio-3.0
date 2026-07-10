@@ -1,8 +1,8 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { Pool } from 'pg';
 
-// tiny .env loader (no dependency) — lets `npm start` / `npm run prove` work
-// without passing DATABASE_URL every time.
+// tiny .env loader (no dependency) — lets scripts run without passing DATABASE_URL.
 try {
   const envPath = path.join(__dirname, '..', '.env');
   for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
@@ -13,11 +13,6 @@ try {
   /* no .env — fall back to the default below */
 }
 
-const { Pool } = require('pg');
-
-const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL || 'postgres://poc:poc@localhost:5433/poc',
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://poc:poc@localhost:5433/poc',
 });
-
-module.exports = { pool };

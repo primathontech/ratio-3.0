@@ -1,10 +1,33 @@
 // Per-tenant fixed-window rate limit (ADR-001 D-MT6). Fail-open on backing-store
-// failure (ADR-008): a limiter outage must never take the site down. The store is
-// a Map here; on the real stack it's Redis (same interface: get/set by tenantId).
-// Clock + store are injectable for deterministic tests.
-function createRateLimiter({ limit = 100, windowMs = 60_000, now = () => Date.now(), store = new Map() } = {}) {
+// failure (ADR-008). Clock + store injectable for deterministic tests.
+export interface RateResult {
+  allowed: boolean;
+  remaining: number | null;
+  failOpen?: boolean;
+}
+
+interface Entry {
+  count: number;
+  reset: number;
+}
+interface Store {
+  get(key: string): Entry | undefined;
+  set(key: string, value: Entry): void;
+}
+
+export function createRateLimiter({
+  limit = 100,
+  windowMs = 60_000,
+  now = () => Date.now(),
+  store = new Map<string, Entry>() as Store,
+}: {
+  limit?: number;
+  windowMs?: number;
+  now?: () => number;
+  store?: Store;
+} = {}) {
   return {
-    check(tenantId) {
+    check(tenantId: string): RateResult {
       if (!tenantId || typeof tenantId !== 'string') {
         throw new Error('rate limit requires a tenantId');
       }
@@ -27,5 +50,3 @@ function createRateLimiter({ limit = 100, windowMs = 60_000, now = () => Date.no
     },
   };
 }
-
-module.exports = { createRateLimiter };

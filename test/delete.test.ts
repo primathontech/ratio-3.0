@@ -1,18 +1,16 @@
-// Tenant hard-delete (ADR-010 D-SEC4): provably complete. Written test-first.
-// Scope today = DB (tenant + domain + routes). Cache/blob/secret purge joins the
-// verification pass when those layers exist.
-const { test, after } = require('node:test');
-const assert = require('node:assert');
-const { onboardStore, deleteStore } = require('../src/onboard');
-const { app } = require('../src/origin');
-const { pool } = require('../src/db');
+// Tenant hard-delete (ADR-010 D-SEC4): provably complete. Real test DB.
+import { test, after } from 'node:test';
+import assert from 'node:assert';
+import { onboardStore, deleteStore } from '../src/onboard';
+import { app } from '../src/origin';
+import { pool } from '../src/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const ID = 't_del';
 const HOST = 'del.localhost';
 
-async function residualCount(id) {
-  const { rows } = await pool.query(
+async function residualCount(id: string): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
     `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
           + (SELECT count(*) FROM domains WHERE tenant_id=$1)
           + (SELECT count(*) FROM routes WHERE tenant_id=$1) AS n`,

@@ -1,6 +1,6 @@
-const { serve } = require('@hono/node-server');
-const { app } = require('./origin');
-const { edge } = require('./edge');
+import { serve } from '@hono/node-server';
+import { app } from './origin';
+import { edge } from './edge';
 
 const ORIGIN_PORT = Number(process.env.ORIGIN_PORT || 9090);
 const EDGE_PORT = Number(process.env.EDGE_PORT || 8080);

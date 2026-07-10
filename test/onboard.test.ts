@@ -1,11 +1,10 @@
-// Onboarding = provisioning (crosses tenant boundaries): a new store is just rows.
-// Written test-first (red) before src/onboard.js exists.
-const { test, before, after } = require('node:test');
-const assert = require('node:assert');
-const { onboardStore } = require('../src/onboard');
-const { forTenant } = require('../src/repo');
-const { app } = require('../src/origin');
-const { pool } = require('../src/db');
+// Onboarding = provisioning: a new store is just rows. Real test DB.
+import { test, before, after } from 'node:test';
+import assert from 'node:assert';
+import { onboardStore } from '../src/onboard';
+import { forTenant } from '../src/repo';
+import { app } from '../src/origin';
+import { pool } from '../src/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const ID = 't_onb';
@@ -24,15 +23,12 @@ after(async () => {
 
 test('onboardStore creates tenant + domain + home route', async () => {
   await onboardStore({ id: ID, name: 'Onb', host: HOST, color: '#123456' });
-
   const tenant = await forTenant(ID).getTenant();
-  assert.strictEqual(tenant.name, 'Onb');
-
+  assert.strictEqual(tenant!.name, 'Onb');
   const { rows } = await pool.query('SELECT tenant_id FROM domains WHERE host = $1', [HOST]);
   assert.strictEqual(rows[0].tenant_id, ID);
-
   const home = await forTenant(ID).getRoute('/');
-  assert.strictEqual(home.page_type, 'home');
+  assert.strictEqual(home!.page_type, 'home');
 });
 
 test('the onboarded store renders its home via the origin', async () => {
@@ -48,7 +44,7 @@ test('onboardStore is idempotent (re-onboard updates, no dup error)', async () =
   await onboardStore({ id: ID, name: 'Onb', host: HOST, color: '#111' });
   await onboardStore({ id: ID, name: 'Onb Renamed', host: HOST, color: '#222' });
   const tenant = await forTenant(ID).getTenant();
-  assert.strictEqual(tenant.name, 'Onb Renamed');
+  assert.strictEqual(tenant!.name, 'Onb Renamed');
 });
 
 test('onboardStore rejects incomplete input (no half-provisioned store)', async () => {

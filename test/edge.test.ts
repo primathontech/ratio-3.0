@@ -1,27 +1,26 @@
-// Edge contracts as automated integration tests (real origin + edge on test ports,
-// real test DB). Locks what was previously only covered by the manual prove.js.
-const { test, before, after } = require('node:test');
-const assert = require('node:assert');
-const http = require('http');
+// Edge contracts as automated integration tests (real origin + edge on test ports).
+import { test, before, after } from 'node:test';
+import assert from 'node:assert';
+import http from 'http';
+import { serve } from '@hono/node-server';
+import { app } from '../src/origin';
+import { edge } from '../src/edge';
+import { onboardStore, deleteStore } from '../src/onboard';
+import { pool } from '../src/db';
 
 const ORIGIN_PORT = 19090;
-process.env.ORIGIN_PORT = String(ORIGIN_PORT); // must be set before requiring ../src/edge
+process.env.ORIGIN_PORT = String(ORIGIN_PORT); // edge reads the origin port lazily (per request)
 
-const { serve } = require('@hono/node-server');
-const { app } = require('../src/origin');
-const { edge } = require('../src/edge');
-const { onboardStore, deleteStore } = require('../src/onboard');
-const { pool } = require('../src/db');
+let originServer: ReturnType<typeof serve>;
+let edgeServer: http.Server;
+let edgePort: number;
 
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
-let originServer, edgeServer, edgePort;
-
-function get(port, path, headers = {}) {
-  return new Promise((resolve, reject) => {
+function get(port: number, path: string, headers: Record<string, string> = {}) {
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, path, headers }, (res) => {
       let b = '';
       res.on('data', (d) => (b += d));
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: b }));
+      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: b }));
     });
     req.on('error', reject);
     req.end();
@@ -29,17 +28,17 @@ function get(port, path, headers = {}) {
 }
 
 before(async () => {
-  await new Promise((r) => {
-    originServer = serve({ fetch: app.fetch, port: ORIGIN_PORT, hostname: '127.0.0.1' }, r);
+  await new Promise<void>((r) => {
+    originServer = serve({ fetch: app.fetch, port: ORIGIN_PORT, hostname: '127.0.0.1' }, () => r());
   });
-  await new Promise((r) => {
-    edgeServer = edge.listen(0, r);
+  await new Promise<void>((r) => {
+    edgeServer = edge.listen(0, () => r());
   });
-  edgePort = edgeServer.address().port;
+  edgePort = (edgeServer.address() as import('net').AddressInfo).port;
 });
 
 after(async () => {
-  await new Promise((r) => edgeServer.close(r));
+  await new Promise<void>((r) => edgeServer.close(() => r()));
   originServer.close();
   await pool.end();
 });
