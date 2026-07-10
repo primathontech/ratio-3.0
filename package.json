@@ -1,8 +1,8 @@
 {
-  "name": "s2-poc",
+  "name": "ratio-3.0",
   "private": true,
   "version": "0.0.1",
-  "description": "Ratio 3.0 — S2 Multi-tenancy & Routing proof of concept",
+  "description": "Ratio 3.0 — multi-tenant storefront platform (S2 vertical slice: Cloudflare edge + Hono origin + Postgres)",
   "scripts": {
     "db:up": "docker compose up -d",
     "db:down": "docker compose down -v",
