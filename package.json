@@ -12,7 +12,9 @@
     "start": "node src/server.js",
     "prove": "node test/prove.js",
     "prove:s1": "node test/prove-s1.js",
-    "onboard": "node scripts/onboard.js"
+    "onboard": "node scripts/onboard.js",
+    "pretest": "node scripts/ensure-test-db.js && DATABASE_URL=postgres://localhost:5432/s2poc_test npm run migrate && DATABASE_URL=postgres://localhost:5432/s2poc_test npm run seed",
+    "test": "DATABASE_URL=postgres://localhost:5432/s2poc_test node --test test/*.test.js"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
