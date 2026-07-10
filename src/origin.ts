@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { forTenant } from './repo';
+import { pool } from './db';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -14,10 +15,22 @@ export const app = new Hono();
 app.onError((e, c) => c.text('500 — ' + e.message, 500));
 
 app.all('*', async (c) => {
+  const path = new URL(c.req.url).pathname;
+
+  // Orchestrator probes hit the container directly — public, no edge-auth, no tenant.
+  if (path === '/health') return c.json({ status: 'ok' });
+  if (path === '/ready') {
+    try {
+      await pool.query('SELECT 1');
+      return c.json({ ready: true });
+    } catch {
+      return c.json({ ready: false }, 503);
+    }
+  }
+
   if (c.req.header('x-edge-auth') !== EDGE_SECRET) {
     return c.text('403 — origin is private (no valid edge auth)', 403);
   }
-  const path = new URL(c.req.url).pathname;
 
   if (path === '/__stats') return c.json({ renders });
 

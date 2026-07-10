@@ -17,6 +17,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test:coverage": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test --experimental-test-coverage test/*.test.ts",
     "prepare": "husky",
     "pretest": "npm run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run migrate && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run seed",
     "test": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test test/*.test.ts"
