@@ -13,6 +13,12 @@ try {
   /* no .env — fall back to the default below */
 }
 
+const connectionString = process.env.DATABASE_URL || 'postgres://poc:poc@localhost:5433/poc';
+
 export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgres://poc:poc@localhost:5433/poc',
+  connectionString,
+  // Managed Postgres (Neon) requires TLS; local dev does not.
+  ssl: /neon\.tech|sslmode=require/.test(connectionString)
+    ? { rejectUnauthorized: false }
+    : undefined,
 });

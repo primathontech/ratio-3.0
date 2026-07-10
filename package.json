@@ -18,6 +18,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:coverage": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test --experimental-test-coverage test/*.test.ts",
+    "cf:dev": "wrangler dev",
+    "deploy": "wrangler deploy",
     "prepare": "husky",
     "pretest": "npm run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run migrate && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run seed",
     "test": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test test/*.test.ts"
@@ -30,6 +32,7 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
+    "@neondatabase/serverless": "^1.1.0",
     "hono": "^4.12.28",
     "pg": "^8.13.1"
   },
@@ -45,6 +48,7 @@
     "prettier": "^3.9.5",
     "tsx": "^4.23.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.63.0"
+    "typescript-eslint": "^8.63.0",
+    "wrangler": "^4.110.0"
   }
 }
