@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { app } from './origin';
+import { app } from './index';
 
 // Origin-ONLY entrypoint for the container (AWS App Runner / Fargate). No edge here —
 // the edge is the Cloudflare Worker. App Runner injects PORT and needs a 0.0.0.0 bind.

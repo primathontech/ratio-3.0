@@ -1,7 +1,7 @@
 // Per-tenant rate limit (ADR-001 D-MT6) + fail-open (ADR-008). Deterministic unit.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createRateLimiter } from '../src/ratelimit';
+import { createRateLimiter } from '../packages/shared/ratelimit';
 
 test('allows up to the limit, then blocks (per window)', () => {
   const rl = createRateLimiter({ limit: 3, windowMs: 1000, now: () => 0 });

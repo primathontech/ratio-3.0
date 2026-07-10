@@ -3,8 +3,8 @@
 // Written test-first.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { app } from '../src/origin';
-import { pool } from '../src/db';
+import { app } from '../apps/origin/index';
+import { pool } from '../packages/shared/db';
 
 const call = (path: string) => app.fetch(new Request('http://origin' + path));
 

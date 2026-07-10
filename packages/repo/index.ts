@@ -1,4 +1,4 @@
-import { pool } from './db';
+import { pool } from '../shared/db';
 
 export interface Tenant {
   id: string;

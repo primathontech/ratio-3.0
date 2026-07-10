@@ -2,7 +2,7 @@
 // in filename order, each in a transaction, recorded in schema_migrations.
 import fs from 'fs';
 import path from 'path';
-import { pool } from '../src/db';
+import { pool } from '../packages/shared/db';
 
 (async () => {
   await pool.query(

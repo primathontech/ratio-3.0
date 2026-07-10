@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { forTenant } from './repo';
-import { pool } from './db';
+import { forTenant } from '../../packages/repo/index';
+import { pool } from '../../packages/shared/db';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.

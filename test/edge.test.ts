@@ -3,10 +3,10 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import http from 'http';
 import { serve } from '@hono/node-server';
-import { app } from '../src/origin';
-import { edge } from '../src/edge';
-import { onboardStore, deleteStore } from '../src/onboard';
-import { pool } from '../src/db';
+import { app } from '../apps/origin/index';
+import { edge } from '../dev/edge-sim';
+import { onboardStore, deleteStore } from '../packages/provisioning/index';
+import { pool } from '../packages/shared/db';
 
 const ORIGIN_PORT = 19090;
 process.env.ORIGIN_PORT = String(ORIGIN_PORT); // edge reads the origin port lazily (per request)

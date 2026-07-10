@@ -1,7 +1,7 @@
 // Observability seam (ADR-008 D-R8): bounded per-tenant cardinality. Deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createMetrics } from '../src/metrics';
+import { createMetrics } from '../packages/shared/metrics';
 
 test('counts totals across labels', () => {
   const m = createMetrics();

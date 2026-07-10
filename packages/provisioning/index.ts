@@ -1,4 +1,4 @@
-import { pool } from './db';
+import { pool } from '../shared/db';
 
 // Provisioning (crosses tenant boundaries): create a tenant + host mapping + home
 // route atomically. A merchant is data: no fork, no server, no deploy. Idempotent.

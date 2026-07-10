@@ -9,7 +9,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "db:init": "npm run migrate && npm run seed",
-    "start": "tsx src/server.ts",
+    "start": "tsx dev/server.ts",
     "prove": "tsx test/prove.ts",
     "prove:s1": "tsx test/prove-s1.ts",
     "onboard": "tsx scripts/onboard.ts",

@@ -1,6 +1,6 @@
 import http from 'http';
 import type { IncomingMessage, ServerResponse, IncomingHttpHeaders } from 'http';
-import { pool } from './db';
+import { pool } from '../packages/shared/db';
 
 // The "edge / CDN" (Cloudflare on the real stack). Resolves host->tenant from the
 // domains table (short TTL cache), injects a trusted header over a private origin,
