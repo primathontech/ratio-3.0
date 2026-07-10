@@ -1,0 +1,49 @@
+name: Onboard merchant (one-click)
+
+# One run = a fully live merchant on a platform subdomain:
+#   1. insert tenant + host + home route into Neon (merchant = data)
+#   2. create the proxied DNS record (the *.<domain>/* Worker route already serves it)
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: tenant id (e.g. t_zappy)
+        required: true
+      name:
+        description: store name (e.g. Zappy)
+        required: true
+      sub:
+        description: subdomain slug (e.g. zappy)
+        required: true
+      color:
+        description: theme hex
+        required: true
+        default: '#333333'
+      domain:
+        description: platform domain
+        required: true
+        default: ratiodev.in
+
+jobs:
+  onboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: 1) Create store (Neon)
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/onboard.ts "${{ inputs.id }}" "${{ inputs.name }}" "${{ inputs.sub }}.${{ inputs.domain }}" "${{ inputs.color }}"
+      - name: 2) Create proxied DNS record
+        run: |
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.domain }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
+            --data "{\"type\":\"A\",\"name\":\"${{ inputs.sub }}\",\"content\":\"192.0.2.1\",\"proxied\":true}")
+          echo "$resp" | jq '{success, errors:(.errors|map(.message))}'
+          # OK if it succeeds OR the record already exists (idempotent re-onboard)
+          echo "$resp" | jq -e '.success or (.errors|any(.code==81057 or (.message|test("already exist";"i"))))' >/dev/null
+      - name: 3) Done
+        run: echo "✅ https://${{ inputs.sub }}.${{ inputs.domain }}  (allow a few min for a brand-new subdomain's DNS to propagate)"

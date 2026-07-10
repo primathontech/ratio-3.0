@@ -18,27 +18,22 @@ TypeScript. Full architecture, infra, and env/secrets: **[INFRASTRUCTURE.md](./I
 
 ## Onboard a new merchant
 
-A store on a **platform subdomain** (`<merchant>.ratiodev.in`) — 2 steps, no code, no deploy.
+A store on a **platform subdomain** (`<merchant>.ratiodev.in`) — **one command**, no code, no deploy.
+It creates the tenant in Neon **and** the DNS record in a single run:
 
-**1. Create the store (data → Neon):**
 ```bash
-gh workflow run onboard.yml --repo primathontech/ratio-3.0 \
-  -f id=t_zappy -f name="Zappy" -f host=zappy.ratiodev.in -f color="#16a085"
+gh workflow run onboard-merchant.yml --repo primathontech/ratio-3.0 \
+  -f id=t_zappy -f name="Zappy" -f sub=zappy -f color="#16a085"
 ```
 
-**2. Give it a subdomain DNS record:**
-```bash
-gh workflow run cf-setup-domain.yml --repo primathontech/ratio-3.0 \
-  -f domain=ratiodev.in -f subs="zappy" -f script=ratio-3-0
-```
+→ `https://zappy.ratiodev.in` serves the store (allow a few minutes for a brand-new
+subdomain's DNS to propagate).
 
-**3. Done →** `https://zappy.ratiodev.in` serves the store (allow a few minutes for the
-new subdomain's DNS to propagate).
+Inputs: `id` = `t_<slug>` · `sub` = subdomain slug · `color` = theme hex · `domain`
+defaults to `ratiodev.in`.
 
-Inputs: `id` = `t_<slug>` · `host` = `<slug>.ratiodev.in` · `color` = theme hex.
-
-> No GitHub CLI? Do the same via GitHub → **Actions** → *Onboard merchant* / *CF setup
-> domain* → **Run workflow**.
+> No GitHub CLI? GitHub → **Actions** → *Onboard merchant (one-click)* → **Run workflow**.
+> (Lower-level `onboard.yml` + `cf-setup-domain.yml` still exist for BYO-domain / bulk cases.)
 
 **Merchant's own domain** (e.g. `shop.acme.com`) = Cloudflare-for-SaaS path — currently
 on hold (see Jira OFCE-359 / INFRASTRUCTURE.md).
