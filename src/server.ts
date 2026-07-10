@@ -10,5 +10,7 @@ serve({ fetch: app.fetch, port: ORIGIN_PORT, hostname: '127.0.0.1' }, () =>
   console.log(`origin (private shared host, Hono) → 127.0.0.1:${ORIGIN_PORT}`)
 );
 edge.listen(EDGE_PORT, () =>
-  console.log(`edge   (fake CDN)           → http://localhost:${EDGE_PORT}  (try Host: acme.localhost / beta.localhost)`)
+  console.log(
+    `edge   (fake CDN)           → http://localhost:${EDGE_PORT}  (try Host: acme.localhost / beta.localhost)`
+  )
 );

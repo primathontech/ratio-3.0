@@ -7,7 +7,9 @@ export interface Metrics {
   reset(): void;
 }
 
-export function createMetrics({ maxTenantsPerMetric = 100 }: { maxTenantsPerMetric?: number } = {}): Metrics {
+export function createMetrics({
+  maxTenantsPerMetric = 100,
+}: { maxTenantsPerMetric?: number } = {}): Metrics {
   const counters = new Map<string, Map<string, number>>();
 
   return {

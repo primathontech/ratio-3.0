@@ -14,8 +14,18 @@
     "prove:s1": "tsx test/prove-s1.ts",
     "onboard": "tsx scripts/onboard.ts",
     "typecheck": "tsc --noEmit",
-    "pretest": "npm run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=postgres://localhost:5432/s2poc_test npm run migrate && DATABASE_URL=postgres://localhost:5432/s2poc_test npm run seed",
-    "test": "DATABASE_URL=postgres://localhost:5432/s2poc_test node --import tsx --test test/*.test.ts"
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "husky",
+    "pretest": "npm run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run migrate && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" npm run seed",
+    "test": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test test/*.test.ts"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@hono/node-server": "^2.0.8",
@@ -23,9 +33,17 @@
     "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
+    "eslint": "^10.6.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.7.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.9.5",
     "tsx": "^4.23.0",
-    "typescript": "^7.0.2"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.63.0"
   }
 }

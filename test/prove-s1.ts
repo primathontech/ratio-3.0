@@ -8,22 +8,27 @@ const ORIGIN = Number(process.env.ORIGIN_PORT || 9090);
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, headers }, (res) => {
-      let b = '';
-      res.on('data', (d) => (b += d));
-      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: b }));
-    });
-    req.on('error', reject);
-    req.end();
-  });
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>(
+    (resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, path, headers }, (res) => {
+        let b = '';
+        res.on('data', (d) => (b += d));
+        res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: b }));
+      });
+      req.on('error', reject);
+      req.end();
+    }
+  );
 }
 const originRenders = async (): Promise<number> =>
   JSON.parse((await get(ORIGIN, '/__stats', { 'x-edge-auth': SECRET })).body).renders;
 const edgeStats = async (): Promise<{ hit: number; miss: number; bypass: number }> =>
   JSON.parse((await get(EDGE, '/__admin/stats', { 'x-admin-secret': SECRET })).body);
 const doPurge = async (key: string) =>
-  JSON.parse((await get(EDGE, '/__admin/purge?key=' + encodeURIComponent(key), { 'x-admin-secret': SECRET })).body);
+  JSON.parse(
+    (await get(EDGE, '/__admin/purge?key=' + encodeURIComponent(key), { 'x-admin-secret': SECRET }))
+      .body
+  );
 
 (async () => {
   const results: { n: string; ok: boolean; d: string }[] = [];
@@ -47,19 +52,37 @@ const doPurge = async (key: string) =>
     const x = await get(EDGE, '/cart', { host: 'acme.localhost' });
     carts.push(x.headers['x-edge'] as string | undefined);
   }
-  check('2. Non-cacheable (cart) always BYPASS', carts.every((e) => e === 'BYPASS'), `edge=${carts.join(',')}`);
+  check(
+    '2. Non-cacheable (cart) always BYPASS',
+    carts.every((e) => e === 'BYPASS'),
+    `edge=${carts.join(',')}`
+  );
 
   await get(EDGE, '/', { host: 'acme.localhost' });
   const homePre = await get(EDGE, '/', { host: 'acme.localhost' });
-  await forTenant('t_acme').addRoute('/products/red-shoe', 'product', { title: 'Red Shoe v2', price: 'Rs 1799' });
+  await forTenant('t_acme').addRoute('/products/red-shoe', 'product', {
+    title: 'Red Shoe v2',
+    price: 'Rs 1799',
+  });
   const purged = await doPurge('t:t_acme:route:/products/red-shoe');
   const prodAfter = await get(EDGE, '/products/red-shoe', { host: 'acme.localhost' });
   const homeAfter = await get(EDGE, '/', { host: 'acme.localhost' });
-  check('3a. Publish purges exactly that page', prodAfter.headers['x-edge'] === 'MISS' && prodAfter.body.includes('Red Shoe v2'), `edge=${prodAfter.headers['x-edge']}, purged=${purged.purged}`);
-  check('3b. Purge is EXACT — home still cached', homePre.headers['x-edge'] === 'HIT' && homeAfter.headers['x-edge'] === 'HIT', `home=${homeAfter.headers['x-edge']}`);
+  check(
+    '3a. Publish purges exactly that page',
+    prodAfter.headers['x-edge'] === 'MISS' && prodAfter.body.includes('Red Shoe v2'),
+    `edge=${prodAfter.headers['x-edge']}, purged=${purged.purged}`
+  );
+  check(
+    '3b. Purge is EXACT — home still cached',
+    homePre.headers['x-edge'] === 'HIT' && homeAfter.headers['x-edge'] === 'HIT',
+    `home=${homeAfter.headers['x-edge']}`
+  );
 
   const betaHome = await get(EDGE, '/', { host: 'beta.localhost' });
-  check('4. Cache key is per-tenant', betaHome.body.includes('Beta') && betaHome.headers['x-tenant'] === 't_beta');
+  check(
+    '4. Cache key is per-tenant',
+    betaHome.body.includes('Beta') && betaHome.headers['x-tenant'] === 't_beta'
+  );
 
   const s = await edgeStats();
   const cacheable = s.hit + s.miss;
@@ -71,7 +94,9 @@ const doPurge = async (key: string) =>
     console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.n}${r.d ? '   [' + r.d + ']' : ''}`);
     if (!r.ok) allok = false;
   }
-  console.log(`\nedge stats: hit=${s.hit} miss=${s.miss} bypass=${s.bypass}  ->  cache-hit ratio on cacheable = ${ratio}%`);
+  console.log(
+    `\nedge stats: hit=${s.hit} miss=${s.miss} bypass=${s.bypass}  ->  cache-hit ratio on cacheable = ${ratio}%`
+  );
   console.log(allok ? 'ALL GREEN — S1 cacheability proven\n' : 'SOME FAILED\n');
   await pool.end();
   process.exit(allok ? 0 : 1);

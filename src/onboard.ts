@@ -30,7 +30,13 @@ export async function onboardStore({
     await client.query(
       `INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES ($1,'/','home',$2)
        ON CONFLICT (tenant_id, path) DO UPDATE SET page_config=EXCLUDED.page_config`,
-      [id, JSON.stringify({ title: name + ' Home', body: 'Welcome to ' + name + ' — onboarded as data.' })]
+      [
+        id,
+        JSON.stringify({
+          title: name + ' Home',
+          body: 'Welcome to ' + name + ' — onboarded as data.',
+        }),
+      ]
     );
     await client.query('COMMIT');
   } catch (e) {

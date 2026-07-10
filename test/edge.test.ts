@@ -16,15 +16,17 @@ let edgeServer: http.Server;
 let edgePort: number;
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, path, headers }, (res) => {
-      let b = '';
-      res.on('data', (d) => (b += d));
-      res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: b }));
-    });
-    req.on('error', reject);
-    req.end();
-  });
+  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>(
+    (resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, path, headers }, (res) => {
+        let b = '';
+        res.on('data', (d) => (b += d));
+        res.on('end', () => resolve({ status: res.statusCode!, headers: res.headers, body: b }));
+      });
+      req.on('error', reject);
+      req.end();
+    }
+  );
 }
 
 before(async () => {

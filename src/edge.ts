@@ -34,7 +34,11 @@ const cache = new Map<string, CacheEntry>();
 const stats = { hit: 0, miss: 0, bypass: 0 };
 function purge(key: string | null): number {
   let n = 0;
-  for (const [k, v] of cache) if (key && v.keys.has(key)) { cache.delete(k); n++; }
+  for (const [k, v] of cache)
+    if (key && v.keys.has(key)) {
+      cache.delete(k);
+      n++;
+    }
   return n;
 }
 
@@ -95,9 +99,16 @@ export const edge = http.createServer(async (req: IncomingMessage, res: ServerRe
           let edgeState = 'BYPASS';
           if (isGet && originRes.headers['x-cache'] === 'long' && originRes.statusCode === 200) {
             const keys = new Set(
-              String(originRes.headers['x-surrogate-keys'] || '').split(' ').filter(Boolean)
+              String(originRes.headers['x-surrogate-keys'] || '')
+                .split(' ')
+                .filter(Boolean)
             );
-            cache.set(cacheKey, { status: originRes.statusCode, headers: originRes.headers, body, keys });
+            cache.set(cacheKey, {
+              status: originRes.statusCode,
+              headers: originRes.headers,
+              body,
+              keys,
+            });
             stats.miss++;
             edgeState = 'MISS';
           } else {
