@@ -26,6 +26,11 @@ interface RouteRow {
 
 const CACHEABLE = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
+// Join origin base + request path without a double slash (ORIGIN_URL may end in "/").
+export function originTarget(base: string, path: string, search: string): string {
+  return base.replace(/\/+$/, '') + path + search;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -52,7 +57,7 @@ app.all('*', async (c) => {
 
   // path B: inject the trusted header + proxy to the private container origin.
   if (c.env.ORIGIN_URL) {
-    const res = await fetch(c.env.ORIGIN_URL + path + url.search, {
+    const res = await fetch(originTarget(c.env.ORIGIN_URL, path, url.search), {
       method: c.req.method,
       headers: {
         'x-edge-auth': c.env.EDGE_SECRET ?? 'private-link-secret',
