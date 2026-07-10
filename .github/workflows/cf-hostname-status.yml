@@ -1,0 +1,15 @@
+name: CF hostname status
+on:
+  workflow_dispatch:
+    inputs:
+      zone: { required: true, default: ratiodev.in }
+      hostname: { required: true }
+jobs:
+  s:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Status
+        run: |
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.zone }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames?hostname=${{ inputs.hostname }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            | jq '.result[0] | {hostname, status, ssl_status:.ssl.status, ssl_method:.ssl.method, ownership_verification, ssl_validation:.ssl.validation_records, verification_errors}'
