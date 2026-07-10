@@ -1,0 +1,15 @@
+name: CF list record
+on: workflow_dispatch
+jobs:
+  x:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect
+        run: |
+          Z=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=ratiodev.in" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}")
+          echo "zones named ratiodev.in:"; echo "$Z" | jq '[.result[]|{id,status}]'
+          ZID=$(echo "$Z" | jq -r '.result[0].id')
+          echo "records for mango.ratiodev.in in zone $ZID:"
+          curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records?search=mango" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq '[.result[]|{type,name,content,proxied}]'
+          echo "all A/AAAA records in zone:"
+          curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq '[.result[]|{type,name,proxied}]'
