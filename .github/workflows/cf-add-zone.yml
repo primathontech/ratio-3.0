@@ -1,0 +1,23 @@
+name: CF add zone
+
+# Manual: creates the Cloudflare zone for a domain via API and prints the
+# nameservers to set at the registrar. Input the domain when dispatching.
+on:
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: Domain to add (e.g. ratiodev.in)
+        required: true
+        default: ratiodev.in
+
+jobs:
+  add-zone:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create zone
+        run: |
+          resp=$(curl -s -X POST https://api.cloudflare.com/client/v4/zones \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "{\"name\":\"${{ inputs.domain }}\",\"account\":{\"id\":\"7f06c71e716a0e4a5d38073c16758c60\"},\"type\":\"full\"}")
+          echo "$resp" | jq '{success, errors, messages, name: .result.name, status: .result.status, name_servers: .result.name_servers}'
