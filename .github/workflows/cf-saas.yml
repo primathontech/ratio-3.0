@@ -1,0 +1,38 @@
+name: CF for SaaS custom hostname
+
+# Manual: configure Cloudflare for SaaS so a merchant's own domain is served by the
+# Worker. Sets an originless fallback origin, a */* Worker route (catches custom
+# hostnames), and adds the custom hostname (prints the DNS/SSL records the merchant
+# must add at their registrar).
+on:
+  workflow_dispatch:
+    inputs:
+      zone: { description: SaaS zone, required: true, default: ratiodev.in }
+      hostname: { description: merchant hostname, required: true }
+      script: { description: worker script, required: true, default: ratio-3-0 }
+      fallback: { description: fallback origin host, required: true, default: service.ratiodev.in }
+
+jobs:
+  saas:
+    runs-on: ubuntu-latest
+    env:
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Configure SaaS + add custom hostname
+        run: |
+          Z="${{ inputs.zone }}"; HN="${{ inputs.hostname }}"; FB="${{ inputs.fallback }}"; SC="${{ inputs.script }}"
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$Z" -H "Authorization: Bearer $CF_TOKEN" | jq -r '.result[0].id')
+          echo "zone: $ZID"
+          FBSUB="${FB%%.$Z}"
+          echo "--- fallback originless DNS ($FB AAAA 100::) ---"
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"type\":\"AAAA\",\"name\":\"$FBSUB\",\"content\":\"100::\",\"proxied\":true}" | jq '{success, errors:(.errors|map(.message))}'
+          echo "--- set fallback origin -> $FB ---"
+          curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames/fallback_origin" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"origin\":\"$FB\"}" | jq '{success, errors:(.errors|map(.message)), status:.result.status}'
+          echo "--- worker route */* -> $SC ---"
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/workers/routes" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"pattern\":\"*/*\",\"script\":\"$SC\"}" | jq '{success, errors:(.errors|map(.message))}'
+          echo "--- add custom hostname $HN ---"
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames" -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"hostname\":\"$HN\",\"ssl\":{\"method\":\"txt\",\"type\":\"dv\"}}" | jq '{success, errors:(.errors|map(.message)), status:.result.status, ownership_verification:.result.ownership_verification, ssl_validation:.result.ssl.validation_records}'
