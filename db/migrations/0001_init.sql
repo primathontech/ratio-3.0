@@ -1,4 +1,4 @@
--- S2 POC schema: everything is keyed by tenant_id (ADR-001 D-MT2: shared DB, tenant-keyed rows)
+-- S2 schema: everything keyed by tenant_id (ADR-001 D-MT2: shared DB, tenant-keyed rows).
 CREATE TABLE IF NOT EXISTS tenants (
   id      text PRIMARY KEY,
   name    text NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS tenants (
   theme   jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
--- hostname -> tenant map, in DATA (so onboarding a store is just rows, no code change)
+-- hostname -> tenant map, in DATA (onboarding a store is just rows, no code change).
 CREATE TABLE IF NOT EXISTS domains (
   host      text PRIMARY KEY,
   tenant_id text NOT NULL REFERENCES tenants(id)

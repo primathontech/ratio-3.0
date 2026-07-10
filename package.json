@@ -6,13 +6,17 @@
   "scripts": {
     "db:up": "docker compose up -d",
     "db:down": "docker compose down -v",
-    "db:init": "psql postgres://poc:poc@localhost:5433/poc -v ON_ERROR_STOP=1 -f db/schema.sql -f db/seed.sql",
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed.js",
+    "db:init": "npm run migrate && npm run seed",
     "start": "node src/server.js",
     "prove": "node test/prove.js",
     "prove:s1": "node test/prove-s1.js",
     "onboard": "node scripts/onboard.js"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.8",
+    "hono": "^4.12.28",
     "pg": "^8.13.1"
   }
 }
