@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { forTenant } from '../../packages/repo/index';
 import { pool } from '../../packages/shared/db';
+import { normalizePage } from '../../packages/content-model/index';
+import { renderPage } from '../../packages/theme/index';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -62,16 +64,11 @@ app.all('*', async (c) => {
     `t:${tenantId}:type:${route.page_type}`,
     `t:${tenantId}:route:${path}`,
   ];
-  const cfg = route.page_config as { title?: string; body?: string; price?: string };
   c.header('x-tenant', tenantId as string);
   c.header('x-page-type', route.page_type);
   c.header('x-cache', cacheable ? 'long' : 'no-store');
   c.header('x-surrogate-keys', surrogateKeys.join(' '));
   c.header('x-render-count', String(renders));
-  return c.html(
-    `<!doctype html><html><body style="color:${tenant.theme.color}">` +
-      `<h1>${cfg.title || ''}</h1><p>${cfg.body || cfg.price || ''}</p>` +
-      `<small>tenant=${tenant.name} · type=${route.page_type} · path=${path} · render#${renders}</small>` +
-      `</body></html>`
-  );
+  const page = normalizePage(route.page_config);
+  return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
 });
