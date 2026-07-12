@@ -92,3 +92,30 @@ jobs:
           docker push "$IMG:${{ github.sha }}"
           docker push "$IMG:latest"
           echo "pushed $IMG:latest"
+      # Roll the running ECS service to the new image (ECS doesn't auto-pull on push).
+      # Dormant until repo var ECS_DEPLOY=true + the IAM user has ecs:UpdateService/Describe/List.
+      - name: Roll ECS to the new image
+        if: vars.ECS_DEPLOY == 'true'
+        run: |
+          set -euo pipefail
+          CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
+          SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
+          echo "force-deploying $SVC on $CLUSTER"
+          aws ecs update-service --cluster "$CLUSTER" --service "$SVC" --force-new-deployment >/dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SVC"
+          echo "ECS rolled + stable"
+
+  # Purge the Cloudflare edge cache after a deploy so cached pages pick up new
+  # content. Dormant until repo var PURGE_CACHE=true + token has Zone:CachePurge:Edit.
+  # (Interim: purge_everything; exact surrogate-key purge is the S1/ADR-005 refinement.)
+  purge:
+    needs: [deploy, origin-image]
+    if: github.ref == 'refs/heads/main' && vars.PURGE_CACHE == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge Cloudflare cache
+        run: |
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=ratiodev.in" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/purge_cache" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}' | jq '{success, errors:(.errors|map(.message))}'
