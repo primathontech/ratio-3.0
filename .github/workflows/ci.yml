@@ -92,18 +92,39 @@ jobs:
           docker push "$IMG:${{ github.sha }}"
           docker push "$IMG:latest"
           echo "pushed $IMG:latest"
-      # Roll the running ECS service to the new image (ECS doesn't auto-pull on push).
-      # Dormant until repo var ECS_DEPLOY=true + the IAM user has ecs:UpdateService/Describe/List.
+      # Roll the running ECS service to the new image. The Express service's task-def
+      # pins the image by immutable DIGEST, so --force-new-deployment alone just re-runs
+      # the old code. We must register a NEW task-def revision that points at this commit's
+      # image (:sha, not :latest — ECS won't reliably re-pull a moving tag) and move the
+      # service to it. Dormant until repo var ECS_DEPLOY=true + the IAM user has
+      # ecs:Describe*/List*/RegisterTaskDefinition/UpdateService and iam:PassRole.
       - name: Roll ECS to the new image
         if: vars.ECS_DEPLOY == 'true'
         run: |
           set -euo pipefail
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
+          NEW_IMAGE="$REGISTRY/ratio-3-0-origin:${{ github.sha }}"
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
           SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
-          echo "force-deploying $SVC on $CLUSTER"
-          aws ecs update-service --cluster "$CLUSTER" --service "$SVC" --force-new-deployment >/dev/null
+          CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+          echo "current task-def=$CUR_TD  ->  new image=$NEW_IMAGE"
+          # Take the current task-def, swap the image, drop the read-only fields that
+          # register-task-definition rejects, and register a new revision.
+          aws ecs describe-task-definition --task-definition "$CUR_TD" \
+            --query 'taskDefinition' --output json \
+          | jq --arg img "$NEW_IMAGE" '
+              .containerDefinitions[0].image = $img
+              | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
+                    .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
+          NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
+            --query 'taskDefinition.taskDefinitionArn' --output text)
+          echo "registered $NEW_TD"
+          aws ecs update-service --cluster "$CLUSTER" --service "$SVC" \
+            --task-definition "$NEW_TD" --force-new-deployment >/dev/null
           aws ecs wait services-stable --cluster "$CLUSTER" --services "$SVC"
-          echo "ECS rolled + stable"
+          echo "ECS rolled to new task-def + stable"
 
   # Purge the Cloudflare edge cache after a deploy so cached pages pick up new
   # content. Dormant until repo var PURGE_CACHE=true + token has Zone:CachePurge:Edit.
