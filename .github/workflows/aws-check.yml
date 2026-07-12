@@ -1,7 +1,8 @@
 name: AWS check
 
-# Manual, non-destructive: verifies the AWS keys work and shows which account/user
-# they belong to. Creates nothing. Run from the Actions tab or `gh workflow run`.
+# Manual, non-destructive: verifies the AWS keys work and dumps the ECS service's
+# image wiring so we can see whether the running task actually tracks ECR :latest.
+# Creates nothing. Run from the Actions tab or `gh workflow run`.
 on: workflow_dispatch
 
 jobs:
@@ -16,3 +17,25 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - name: Who am I
         run: aws sts get-caller-identity
+      - name: ECS image wiring
+        run: |
+          set -euo pipefail
+          CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
+          SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
+          echo "cluster=$CLUSTER"
+          echo "service=$SVC"
+          TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].taskDefinition' --output text)
+          echo "task-definition=$TD"
+          echo "--- task-def container image (what the service is pinned to) ---"
+          aws ecs describe-task-definition --task-definition "$TD" \
+            --query 'taskDefinition.containerDefinitions[].image' --output text
+          echo "--- ECR :latest digest (what CI just pushed) ---"
+          aws ecr describe-images --repository-name ratio-3-0-origin \
+            --image-ids imageTag=latest \
+            --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}' --output json || true
+          echo "--- running tasks + their image ---"
+          for T in $(aws ecs list-tasks --cluster "$CLUSTER" --service-name "${SVC##*/}" --query 'taskArns' --output text); do
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$T" \
+              --query 'tasks[0].{startedAt:startedAt,image:containers[0].image,imageDigest:containers[0].imageDigest}' --output json
+          done
