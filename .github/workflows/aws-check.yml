@@ -19,23 +19,21 @@ jobs:
         run: aws sts get-caller-identity
       - name: ECS image wiring
         run: |
-          set -euo pipefail
+          set -uo pipefail
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
           SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
           echo "cluster=$CLUSTER"
           echo "service=$SVC"
-          TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
-            --query 'services[0].taskDefinition' --output text)
-          echo "task-definition=$TD"
-          echo "--- task-def container image (what the service is pinned to) ---"
-          aws ecs describe-task-definition --task-definition "$TD" \
-            --query 'taskDefinition.containerDefinitions[].image' --output text
+          echo "--- full service (deployments / taskDefinition / config) ---"
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].{status:status,taskDefinition:taskDefinition,desired:desiredCount,running:runningCount,deployments:deployments[].{status:status,taskDefinition:taskDefinition,rollout:rolloutState,createdAt:createdAt,updatedAt:updatedAt}}' \
+            --output json
           echo "--- ECR :latest digest (what CI just pushed) ---"
           aws ecr describe-images --repository-name ratio-3-0-origin \
             --image-ids imageTag=latest \
-            --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}' --output json || true
-          echo "--- running tasks + their image ---"
-          for T in $(aws ecs list-tasks --cluster "$CLUSTER" --service-name "${SVC##*/}" --query 'taskArns' --output text); do
+            --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}' --output json
+          echo "--- running tasks + their image + digest ---"
+          for T in $(aws ecs list-tasks --cluster "$CLUSTER" --service-name "${SVC##*/}" --desired-status RUNNING --query 'taskArns' --output text); do
             aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$T" \
-              --query 'tasks[0].{startedAt:startedAt,image:containers[0].image,imageDigest:containers[0].imageDigest}' --output json
+              --query 'tasks[0].{startedAt:startedAt,taskDefinition:taskDefinitionArn,image:containers[0].image,imageDigest:containers[0].imageDigest}' --output json
           done
