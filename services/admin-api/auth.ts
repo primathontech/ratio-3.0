@@ -69,9 +69,15 @@ export async function getMembership(userId: string, tenantId: string): Promise<M
 // boundaries by design — it's the caller's own access list, scoped to their user id.
 export async function listStoresForUser(
   userId: string
-): Promise<{ id: string; name: string; role: string }[]> {
-  const { rows } = await pool.query<{ id: string; name: string; role: string }>(
-    `SELECT t.id, t.name, m.role
+): Promise<{ id: string; name: string; role: string; host: string | null }[]> {
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    role: string;
+    host: string | null;
+  }>(
+    `SELECT t.id, t.name, m.role,
+            (SELECT host FROM domains WHERE tenant_id = t.id ORDER BY host LIMIT 1) AS host
        FROM memberships m JOIN tenants t ON t.id = m.tenant_id
       WHERE m.clerk_user_id = $1
       ORDER BY t.name`,

@@ -7,6 +7,7 @@ export interface Store {
   id: string;
   name: string;
   role: string;
+  host: string | null;
 }
 export interface PageSummary {
   path: string;
