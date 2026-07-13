@@ -627,8 +627,19 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
   if (!result.records || result.records.length === 0) {
     return <div className="note">{result.note || result.error || 'Domain mapped.'}</div>;
   }
+  // A root/apex domain (2 labels, e.g. brand.in) can't take a CNAME at most registrars.
+  const isApex = !!result.host && result.host.split('.').length <= 2;
   return (
     <>
+      {isApex && (
+        <div className="note note-warn" style={{ marginBottom: 10 }}>
+          <strong>{result.host}</strong> is a root domain — most registrars (including GoDaddy)
+          can't put a <span className="mono">CNAME</span> at the root. Either <strong>forward the
+          root to https://www.{result.host}</strong> and connect the <span className="mono">www</span>{' '}
+          version instead (the usual setup), or move DNS to a provider with CNAME flattening (e.g.
+          Cloudflare). The <span className="mono">TXT</span> records below still apply as-is.
+        </div>
+      )}
       <p style={{ fontSize: 13 }}>
         Add these records at your DNS provider for <span className="mono">{result.host}</span>. It goes live
         once they propagate and the certificate issues.
@@ -640,7 +651,10 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
             <div className="dns-kv">
               <div className="mono dns-name">{r.name}</div>
               <div className="mono dns-val">{r.value}</div>
-              <div className="muted">{r.purpose}</div>
+              <div className="muted">
+                {r.purpose}
+                {isApex && r.type === 'CNAME' ? ' — use forwarding to www for a root domain' : ''}
+              </div>
             </div>
           </div>
         ))}
