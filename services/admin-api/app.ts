@@ -16,16 +16,20 @@ import {
   listAllStores,
   isPlatformAdmin,
   clerkVerifier,
+  agentVerifier,
+  composeVerifiers,
+  mintAgentToken,
   type Verifier,
 } from './auth';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
 // Auth is ADR-010: Clerk verifies identity, our memberships table authorizes per store.
-// createApp takes the verifier so tests can inject identity without calling Clerk.
-type Vars = { Variables: { userId: string } };
+// createApp takes the verifier so tests can inject identity without calling Clerk. The
+// default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
+type Vars = { Variables: { userId: string; scope?: string[] } };
 
-export function createApp(verify: Verifier = clerkVerifier) {
+export function createApp(verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier)) {
   const app = new Hono<Vars>();
 
   // The admin SPA lives on a different origin (Cloudflare Pages) and calls this API from
@@ -82,6 +86,19 @@ export function createApp(verify: Verifier = clerkVerifier) {
   app.delete('/stores/:id', requireMembership, async (c) => {
     const proof = await deleteStore(c.req.param('id'));
     return c.json(proof);
+  });
+
+  // Mint a short-lived agent token scoped to THIS store (ADR-007 / OFCE-399), so the owner
+  // can delegate the AI agent access to the same API. Membership-gated; scope is exactly
+  // this tenant and inherits the caller's principal — it can only narrow, never widen.
+  app.post('/stores/:id/agent-tokens', requireMembership, (c) => {
+    const expiresIn = 3600;
+    const token = mintAgentToken({
+      sub: c.get('userId'),
+      scope: [c.req.param('id')],
+      exp: Math.floor(Date.now() / 1000) + expiresIn,
+    });
+    return c.json({ token, scope: [c.req.param('id')], expiresIn }, 201);
   });
 
   // --- Content CRUD (OFCE-362 slice 2). All membership-gated. The storefront renders
