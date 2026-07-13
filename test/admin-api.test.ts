@@ -68,6 +68,13 @@ test('POST /stores creates the store and makes the caller its owner', async () =
   assert.strictEqual((await getMembership(ALICE, ID))!.role, 'owner');
 });
 
+test('GET /stores lists only the caller’s own stores', async () => {
+  const mine = await (await call('GET', '/stores', alice)).json();
+  assert.ok((mine as { stores: { id: string }[] }).stores.some((s) => s.id === ID));
+  const theirs = await (await call('GET', '/stores', bob)).json();
+  assert.ok(!(theirs as { stores: { id: string }[] }).stores.some((s) => s.id === ID));
+});
+
 test('the owner can read the store', async () => {
   const r = await call('GET', `/stores/${ID}`, alice);
   assert.strictEqual(r.status, 200);

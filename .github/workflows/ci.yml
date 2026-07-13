@@ -140,3 +140,34 @@ jobs:
           curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/purge_cache" \
             -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
             --data '{"purge_everything":true}' | jq '{success, errors:(.errors|map(.message))}'
+
+  # Admin portal SPA (apps/admin, OFCE-362 slice 3). Built + tested on every push.
+  # Deploy to Cloudflare Pages is dormant until repo var DEPLOY_ADMIN_UI=true (needs a
+  # Pages project 'ratio-admin', secret CLERK_PUBLISHABLE_KEY, and var ADMIN_API_URL).
+  admin-ui:
+    needs: build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - name: Build
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          VITE_ADMIN_API_URL: ${{ vars.ADMIN_API_URL }}
+        run: npm run build
+      - name: Deploy to Cloudflare Pages
+        if: github.ref == 'refs/heads/main' && vars.DEPLOY_ADMIN_UI == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: '7f06c71e716a0e4a5d38073c16758c60'
+        run: npx --yes wrangler pages deploy dist --project-name=ratio-admin --branch=main

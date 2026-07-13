@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { onboardStore, deleteStore } from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
-import { authMiddleware, requireMembership, clerkVerifier, type Verifier } from './auth';
+import {
+  authMiddleware,
+  requireMembership,
+  listStoresForUser,
+  clerkVerifier,
+  type Verifier,
+} from './auth';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
@@ -16,6 +22,11 @@ export function createApp(verify: Verifier = clerkVerifier) {
   app.onError((e, c) => c.json({ error: e.message }, 400));
 
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // The stores the signed-in user may manage (drives the admin portal's home screen).
+  app.get('/stores', async (c) => {
+    return c.json({ stores: await listStoresForUser(c.get('userId')) });
+  });
 
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.

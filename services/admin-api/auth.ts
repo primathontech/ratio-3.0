@@ -65,6 +65,21 @@ export async function getMembership(userId: string, tenantId: string): Promise<M
   return rows[0] || null;
 }
 
+// The stores a user may manage (their memberships joined to tenants). Crosses tenant
+// boundaries by design — it's the caller's own access list, scoped to their user id.
+export async function listStoresForUser(
+  userId: string
+): Promise<{ id: string; name: string; role: string }[]> {
+  const { rows } = await pool.query<{ id: string; name: string; role: string }>(
+    `SELECT t.id, t.name, m.role
+       FROM memberships m JOIN tenants t ON t.id = m.tenant_id
+      WHERE m.clerk_user_id = $1
+      ORDER BY t.name`,
+    [userId]
+  );
+  return rows;
+}
+
 // Route guard: the authenticated user must have a membership on :id, else 403.
 export const requireMembership: MiddlewareHandler<Vars> = async (c, next) => {
   const tenantId = c.req.param('id');
