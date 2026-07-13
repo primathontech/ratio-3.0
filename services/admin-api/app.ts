@@ -43,6 +43,39 @@ export function createApp(verify: Verifier = clerkVerifier) {
     return c.json(proof);
   });
 
+  // --- Content CRUD (OFCE-362 slice 2). All membership-gated. The storefront renders
+  // whatever page_config lives here, so editing a page changes the live store. ---
+
+  app.get('/stores/:id/pages', requireMembership, async (c) => {
+    const pages = await forTenant(c.req.param('id')).listRoutes();
+    return c.json({ pages });
+  });
+
+  app.get('/stores/:id/page', requireMembership, async (c) => {
+    const path = c.req.query('path');
+    if (!path) return c.json({ error: 'path query param required' }, 400);
+    const route = await forTenant(c.req.param('id')).getRoute(path);
+    if (!route) return c.json({ error: 'not found' }, 404);
+    return c.json({ path: route.path, pageType: route.page_type, pageConfig: route.page_config });
+  });
+
+  app.put('/stores/:id/page', requireMembership, async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      path?: string;
+      pageType?: string;
+      pageConfig?: unknown;
+    };
+    if (!body.path || !body.path.startsWith('/')) {
+      return c.json({ error: 'path is required and must start with /' }, 400);
+    }
+    if (typeof body.pageConfig !== 'object' || body.pageConfig === null) {
+      return c.json({ error: 'pageConfig must be an object' }, 400);
+    }
+    const pageType = body.pageType || 'page';
+    await forTenant(c.req.param('id')).addRoute(body.path, pageType, body.pageConfig);
+    return c.json({ path: body.path, pageType, pageConfig: body.pageConfig });
+  });
+
   return app;
 }
 

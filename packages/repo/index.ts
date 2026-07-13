@@ -35,6 +35,13 @@ export function forTenant(tenantId: string) {
       );
       return rows[0] || null;
     },
+    async listRoutes(): Promise<{ path: string; page_type: string }[]> {
+      const { rows } = await pool.query<{ path: string; page_type: string }>(
+        'SELECT path, page_type FROM routes WHERE tenant_id = $1 ORDER BY path',
+        [tenantId]
+      );
+      return rows;
+    },
     async addRoute(path: string, pageType: string, pageConfig: unknown): Promise<void> {
       await pool.query(
         `INSERT INTO routes (tenant_id, path, page_type, page_config)
