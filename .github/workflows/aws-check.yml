@@ -17,23 +17,26 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - name: Who am I
         run: aws sts get-caller-identity
-      - name: ECS image wiring
+      - name: ECS service full config (to clone for admin-api)
         run: |
           set -uo pipefail
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
           SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
           echo "cluster=$CLUSTER"
           echo "service=$SVC"
-          echo "--- full service (deployments / taskDefinition / config) ---"
+          echo "--- how it's exposed: launchType / network / loadBalancers / registries ---"
           aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
-            --query 'services[0].{status:status,taskDefinition:taskDefinition,desired:desiredCount,running:runningCount,deployments:deployments[].{status:status,taskDefinition:taskDefinition,rollout:rolloutState,createdAt:createdAt,updatedAt:updatedAt}}' \
+            --query 'services[0].{launchType:launchType,capacityProviderStrategy:capacityProviderStrategy,platformVersion:platformVersion,schedulingStrategy:schedulingStrategy,networkConfiguration:networkConfiguration,loadBalancers:loadBalancers,serviceRegistries:serviceRegistries,role:roleArn}' \
             --output json
-          echo "--- ECR :latest digest (what CI just pushed) ---"
-          aws ecr describe-images --repository-name ratio-3-0-origin \
-            --image-ids imageTag=latest \
-            --query 'imageDetails[0].{digest:imageDigest,pushedAt:imagePushedAt}' --output json
-          echo "--- running tasks + their image + digest ---"
-          for T in $(aws ecs list-tasks --cluster "$CLUSTER" --service-name "${SVC##*/}" --desired-status RUNNING --query 'taskArns' --output text); do
-            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$T" \
-              --query 'tasks[0].{startedAt:startedAt,taskDefinition:taskDefinitionArn,image:containers[0].image,imageDigest:containers[0].imageDigest}' --output json
-          done
+          echo "--- primary task-def (command / env keys / port / roles / resources) ---"
+          TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+          aws ecs describe-task-definition --task-definition "$TD" \
+            --query 'taskDefinition.{family:family,cpu:cpu,memory:memory,networkMode:networkMode,execRole:executionRoleArn,taskRole:taskRoleArn,requiresCompat:requiresCompatibilities,container:containerDefinitions[0].{name:name,command:command,portMappings:portMappings,envKeys:environment[].name,logConfiguration:logConfiguration}}' \
+            --output json
+          echo "--- load balancers on the account (ALB dns = the public URL) ---"
+          aws elbv2 describe-load-balancers \
+            --query 'LoadBalancers[].{name:LoadBalancerName,dns:DNSName,arn:LoadBalancerArn,type:Type}' --output json 2>/dev/null || echo "no elbv2 access / none"
+          echo "--- target groups + listeners (for adding an admin-api rule) ---"
+          aws elbv2 describe-target-groups \
+            --query 'TargetGroups[].{name:TargetGroupName,port:Port,arn:TargetGroupArn,lb:LoadBalancerArns}' --output json 2>/dev/null || echo "no tg access / none"
