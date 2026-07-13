@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { onboardStore, deleteStore } from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
 import {
@@ -17,6 +18,13 @@ type Vars = { Variables: { userId: string } };
 
 export function createApp(verify: Verifier = clerkVerifier) {
   const app = new Hono<Vars>();
+
+  // The admin SPA lives on a different origin (Cloudflare Pages) and calls this API from
+  // the browser with a Bearer token, so it needs CORS. Lock to ADMIN_CORS_ORIGIN in prod
+  // (comma-separated allowed origins); '*' only as a dev default. Runs before auth so
+  // preflight OPTIONS isn't rejected by the 401 gate.
+  const origins = (process.env.ADMIN_CORS_ORIGIN || '*').split(',').map((o) => o.trim());
+  app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
 
   app.use('*', authMiddleware(verify));
   app.onError((e, c) => c.json({ error: e.message }, 400));

@@ -46,6 +46,20 @@ test('GET /health is public', async () => {
   assert.strictEqual(r.status, 200);
 });
 
+test('CORS preflight passes the auth gate and returns the allow-origin header', async () => {
+  const r = await app.fetch(
+    new Request('http://cp/stores', {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'https://admin.example',
+        'access-control-request-method': 'POST',
+      },
+    })
+  );
+  assert.notStrictEqual(r.status, 401);
+  assert.ok(r.headers.get('access-control-allow-origin'));
+});
+
 test('POST /stores without a session is 401', async () => {
   const r = await call('POST', '/stores', {}, { id: ID, name: 'CP', host: 'cp.localhost' });
   assert.strictEqual(r.status, 401);

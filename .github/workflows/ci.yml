@@ -106,24 +106,26 @@ jobs:
           REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           NEW_IMAGE="$REGISTRY/ratio-3-0-origin:${{ github.sha }}"
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
-          SVC=$(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[0]' --output text)
-          CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
-            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
-          echo "current task-def=$CUR_TD  ->  new image=$NEW_IMAGE"
-          # Take the current task-def, swap the image, drop the read-only fields that
-          # register-task-definition rejects, and register a new revision.
-          aws ecs describe-task-definition --task-definition "$CUR_TD" \
-            --query 'taskDefinition' --output json \
-          | jq --arg img "$NEW_IMAGE" '
-              .containerDefinitions[0].image = $img
-              | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
-                    .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
-          NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
-            --query 'taskDefinition.taskDefinitionArn' --output text)
-          echo "registered $NEW_TD"
-          aws ecs update-service --cluster "$CLUSTER" --service "$SVC" \
-            --task-definition "$NEW_TD" --force-new-deployment >/dev/null
-          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SVC"
+          # Roll EVERY service in the cluster (origin + admin-api both run this image with
+          # their own command/env). Each keeps its own task-def; we only swap the image tag.
+          for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
+            CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+              --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+            echo "rolling ${SVC##*/}: $CUR_TD -> $NEW_IMAGE"
+            aws ecs describe-task-definition --task-definition "$CUR_TD" \
+              --query 'taskDefinition' --output json \
+            | jq --arg img "$NEW_IMAGE" '
+                .containerDefinitions[0].image = $img
+                | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
+                      .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
+            NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
+              --query 'taskDefinition.taskDefinitionArn' --output text)
+            aws ecs update-service --cluster "$CLUSTER" --service "$SVC" \
+              --task-definition "$NEW_TD" --force-new-deployment >/dev/null
+          done
+          echo "waiting for all services to stabilise…"
+          aws ecs wait services-stable --cluster "$CLUSTER" \
+            --services $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text)
           echo "ECS rolled to new task-def + stable"
 
   # Purge the Cloudflare edge cache after a deploy so cached pages pick up new
