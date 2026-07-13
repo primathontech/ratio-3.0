@@ -10,7 +10,13 @@ import { pool } from '../packages/shared/db';
 
 const ALICE = 'user_alice';
 const BOB = 'user_bob';
-const TOKENS: Record<string, string> = { 'tok-alice': ALICE, 'tok-bob': BOB };
+const SUPER = 'user_super';
+process.env.PLATFORM_ADMIN_IDS = SUPER; // designate the super-admin (read lazily by auth)
+const TOKENS: Record<string, string> = {
+  'tok-alice': ALICE,
+  'tok-bob': BOB,
+  'tok-super': SUPER,
+};
 // Injected verifier: a bearer token maps to a user id; anything else is anonymous.
 const verify = async (token: string) => (TOKENS[token] ? { userId: TOKENS[token] } : null);
 const app = createApp(verify);
@@ -18,6 +24,7 @@ const app = createApp(verify);
 const ID = 't_cp';
 const alice = { authorization: 'Bearer tok-alice' };
 const bob = { authorization: 'Bearer tok-bob' };
+const superadmin = { authorization: 'Bearer tok-super' };
 
 function call(method: string, path: string, headers: Record<string, string> = {}, body?: unknown) {
   return app.fetch(
@@ -103,6 +110,34 @@ test('the owner can read the store', async () => {
 test('a different authenticated user is 403 (no membership)', async () => {
   const r = await call('GET', `/stores/${ID}`, bob);
   assert.strictEqual(r.status, 403);
+});
+
+test('a platform super-admin reaches a store it does NOT own', async () => {
+  const r = await call('GET', `/stores/${ID}`, superadmin);
+  assert.strictEqual(r.status, 200);
+  assert.strictEqual(((await r.json()) as { id: string }).id, ID);
+});
+
+test('GET /stores returns every store for a super-admin', async () => {
+  const { stores } = (await (await call('GET', '/stores', superadmin)).json()) as {
+    stores: { id: string; role: string }[];
+  };
+  const mine = stores.find((s) => s.id === ID);
+  assert.ok(mine, 'super-admin sees a store they are not a member of');
+  assert.strictEqual(mine!.role, 'admin');
+});
+
+test('GET /me reports platform-admin status', async () => {
+  assert.strictEqual(
+    ((await (await call('GET', '/me', superadmin)).json()) as { isPlatformAdmin: boolean })
+      .isPlatformAdmin,
+    true
+  );
+  assert.strictEqual(
+    ((await (await call('GET', '/me', bob)).json()) as { isPlatformAdmin: boolean })
+      .isPlatformAdmin,
+    false
+  );
 });
 
 test('a non-owner cannot delete the store', async () => {

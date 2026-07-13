@@ -6,6 +6,8 @@ import {
   authMiddleware,
   requireMembership,
   listStoresForUser,
+  listAllStores,
+  isPlatformAdmin,
   clerkVerifier,
   type Verifier,
 } from './auth';
@@ -33,9 +35,20 @@ export function createApp(verify: Verifier = clerkVerifier) {
   app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
+  // Who am I — also surfaces the caller's Clerk id (for PLATFORM_ADMIN_IDS setup).
+  app.get('/me', (c) => {
+    const userId = c.get('userId');
+    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId) });
+  });
+
   // The stores the signed-in user may manage (drives the admin portal's home screen).
+  // Platform admins see every store; everyone else sees only their memberships.
   app.get('/stores', async (c) => {
-    return c.json({ stores: await listStoresForUser(c.get('userId')) });
+    const userId = c.get('userId');
+    const stores = isPlatformAdmin(userId)
+      ? await listAllStores()
+      : await listStoresForUser(userId);
+    return c.json({ stores });
   });
 
   // Create a store. The authenticated caller becomes its owner — the membership is

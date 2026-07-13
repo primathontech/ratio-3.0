@@ -65,6 +65,35 @@ export async function getMembership(userId: string, tenantId: string): Promise<M
   return rows[0] || null;
 }
 
+// Platform super-admins (Ratio staff) — an allowlist of Clerk user IDs in the
+// PLATFORM_ADMIN_IDS env (comma-separated). Deny-by-default: empty => nobody. Read lazily
+// so it can't be baked in at import time. This is the ONE cross-tenant escape hatch.
+export function isPlatformAdmin(userId: string): boolean {
+  const ids = (process.env.PLATFORM_ADMIN_IDS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return ids.includes(userId);
+}
+
+// Every store (platform-admin view). Role reported as 'admin'.
+export async function listAllStores(): Promise<
+  { id: string; name: string; role: string; host: string | null }[]
+> {
+  const { rows } = await pool.query<{
+    id: string;
+    name: string;
+    role: string;
+    host: string | null;
+  }>(
+    `SELECT t.id, t.name, 'admin' AS role,
+            (SELECT host FROM domains WHERE tenant_id = t.id ORDER BY host LIMIT 1) AS host
+       FROM tenants t
+      ORDER BY t.name`
+  );
+  return rows;
+}
+
 // The stores a user may manage (their memberships joined to tenants). Crosses tenant
 // boundaries by design — it's the caller's own access list, scoped to their user id.
 export async function listStoresForUser(
@@ -88,8 +117,10 @@ export async function listStoresForUser(
 
 // Route guard: the authenticated user must have a membership on :id, else 403.
 export const requireMembership: MiddlewareHandler<Vars> = async (c, next) => {
+  const userId = c.get('userId');
+  if (isPlatformAdmin(userId)) return next(); // super-admin: access to every store
   const tenantId = c.req.param('id');
-  const m = tenantId ? await getMembership(c.get('userId'), tenantId) : null;
+  const m = tenantId ? await getMembership(userId, tenantId) : null;
   if (!m) return c.json({ error: 'forbidden' }, 403);
   return next();
 };

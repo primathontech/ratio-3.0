@@ -75,6 +75,7 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   const [stores, setStores] = useState<Store[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [me, setMe] = useState<{ userId: string; isPlatformAdmin: boolean } | null>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -84,13 +85,23 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
       .catch((e: Error) => setError(e.message));
   }, [api]);
   useEffect(load, [load]);
+  useEffect(() => {
+    api.me().then(setMe).catch(() => {});
+  }, [api]);
 
   return (
     <>
       <div className="page-head">
         <div>
-          <h1>Your stores</h1>
-          <p className="muted">Every store is live at its own domain.</p>
+          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {me?.isPlatformAdmin ? 'All stores' : 'Your stores'}
+            {me?.isPlatformAdmin && <Badge accent>Admin · all stores</Badge>}
+          </h1>
+          <p className="muted">
+            {me?.isPlatformAdmin
+              ? 'Platform admin — you can manage every store on Ratio.'
+              : 'Every store is live at its own domain.'}
+          </p>
         </div>
         <button className="btn btn-primary" onClick={() => setCreating(true)}>
           <Icon.plus /> New store
@@ -140,6 +151,12 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
             load();
           }}
         />
+      )}
+
+      {me && (
+        <p className="muted" style={{ marginTop: 32, fontSize: 12.5 }}>
+          Signed in · <span className="mono">{me.userId}</span>
+        </p>
       )}
     </>
   );

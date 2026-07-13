@@ -48,6 +48,7 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
   }
 
   return {
+    me: () => req<{ userId: string; isPlatformAdmin: boolean }>('GET', '/me'),
     listStores: () => req<{ stores: Store[] }>('GET', '/stores').then((d) => d.stores),
     createStore: (s: { id: string; name: string; host: string; color?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
