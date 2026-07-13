@@ -46,6 +46,15 @@ export const Icon = {
     ),
   back: ({ size }: IconProps) => svg(<path d="M15 18l-6-6 6-6" />, size),
   check: ({ size }: IconProps) => svg(<path d="M20 6L9 17l-5-5" />, size),
+  up: ({ size }: IconProps) => svg(<path d="M18 15l-6-6-6 6" />, size),
+  down: ({ size }: IconProps) => svg(<path d="M6 9l6 6 6-6" />, size),
+  trash: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1L5 6" />
+      </>,
+      size
+    ),
 };
 
 /* Spinner ---------------------------------------------------------------- */

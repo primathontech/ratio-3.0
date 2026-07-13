@@ -639,6 +639,95 @@ h2 {
   }
 }
 
+/* Section builder --------------------------------------------------------- */
+.btn-sm {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
+.editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.field-label {
+  font-size: 12.5px;
+  font-weight: 560;
+  color: var(--muted);
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: var(--accent);
+  color: #fff;
+}
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sec-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 12px;
+}
+.sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sec-actions {
+  display: flex;
+  gap: 4px;
+}
+.sec-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.sec-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.products-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.product-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.product-row .input {
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.add-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line-strong);
+  margin-top: 2px;
+}
+
 @media (max-width: 820px) {
   .editor {
     grid-template-columns: 1fr;

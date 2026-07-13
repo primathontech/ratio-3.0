@@ -3,6 +3,7 @@ import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-r
 import { createApi, type Api, type Store, type PageSummary } from './api';
 import { useTheme } from './theme';
 import { Badge, Dialog, EmptyState, Field, Icon, Spinner, ToastProvider, useToast } from './ui';
+import { SectionEditor, toEditable, type Section } from './sections';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -275,10 +276,14 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [path, setPath] = useState('/');
   const [pageType, setPageType] = useState('home');
-  const [config, setConfig] = useState('{\n  "sections": []\n}');
+  const [title, setTitle] = useState('');
+  const [sections, setSections] = useState<Section[]>([]);
+  const [mode, setMode] = useState<'visual' | 'json'>('visual');
+  const [rawJson, setRawJson] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [previewBump, setPreviewBump] = useState(0);
+  const [creating, setCreating] = useState(false);
 
   const loadPages = useCallback(() => {
     api.listPages(store.id).then(setPages).catch((e: Error) => setErr(e.message));
@@ -289,27 +294,71 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
     setErr(null);
     try {
       const page = await api.getPage(store.id, p);
+      const editable = toEditable(page.pageConfig);
       setPath(page.path);
       setPageType(page.pageType);
-      setConfig(JSON.stringify(page.pageConfig, null, 2));
+      setTitle(editable.title ?? '');
+      setSections(editable.sections);
+      setMode('visual');
     } catch (e) {
       setErr((e as Error).message);
+    }
+  }
+
+  // Build the pageConfig from whichever editor mode is active.
+  function buildConfig(): { pageConfig: unknown } | { error: string } {
+    if (mode === 'json') {
+      try {
+        return { pageConfig: JSON.parse(rawJson) };
+      } catch {
+        return { error: 'The JSON is not valid.' };
+      }
+    }
+    return { pageConfig: { title: title || undefined, sections } };
+  }
+
+  function switchMode(next: 'visual' | 'json') {
+    if (next === mode) return;
+    if (next === 'json') {
+      setRawJson(JSON.stringify({ title: title || undefined, sections }, null, 2));
+    } else {
+      try {
+        const editable = toEditable(JSON.parse(rawJson));
+        setTitle(editable.title ?? '');
+        setSections(editable.sections);
+        setErr(null);
+      } catch {
+        setErr('Fix the JSON before switching back to the visual editor.');
+        return;
+      }
+    }
+    setMode(next);
+  }
+
+  async function createPage(newPath: string, newType: string) {
+    setCreating(false);
+    try {
+      await api.savePage(store.id, { path: newPath, pageType: newType, pageConfig: { sections: [] } });
+      toast('Page created');
+      loadPages();
+      openPage(newPath);
+    } catch (e) {
+      setErr((e as Error).message);
+      toast('Create failed', 'error');
     }
   }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    let pageConfig: unknown;
-    try {
-      pageConfig = JSON.parse(config);
-    } catch {
-      setErr('The page config is not valid JSON.');
+    const built = buildConfig();
+    if ('error' in built) {
+      setErr(built.error);
       return;
     }
     setSaving(true);
     try {
-      await api.savePage(store.id, { path, pageType, pageConfig });
+      await api.savePage(store.id, { path, pageType, pageConfig: built.pageConfig });
       toast('Saved — live on your store');
       setPreviewBump((n) => n + 1);
       loadPages();
@@ -348,6 +397,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
         <div className="card pane">
           <div className="pane-head">
             <h2>Pages</h2>
+            <button className="btn btn-ghost btn-sm" onClick={() => setCreating(true)}>
+              <Icon.plus size={14} /> New page
+            </button>
           </div>
           {!pages && <div className="center-pad"><Spinner /></div>}
           <div className="pagelist">
@@ -372,9 +424,33 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                 <input className="input" value={pageType} onChange={(e) => setPageType(e.target.value)} />
               </Field>
             </div>
-            <Field label="Content (JSON)">
-              <textarea className="textarea" value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} />
+            <Field label="Page title">
+              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Shown in the browser tab" />
             </Field>
+
+            <div className="editor-head">
+              <span className="field-label">Content</span>
+              <div className="seg">
+                <button type="button" className={mode === 'visual' ? 'on' : ''} onClick={() => switchMode('visual')}>
+                  Visual
+                </button>
+                <button type="button" className={mode === 'json' ? 'on' : ''} onClick={() => switchMode('json')}>
+                  JSON
+                </button>
+              </div>
+            </div>
+
+            {mode === 'visual' ? (
+              <SectionEditor sections={sections} onChange={setSections} />
+            ) : (
+              <textarea
+                className="textarea"
+                value={rawJson}
+                onChange={(e) => setRawJson(e.target.value)}
+                spellCheck={false}
+              />
+            )}
+
             {err && <div className="note note-error">{err}</div>}
             <div>
               <button className="btn btn-primary" type="submit" disabled={saving}>
@@ -413,6 +489,46 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           )}
         </div>
       </div>
+
+      {creating && <NewPageDialog onClose={() => setCreating(false)} onCreate={createPage} />}
     </>
+  );
+}
+
+function NewPageDialog({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (path: string, type: string) => void;
+}) {
+  const [p, setP] = useState('/');
+  const [t, setT] = useState('page');
+  return (
+    <Dialog title="New page" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (p.startsWith('/')) onCreate(p, t || 'page');
+        }}
+      >
+        <div className="body">
+          <Field label="Path (must start with /)">
+            <input className="input mono" value={p} onChange={(e) => setP(e.target.value)} placeholder="/about" required />
+          </Field>
+          <Field label="Type">
+            <input className="input" value={t} onChange={(e) => setT(e.target.value)} placeholder="page" />
+          </Field>
+        </div>
+        <div className="actions">
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="btn btn-primary">
+            <Icon.plus /> Create page
+          </button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
