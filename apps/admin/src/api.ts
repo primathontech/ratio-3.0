@@ -87,6 +87,8 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
       req<{ domains: DomainInfo[] }>('GET', `/stores/${id}/domains`).then((d) => d.domains),
     connectDomain: (id: string, host: string) =>
       req<DomainConnection>('POST', `/stores/${id}/domains`, { host }),
+    getDomain: (id: string, host: string) =>
+      req<DomainConnection>('GET', `/stores/${id}/domain?host=${encodeURIComponent(host)}`),
     removeDomain: (id: string, host: string) =>
       req<{ removed: boolean }>('DELETE', `/stores/${id}/domains`, { host }),
   };

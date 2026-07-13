@@ -178,6 +178,14 @@ test('owner connects a custom domain; it is mapped + listed, then removable', as
   assert.strictEqual(del.removed, true);
 });
 
+test('GET /stores/:id/domain returns details (platform host) and is membership-gated', async () => {
+  const ok = await call('GET', `/stores/${ID}/domain?host=x.ratiodev.in`, alice);
+  assert.strictEqual(ok.status, 200);
+  assert.strictEqual(((await ok.json()) as { kind: string }).kind, 'platform');
+  const forbidden = await call('GET', `/stores/${ID}/domain?host=x.ratiodev.in`, bob);
+  assert.strictEqual(forbidden.status, 403);
+});
+
 test('a non-owner cannot delete the store', async () => {
   const r = await call('DELETE', `/stores/${ID}`, bob);
   assert.strictEqual(r.status, 403);

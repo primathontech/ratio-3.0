@@ -177,6 +177,38 @@ export function createApp(verify: Verifier = clerkVerifier) {
     return c.json({ removed });
   });
 
+  // The DNS records + status for ONE domain — so a merchant can pull the setup details
+  // back up anytime. Creates the custom hostname if it wasn't provisioned yet (e.g. the
+  // domain was mapped before the Cloudflare token was configured).
+  app.get('/stores/:id/domain', requireMembership, async (c) => {
+    const host = c.req.query('host');
+    if (!host) return c.json({ error: 'host query param required' }, 400);
+    if (isPlatformHost(host)) {
+      return c.json({
+        host,
+        configured: true,
+        kind: 'platform',
+        status: 'active',
+        sslStatus: 'active',
+        records: [],
+      });
+    }
+    const cfg = cfConfig();
+    if (!cfg)
+      return c.json({
+        host,
+        configured: false,
+        note: 'Custom domains are not configured on this server.',
+      });
+    try {
+      const conn =
+        (await customHostnameStatus(cfg, host)) ?? (await connectCustomHostname(cfg, host));
+      return c.json({ ...conn, configured: true });
+    } catch (e) {
+      return c.json({ host, configured: true, error: (e as Error).message }, 502);
+    }
+  });
+
   return app;
 }
 

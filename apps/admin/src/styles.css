@@ -667,8 +667,13 @@ h2 {
 .domain-row a {
   font-size: 13.5px;
 }
-.domain-row .icon-btn {
+.domain-actions {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.domain-row .icon-btn {
   width: 30px;
   height: 30px;
 }

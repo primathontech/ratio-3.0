@@ -562,6 +562,7 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
   const toast = useToast();
   const [domains, setDomains] = useState<DomainInfo[] | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api.listDomains(store.id).then(setDomains).catch(() => setDomains([]));
@@ -599,9 +600,14 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
             <span className="badge">{d.kind === 'platform' ? 'Ratio subdomain' : 'custom'}</span>
             {statusBadge(d)}
             {d.kind === 'custom' && (
-              <button className="icon-btn" aria-label="Remove domain" onClick={() => remove(d.host)}>
-                <Icon.trash size={14} />
-              </button>
+              <div className="domain-actions">
+                <button className="btn btn-subtle btn-sm" onClick={() => setViewing(d.host)}>
+                  View DNS records
+                </button>
+                <button className="icon-btn" aria-label="Remove domain" onClick={() => remove(d.host)}>
+                  <Icon.trash size={14} />
+                </button>
+              </div>
             )}
           </div>
         ))}
@@ -609,7 +615,82 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
       {connecting && (
         <ConnectDomainDialog api={api} store={store} onClose={() => setConnecting(false)} onDone={() => { setConnecting(false); load(); }} />
       )}
+      {viewing && (
+        <DomainRecordsDialog api={api} store={store} host={viewing} onClose={() => { setViewing(null); load(); }} />
+      )}
     </div>
+  );
+}
+
+// Reused by the connect dialog and the "view records" dialog.
+function DnsRecordsView({ result }: { result: DomainConnection }) {
+  if (!result.records || result.records.length === 0) {
+    return <div className="note">{result.note || result.error || 'Domain mapped.'}</div>;
+  }
+  return (
+    <>
+      <p style={{ fontSize: 13 }}>
+        Add these records at your DNS provider for <span className="mono">{result.host}</span>. It goes live
+        once they propagate and the certificate issues.
+      </p>
+      <div className="dns-records">
+        {result.records.map((r, i) => (
+          <div className="dns-record" key={i}>
+            <span className="badge">{r.type}</span>
+            <div className="dns-kv">
+              <div className="mono dns-name">{r.name}</div>
+              <div className="mono dns-val">{r.value}</div>
+              <div className="muted">{r.purpose}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function DomainRecordsDialog({
+  api,
+  store,
+  host,
+  onClose,
+}: {
+  api: Api;
+  store: Store;
+  host: string;
+  onClose: () => void;
+}) {
+  const [result, setResult] = useState<DomainConnection | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .getDomain(store.id, host)
+      .then(setResult)
+      .catch((e: Error) => setErr(e.message));
+  }, [api, store.id, host]);
+  return (
+    <Dialog title={`DNS records — ${host}`} onClose={onClose}>
+      <div className="body">
+        {err && <div className="note note-error">{err}</div>}
+        {!result && !err && <div className="center-pad"><Spinner /></div>}
+        {result && (
+          <>
+            {result.status && (
+              <p className="muted" style={{ fontSize: 12.5 }}>
+                Status: <strong>{result.status}</strong>
+                {result.sslStatus ? ` · SSL: ${result.sslStatus}` : ''}
+              </p>
+            )}
+            <DnsRecordsView result={result} />
+          </>
+        )}
+      </div>
+      <div className="actions">
+        <button type="button" className="btn btn-primary" onClick={onClose}>
+          <Icon.check /> Done
+        </button>
+      </div>
+    </Dialog>
   );
 }
 
@@ -667,28 +748,7 @@ function ConnectDomainDialog({
       ) : (
         <div>
           <div className="body">
-            {result.records && result.records.length > 0 ? (
-              <>
-                <p style={{ fontSize: 13 }}>
-                  Add these records at your DNS provider for <span className="mono">{result.host}</span>. It goes
-                  live once they propagate and the certificate issues.
-                </p>
-                <div className="dns-records">
-                  {result.records.map((r, i) => (
-                    <div className="dns-record" key={i}>
-                      <span className="badge">{r.type}</span>
-                      <div className="dns-kv">
-                        <div className="mono dns-name">{r.name}</div>
-                        <div className="mono dns-val">{r.value}</div>
-                        <div className="muted">{r.purpose}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="note">{result.note || result.error || 'Domain mapped.'}</div>
-            )}
+            <DnsRecordsView result={result} />
           </div>
           <div className="actions">
             <button type="button" className="btn btn-primary" onClick={onDone}>
