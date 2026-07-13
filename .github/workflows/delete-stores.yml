@@ -1,0 +1,23 @@
+name: Delete stores
+
+# Manual, destructive: hard-deletes stores from the PRODUCTION database by tenant id
+# (atomic purge + zero-residual proof via deleteStore). Run from the Actions tab.
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: 'Space-separated tenant ids to delete (e.g. "t_acme t_beta")'
+        required: true
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Hard-delete
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/delete-store.ts ${{ inputs.ids }}
