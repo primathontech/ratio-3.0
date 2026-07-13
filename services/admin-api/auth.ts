@@ -87,7 +87,8 @@ export async function listAllStores(): Promise<
     host: string | null;
   }>(
     `SELECT t.id, t.name, 'admin' AS role,
-            (SELECT host FROM domains WHERE tenant_id = t.id ORDER BY host LIMIT 1) AS host
+            (SELECT host FROM domains WHERE tenant_id = t.id
+              ORDER BY (host LIKE '%.localhost'), host LIMIT 1) AS host
        FROM tenants t
       ORDER BY t.name`
   );
@@ -106,7 +107,8 @@ export async function listStoresForUser(
     host: string | null;
   }>(
     `SELECT t.id, t.name, m.role,
-            (SELECT host FROM domains WHERE tenant_id = t.id ORDER BY host LIMIT 1) AS host
+            (SELECT host FROM domains WHERE tenant_id = t.id
+              ORDER BY (host LIKE '%.localhost'), host LIMIT 1) AS host
        FROM memberships m JOIN tenants t ON t.id = m.tenant_id
       WHERE m.clerk_user_id = $1
       ORDER BY t.name`,

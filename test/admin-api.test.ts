@@ -107,6 +107,18 @@ test('the owner can read the store', async () => {
   assert.strictEqual(((await r.json()) as { id: string }).id, ID);
 });
 
+test('store host prefers a real domain over a .localhost dev domain', async () => {
+  await pool.query(
+    `INSERT INTO domains (host, tenant_id) VALUES ('cp.ratiodev.in', $1) ON CONFLICT (host) DO NOTHING`,
+    [ID]
+  );
+  const { stores } = (await (await call('GET', '/stores', alice)).json()) as {
+    stores: { id: string; host: string }[];
+  };
+  assert.strictEqual(stores.find((s) => s.id === ID)!.host, 'cp.ratiodev.in');
+  await pool.query(`DELETE FROM domains WHERE host = 'cp.ratiodev.in'`);
+});
+
 test('a different authenticated user is 403 (no membership)', async () => {
   const r = await call('GET', `/stores/${ID}`, bob);
   assert.strictEqual(r.status, 403);

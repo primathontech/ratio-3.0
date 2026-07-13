@@ -50,10 +50,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Migrate + seed Neon
-        run: |
-          DATABASE_URL="${{ secrets.DATABASE_URL }}" npm run migrate
-          DATABASE_URL="${{ secrets.DATABASE_URL }}" npm run seed
+      # Only apply schema to prod. db/seed.sql is a DEV/TEST demo fixture (Acme/Beta +
+      # *.localhost domains) — never seed it into prod; real stores come from onboarding.
+      - name: Migrate Neon
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npm run migrate
       - name: Deploy Worker
         run: npx wrangler deploy
       - name: Set Worker DATABASE_URL secret
