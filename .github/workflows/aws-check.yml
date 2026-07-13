@@ -17,6 +17,35 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
       - name: Who am I
         run: aws sts get-caller-identity
+      - name: Diagnose admin-api service (events / stopped tasks / logs / health check)
+        run: |
+          set -uo pipefail
+          CLUSTER=arn:aws:ecs:ap-south-1:844310781883:cluster/default
+          SVC=$(aws ecs list-services --cluster "$CLUSTER" --query "serviceArns[?contains(@, 'admin-api')] | [0]" --output text)
+          echo "admin-api service = $SVC"
+          [ "$SVC" = "None" ] && { echo "no admin-api service found"; exit 0; }
+          echo "--- last 12 service events (why tasks fail to place/stabilise) ---"
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].events[:12].[createdAt,message]' --output text
+          echo "--- STOPPED tasks + stop reason + container exit ---"
+          for T in $(aws ecs list-tasks --cluster "$CLUSTER" --service-name "${SVC##*/}" --desired-status STOPPED --query 'taskArns[:3]' --output text); do
+            aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$T" \
+              --query 'tasks[0].{stopped:stoppedReason,task:stoppedAt,containers:containers[].{name:name,exit:exitCode,reason:reason,lastStatus:lastStatus}}' --output json
+          done
+          echo "--- target group health check paths ---"
+          for TG in $(aws elbv2 describe-target-groups --query 'TargetGroups[].TargetGroupArn' --output text); do
+            aws elbv2 describe-target-groups --target-group-arns "$TG" \
+              --query 'TargetGroups[0].{name:TargetGroupName,port:Port,hcPath:HealthCheckPath,hcPort:HealthCheckPort,matcher:Matcher}' --output json
+          done
+          echo "--- recent container logs (admin-api log group) ---"
+          LG=$(aws logs describe-log-groups --query "logGroups[?contains(logGroupName,'admin-api')].logGroupName | [0]" --output text)
+          echo "log group = $LG"
+          if [ "$LG" != "None" ] && [ -n "$LG" ]; then
+            STREAM=$(aws logs describe-log-streams --log-group-name "$LG" --order-by LastEventTime --descending --max-items 1 --query 'logStreams[0].logStreamName' --output text)
+            aws logs get-log-events --log-group-name "$LG" --log-stream-name "$STREAM" --limit 60 \
+              --query 'events[].message' --output text
+          fi
+
       - name: ECS service full config (to clone for admin-api)
         run: |
           set -uo pipefail
