@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
+import { dark } from '@clerk/themes';
 import { App } from './App';
 import { ThemeProvider, useTheme } from './theme';
 import './styles.css';
@@ -8,23 +9,12 @@ import './styles.css';
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!publishableKey) throw new Error('VITE_CLERK_PUBLISHABLE_KEY is not set');
 
-// Theme the Clerk widgets to match the app chrome + current light/dark.
-function clerkAppearance(dark: boolean) {
+// Theme the Clerk widgets to match the app chrome. Use Clerk's official dark base theme
+// (covers social buttons, menus, borders — not just a few colours) + our accent.
+function clerkAppearance(isDark: boolean) {
   return {
-    variables: {
-      colorPrimary: '#4f46e5',
-      borderRadius: '8px',
-      ...(dark
-        ? {
-            colorBackground: '#15181f',
-            colorText: '#e7e9ee',
-            colorTextSecondary: '#98a0ad',
-            colorInputBackground: '#1b1f28',
-            colorInputText: '#e7e9ee',
-            colorPrimary: '#818cf8',
-          }
-        : {}),
-    },
+    baseTheme: isDark ? dark : undefined,
+    variables: { colorPrimary: isDark ? '#818cf8' : '#4f46e5', borderRadius: '8px' },
   };
 }
 
