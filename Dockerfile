@@ -15,4 +15,6 @@ COPY . .
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["sh", "-c", "if [ \"$RATIO_SERVICE\" = \"admin-api\" ]; then exec npx tsx services/admin-api/server.ts; else exec npx tsx apps/origin/server.ts; fi"]
+# admin-api listens on 80 (ECS Express defaults new services' target port to 80); the
+# origin keeps 8080 (its target group is 8080). Each role matches its gateway target.
+CMD ["sh", "-c", "if [ \"$RATIO_SERVICE\" = \"admin-api\" ]; then export PORT=80; exec npx tsx services/admin-api/server.ts; else exec npx tsx apps/origin/server.ts; fi"]
