@@ -7,11 +7,13 @@ export async function onboardStore({
   name,
   host,
   color = '#333333',
+  ownerUserId,
 }: {
   id?: string;
   name?: string;
   host?: string;
   color?: string;
+  ownerUserId?: string;
 }): Promise<void> {
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
@@ -38,6 +40,13 @@ export async function onboardStore({
         }),
       ]
     );
+    if (ownerUserId) {
+      await client.query(
+        `INSERT INTO memberships (clerk_user_id, tenant_id, role) VALUES ($1,$2,'owner')
+         ON CONFLICT (clerk_user_id, tenant_id) DO NOTHING`,
+        [ownerUserId, id]
+      );
+    }
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -49,7 +58,7 @@ export async function onboardStore({
 
 export interface DeleteProof {
   deleted: boolean;
-  removed: { routes: number; domains: number; tenants: number };
+  removed: { routes: number; domains: number; tenants: number; memberships: number };
   residual: number;
 }
 
@@ -62,13 +71,16 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // memberships first: it FK-references tenants(id), so it must go before the tenant.
+    const memberships = await client.query('DELETE FROM memberships WHERE tenant_id = $1', [id]);
     const routes = await client.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
     const domains = await client.query('DELETE FROM domains WHERE tenant_id = $1', [id]);
     const tenants = await client.query('DELETE FROM tenants WHERE id = $1', [id]);
     const { rows } = await client.query<{ residual: string }>(
       `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
             + (SELECT count(*) FROM domains WHERE tenant_id=$1)
-            + (SELECT count(*) FROM routes WHERE tenant_id=$1) AS residual`,
+            + (SELECT count(*) FROM routes WHERE tenant_id=$1)
+            + (SELECT count(*) FROM memberships WHERE tenant_id=$1) AS residual`,
       [id]
     );
     const residual = Number(rows[0].residual);
@@ -80,6 +92,7 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
         routes: routes.rowCount ?? 0,
         domains: domains.rowCount ?? 0,
         tenants: tenants.rowCount ?? 0,
+        memberships: memberships.rowCount ?? 0,
       },
       residual,
     };
