@@ -1,0 +1,34 @@
+name: CF wildcard DNS
+
+# Adds a proxied wildcard *.ratiodev.in DNS record so EVERY store subdomain resolves to
+# Cloudflare, where the edge Worker maps host -> tenant from the DB. Mirrors acme's record
+# shape (acme is known-good). Idempotent. Run from the Actions tab.
+on: workflow_dispatch
+
+jobs:
+  wildcard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add proxied wildcard *.ratiodev.in
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          api() { curl -s -H "Authorization: Bearer $T" -H "Content-Type: application/json" "$@"; }
+          ZID=$(api "https://api.cloudflare.com/client/v4/zones?name=ratiodev.in" | jq -r '.result[0].id')
+          echo "zone=$ZID"
+          echo "--- current records ---"
+          api "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records?per_page=100" \
+            | jq -r '.result[] | "\(.type)\t\(.name)\tproxied=\(.proxied)"'
+          ACME=$(api "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records?name=acme.ratiodev.in")
+          TYPE=$(echo "$ACME" | jq -r '.result[0].type')
+          CONTENT=$(echo "$ACME" | jq -r '.result[0].content')
+          echo "mirroring acme -> type=$TYPE content=$CONTENT"
+          EXIST=$(api "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records?name=%2A.ratiodev.in" | jq -r '.result[0].id // empty')
+          if [ -n "$EXIST" ]; then
+            echo "wildcard already exists ($EXIST) — nothing to do"
+          else
+            api -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" \
+              --data "$(jq -nc --arg t "$TYPE" --arg c "$CONTENT" '{type:$t,name:"*",content:$c,proxied:true,ttl:1}')" \
+              | jq '{success, errors:(.errors|map(.message)), result:{name:.result.name,type:.result.type,proxied:.result.proxied}}'
+          fi
