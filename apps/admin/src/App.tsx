@@ -163,7 +163,13 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   );
 }
 
+// Tolerate the deploy-skew window where the API hasn't shipped `hosts` yet.
+function hostsOf(store: Store): string[] {
+  return store.hosts ?? (store.host ? [store.host] : []);
+}
+
 function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
+  const hosts = hostsOf(store);
   return (
     <div className="card store-card" onClick={onOpen} role="button" tabIndex={0}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
@@ -171,16 +177,21 @@ function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
         <span className="swatch" style={{ background: 'var(--surface-2)' }} />
         <div>
           <div className="name">{store.name}</div>
-          {store.host ? (
-            <a
-              className="host"
-              href={`https://${store.host}`}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {store.host} <Icon.external size={11} />
-            </a>
+          {hosts.length > 0 ? (
+            <div className="hosts">
+              {hosts.map((h) => (
+                <a
+                  key={h}
+                  className="host"
+                  href={`https://${h}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {h} <Icon.external size={11} />
+                </a>
+              ))}
+            </div>
           ) : (
             <span className="host muted">no domain</span>
           )}
@@ -273,6 +284,7 @@ function CreateStoreDialog({
 /* Page manager ----------------------------------------------------------- */
 function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: () => void }) {
   const toast = useToast();
+  const hosts = hostsOf(store);
   const [pages, setPages] = useState<PageSummary[] | null>(null);
   const [path, setPath] = useState('/');
   const [pageType, setPageType] = useState('home');
@@ -370,9 +382,11 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
     }
   }
 
-  // Cache-busted so the preview reflects the just-saved content (bypasses edge cache).
-  const previewSrc = store.host
-    ? `https://${store.host}${path}?_ratiopreview=${previewBump}`
+  // Preview via the platform subdomain — it always resolves (wildcard); a BYO custom
+  // domain may not be connected yet. Cache-busted so it shows the just-saved content.
+  const previewHost = hosts.find((h) => h.endsWith('.ratiodev.in')) ?? hosts[0] ?? null;
+  const previewSrc = previewHost
+    ? `https://${previewHost}${path}?_ratiopreview=${previewBump}`
     : null;
 
   return (
@@ -383,11 +397,13 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
       <div className="page-head">
         <div>
           <h1>{store.name}</h1>
-          {store.host && (
-            <p>
-              <a href={`https://${store.host}`} target="_blank" rel="noreferrer">
-                {store.host} <Icon.external size={12} />
-              </a>
+          {hosts.length > 0 && (
+            <p className="hosts">
+              {hosts.map((h) => (
+                <a key={h} href={`https://${h}`} target="_blank" rel="noreferrer">
+                  {h} <Icon.external size={12} />
+                </a>
+              ))}
             </p>
           )}
         </div>
@@ -464,7 +480,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           <div className="pane-head">
             <h2>Live preview</h2>
             {previewSrc && (
-              <a className="btn btn-subtle" href={`https://${store.host}${path}`} target="_blank" rel="noreferrer">
+              <a className="btn btn-subtle" href={`https://${previewHost}${path}`} target="_blank" rel="noreferrer">
                 Open <Icon.external size={13} />
               </a>
             )}
@@ -472,7 +488,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           {previewSrc ? (
             <>
               <div className="preview-bar mono">
-                <span className="dot" /> {store.host}
+                <span className="dot" /> {previewHost}
                 {path}
               </div>
               <iframe

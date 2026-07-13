@@ -326,7 +326,14 @@ h2 {
   font-size: 15px;
   letter-spacing: -0.01em;
 }
-.store-card .host {
+.hosts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 0;
+}
+.store-card .host,
+.hosts .host {
   font-size: 12.5px;
 }
 .store-card .foot {

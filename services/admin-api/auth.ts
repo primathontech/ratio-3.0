@@ -76,19 +76,26 @@ export function isPlatformAdmin(userId: string): boolean {
   return ids.includes(userId);
 }
 
+export interface StoreRow {
+  id: string;
+  name: string;
+  role: string;
+  host: string | null; // primary (real domains before .localhost)
+  hosts: string[]; // every domain mapped to the store
+}
+
+// Domain columns shared by both listings: a primary host + the full list. Real domains
+// sort before *.localhost dev domains.
+const DOMAIN_COLS = `
+  (SELECT host FROM domains WHERE tenant_id = t.id
+    ORDER BY (host LIKE '%.localhost'), host LIMIT 1) AS host,
+  COALESCE((SELECT array_agg(host ORDER BY (host LIKE '%.localhost'), host)
+              FROM domains WHERE tenant_id = t.id), ARRAY[]::text[]) AS hosts`;
+
 // Every store (platform-admin view). Role reported as 'admin'.
-export async function listAllStores(): Promise<
-  { id: string; name: string; role: string; host: string | null }[]
-> {
-  const { rows } = await pool.query<{
-    id: string;
-    name: string;
-    role: string;
-    host: string | null;
-  }>(
-    `SELECT t.id, t.name, 'admin' AS role,
-            (SELECT host FROM domains WHERE tenant_id = t.id
-              ORDER BY (host LIKE '%.localhost'), host LIMIT 1) AS host
+export async function listAllStores(): Promise<StoreRow[]> {
+  const { rows } = await pool.query<StoreRow>(
+    `SELECT t.id, t.name, 'admin' AS role, ${DOMAIN_COLS}
        FROM tenants t
       ORDER BY t.name`
   );
@@ -97,18 +104,9 @@ export async function listAllStores(): Promise<
 
 // The stores a user may manage (their memberships joined to tenants). Crosses tenant
 // boundaries by design — it's the caller's own access list, scoped to their user id.
-export async function listStoresForUser(
-  userId: string
-): Promise<{ id: string; name: string; role: string; host: string | null }[]> {
-  const { rows } = await pool.query<{
-    id: string;
-    name: string;
-    role: string;
-    host: string | null;
-  }>(
-    `SELECT t.id, t.name, m.role,
-            (SELECT host FROM domains WHERE tenant_id = t.id
-              ORDER BY (host LIKE '%.localhost'), host LIMIT 1) AS host
+export async function listStoresForUser(userId: string): Promise<StoreRow[]> {
+  const { rows } = await pool.query<StoreRow>(
+    `SELECT t.id, t.name, m.role, ${DOMAIN_COLS}
        FROM memberships m JOIN tenants t ON t.id = m.tenant_id
       WHERE m.clerk_user_id = $1
       ORDER BY t.name`,
