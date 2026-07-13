@@ -627,35 +627,37 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
   if (!result.records || result.records.length === 0) {
     return <div className="note">{result.note || result.error || 'Domain mapped.'}</div>;
   }
-  // A root/apex domain (2 labels, e.g. brand.in) can't take a CNAME at most registrars.
-  const isApex = !!result.host && result.host.split('.').length <= 2;
+  const isApex = result.apex ?? (!!result.host && result.host.split('.').length <= 2);
   return (
     <>
       {isApex && (
         <div className="note note-warn" style={{ marginBottom: 10 }}>
           <strong>{result.host}</strong> is a root domain — most registrars (including GoDaddy)
-          can't put a <span className="mono">CNAME</span> at the root. Either <strong>forward the
-          root to https://www.{result.host}</strong> and connect the <span className="mono">www</span>{' '}
-          version instead (the usual setup), or move DNS to a provider with CNAME flattening (e.g.
-          Cloudflare). The <span className="mono">TXT</span> records below still apply as-is.
+          can't put a routing record at the root. The standard fix: <strong>forward the root to
+          https://www.{result.host}</strong> and connect the <span className="mono">www</span>{' '}
+          version instead. (Only providers with ALIAS/ANAME or CNAME-flattening — e.g. Cloudflare
+          — can use the routing record below at the root.) The <span className="mono">TXT</span>{' '}
+          records still apply as-is.
         </div>
       )}
       <p style={{ fontSize: 13 }}>
-        Add these records at your DNS provider for <span className="mono">{result.host}</span>. It goes live
-        once they propagate and the certificate issues.
+        Add these records at your DNS provider for <span className="mono">{result.host}</span>. Most
+        UIs ask for <em>Host/Name</em> (the part before your domain) — that's the middle column.
       </p>
-      <div className="dns-records">
+      <div className="dns-table" role="table">
+        <div className="dns-th" role="row">
+          <span>Type</span>
+          <span>Host / Name</span>
+          <span>Value</span>
+          <span>TTL</span>
+        </div>
         {result.records.map((r, i) => (
-          <div className="dns-record" key={i}>
+          <div className="dns-tr" role="row" key={i}>
             <span className="badge">{r.type}</span>
-            <div className="dns-kv">
-              <div className="mono dns-name">{r.name}</div>
-              <div className="mono dns-val">{r.value}</div>
-              <div className="muted">
-                {r.purpose}
-                {isApex && r.type === 'CNAME' ? ' — use forwarding to www for a root domain' : ''}
-              </div>
-            </div>
+            <span className="mono dns-host">{r.host}</span>
+            <span className="mono dns-val">{r.value}</span>
+            <span className="muted">{r.ttl}</span>
+            <span className="dns-purpose muted">{r.purpose}</span>
           </div>
         ))}
       </div>

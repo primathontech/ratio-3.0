@@ -29,7 +29,9 @@ export interface DomainInfo {
 export interface DnsRecord {
   type: string;
   name: string;
+  host: string;
   value: string;
+  ttl: string;
   purpose: string;
 }
 export interface DomainConnection {
@@ -40,6 +42,7 @@ export interface DomainConnection {
   status?: string;
   sslStatus?: string;
   cnameTarget?: string;
+  apex?: boolean;
   records?: DnsRecord[];
 }
 

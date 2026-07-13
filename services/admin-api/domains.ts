@@ -24,9 +24,11 @@ export function cfConfig(): CfConfig | null {
 }
 
 export interface DnsRecord {
-  type: string;
-  name: string;
+  type: string; // CNAME | ALIAS | TXT — accurate for apex vs subdomain
+  name: string; // full record name (FQDN)
+  host: string; // name relative to the zone — what DNS UIs want (@, www, _acme-challenge)
   value: string;
+  ttl: string;
   purpose: string;
 }
 export interface DomainConnection {
@@ -34,7 +36,20 @@ export interface DomainConnection {
   status: string; // pending | active | ...
   sslStatus: string; // pending_validation | active | ...
   cnameTarget: string;
+  apex: boolean; // true if a root domain (can't take a CNAME at most registrars)
   records: DnsRecord[];
+}
+
+// Registrable zone (last two labels — good enough for common TLDs; multi-part TLDs like
+// .co.uk are the known edge). Used to show provider-style relative host names.
+function zoneOf(host: string): string {
+  const parts = host.split('.');
+  return parts.length <= 2 ? host : parts.slice(-2).join('.');
+}
+function relName(fqdn: string, zone: string): string {
+  if (fqdn === zone) return '@';
+  if (fqdn.endsWith('.' + zone)) return fqdn.slice(0, -(zone.length + 1));
+  return fqdn;
 }
 
 interface CfResult {
@@ -78,15 +93,29 @@ async function zoneId(cfg: CfConfig, fetchImpl: typeof fetch): Promise<string> {
 
 function toConnection(cfg: CfConfig, host: string, ch: Record<string, unknown>): DomainConnection {
   const ssl = (ch.ssl as Record<string, unknown>) || {};
+  const zone = zoneOf(host);
+  const apex = host === zone;
   const records: DnsRecord[] = [
-    { type: 'CNAME', name: host, value: cfg.fallback, purpose: 'Route traffic to Ratio' },
+    {
+      // Root domains can't take a CNAME at most registrars → ALIAS/ANAME (or forward to www).
+      type: apex ? 'ALIAS' : 'CNAME',
+      name: host,
+      host: relName(host, zone),
+      value: cfg.fallback,
+      ttl: 'Auto',
+      purpose: apex
+        ? 'Route the root domain (use ALIAS/ANAME, or forward the root to your www subdomain)'
+        : 'Route traffic to Ratio',
+    },
   ];
   const ov = ch.ownership_verification as { name?: string; value?: string } | undefined;
   if (ov?.name) {
     records.push({
       type: 'TXT',
       name: ov.name,
+      host: relName(ov.name, zone),
       value: ov.value ?? '',
+      ttl: 'Auto',
       purpose: 'Verify domain ownership',
     });
   }
@@ -95,7 +124,9 @@ function toConnection(cfg: CfConfig, host: string, ch: Record<string, unknown>):
       records.push({
         type: 'TXT',
         name: v.txt_name,
+        host: relName(v.txt_name, zone),
         value: v.txt_value ?? '',
+        ttl: 'Auto',
         purpose: 'Issue SSL certificate',
       });
     }
@@ -105,6 +136,7 @@ function toConnection(cfg: CfConfig, host: string, ch: Record<string, unknown>):
     status: (ch.status as string) || 'pending',
     sslStatus: (ssl.status as string) || 'pending_validation',
     cnameTarget: cfg.fallback,
+    apex,
     records,
   };
 }

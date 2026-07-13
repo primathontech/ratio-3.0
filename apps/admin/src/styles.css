@@ -690,32 +690,41 @@ h2 {
   background: color-mix(in srgb, var(--warning) 18%, transparent);
   color: var(--warning);
 }
-.dns-records {
+.dns-table {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.dns-record {
-  display: flex;
-  gap: 10px;
-  padding: 10px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  overflow: hidden;
 }
-.dns-kv {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.dns-th,
+.dns-tr {
+  display: grid;
+  grid-template-columns: 62px 1fr 1.5fr 52px;
+  gap: 10px;
+  padding: 9px 11px;
+  align-items: center;
   font-size: 12px;
 }
-.dns-name,
+.dns-th {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+}
+.dns-tr {
+  border-top: 1px solid var(--line);
+}
+.dns-host,
 .dns-val {
   overflow-wrap: anywhere;
 }
 .dns-val {
   color: var(--accent);
+}
+.dns-purpose {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  margin-top: -3px;
 }
 
 /* Section builder --------------------------------------------------------- */
