@@ -46,6 +46,11 @@ test('GET /health is public', async () => {
   assert.strictEqual(r.status, 200);
 });
 
+test('GET / is a public 200 (ECS load-balancer health check)', async () => {
+  const r = await call('GET', '/');
+  assert.strictEqual(r.status, 200);
+});
+
 test('CORS preflight passes the auth gate and returns the allow-origin header', async () => {
   const r = await app.fetch(
     new Request('http://cp/stores', {

@@ -29,6 +29,8 @@ export function createApp(verify: Verifier = clerkVerifier) {
   app.use('*', authMiddleware(verify));
   app.onError((e, c) => c.json({ error: e.message }, 400));
 
+  // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
+  app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
   // The stores the signed-in user may manage (drives the admin portal's home screen).

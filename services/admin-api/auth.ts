@@ -41,7 +41,7 @@ function extractToken(c: Context): string | null {
 // Verifies the session and sets c.get('userId'); 401 otherwise. Public paths skip auth.
 export function authMiddleware(
   verify: Verifier,
-  publicPaths: string[] = ['/health']
+  publicPaths: string[] = ['/health', '/']
 ): MiddlewareHandler<Vars> {
   return async (c, next) => {
     if (publicPaths.includes(c.req.path)) return next();
