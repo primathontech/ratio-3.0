@@ -1,4 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyToken } from '@clerk/backend';
 import { pool } from '../../packages/shared/db';
 
@@ -10,10 +11,14 @@ import { pool } from '../../packages/shared/db';
 
 export interface Identity {
   userId: string;
+  // Present only for agent tokens (ADR-007): the tenant ids this token may touch. A '*'
+  // element means "all the principal's stores". Absent for human sessions (unrestricted
+  // to their memberships).
+  scope?: string[];
 }
 export type Verifier = (token: string) => Promise<Identity | null>;
 
-type Vars = { Variables: { userId: string } };
+type Vars = { Variables: { userId: string; scope?: string[] } };
 
 // Production verifier. Prefers CLERK_JWT_KEY (PEM) for fully offline verification; falls
 // back to CLERK_SECRET_KEY, where @clerk/backend fetches + caches the JWKS itself (the
@@ -29,6 +34,73 @@ export const clerkVerifier: Verifier = async (token) => {
     return null;
   }
 };
+
+// --- ADR-007 agent-scoped tokens ------------------------------------------------------
+// The AI agent drives the SAME control-plane API as humans. A token is an HMAC-signed
+// claim minted for a PRINCIPAL (the merchant it acts for) + a tenant SCOPE. It resolves,
+// through the same Verifier abstraction, to that principal's identity — so authZ still
+// runs through the memberships table. The scope can only NARROW that access, never widen
+// it (see requireMembership). Signed with AGENT_TOKEN_SECRET; no external dependency.
+
+export interface AgentClaims {
+  sub: string; // principal user id the agent acts as
+  scope: string[]; // tenant ids the token may touch ('*' = all the principal's stores)
+  exp: number; // expiry, unix seconds — agent tokens are short-lived by design
+}
+
+function signBody(body: string, secret: string): string {
+  return createHmac('sha256', secret).update(body).digest('base64url');
+}
+
+export function mintAgentToken(
+  claims: AgentClaims,
+  secret = process.env.AGENT_TOKEN_SECRET
+): string {
+  if (!secret) throw new Error('AGENT_TOKEN_SECRET is not set');
+  const body = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return `rat_${body}.${signBody(body, secret)}`;
+}
+
+export function verifyAgentToken(
+  token: string,
+  secret = process.env.AGENT_TOKEN_SECRET,
+  now: number = Date.now()
+): AgentClaims | null {
+  if (!secret || !token.startsWith('rat_')) return null;
+  const [body, sig] = token.slice(4).split('.');
+  if (!body || !sig) return null;
+  const expected = signBody(body, secret);
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    const claims = JSON.parse(Buffer.from(body, 'base64url').toString()) as AgentClaims;
+    if (!claims.sub || !Array.isArray(claims.scope) || typeof claims.exp !== 'number') return null;
+    if (claims.exp * 1000 < now) return null;
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
+// Verifier variant for agent tokens; ignores anything that isn't one of ours (returns
+// null) so it composes cleanly ahead of the Clerk verifier.
+export const agentVerifier: Verifier = async (token) => {
+  const claims = verifyAgentToken(token);
+  return claims ? { userId: claims.sub, scope: claims.scope } : null;
+};
+
+// Try each verifier in order; first identity wins. Lets one API accept both human Clerk
+// sessions and agent tokens on the same surface.
+export function composeVerifiers(...verifiers: Verifier[]): Verifier {
+  return async (token) => {
+    for (const v of verifiers) {
+      const id = await v(token);
+      if (id) return id;
+    }
+    return null;
+  };
+}
 
 // Token from an Authorization: Bearer header (API) or the __session cookie (browser UI).
 function extractToken(c: Context): string | null {
@@ -49,6 +121,7 @@ export function authMiddleware(
     const id = token ? await verify(token) : null;
     if (!id) return c.json({ error: 'unauthorized' }, 401);
     c.set('userId', id.userId);
+    if (id.scope) c.set('scope', id.scope);
     return next();
   };
 }
@@ -118,8 +191,15 @@ export async function listStoresForUser(userId: string): Promise<StoreRow[]> {
 // Route guard: the authenticated user must have a membership on :id, else 403.
 export const requireMembership: MiddlewareHandler<Vars> = async (c, next) => {
   const userId = c.get('userId');
-  if (isPlatformAdmin(userId)) return next(); // super-admin: access to every store
   const tenantId = c.req.param('id');
+  // Agent tokens (ADR-007) carry a tenant scope that only NARROWS access — checked before
+  // the platform-admin bypass so a scoped token can't reach beyond its list even if minted
+  // for staff. A '*' element means all the principal's stores.
+  const scope = c.get('scope');
+  if (scope && !scope.includes('*') && (!tenantId || !scope.includes(tenantId))) {
+    return c.json({ error: 'out of scope' }, 403);
+  }
+  if (isPlatformAdmin(userId)) return next(); // super-admin: access to every store
   const m = tenantId ? await getMembership(userId, tenantId) : null;
   if (!m) return c.json({ error: 'forbidden' }, 403);
   return next();
