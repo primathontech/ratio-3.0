@@ -152,6 +152,32 @@ test('GET /me reports platform-admin status', async () => {
   );
 });
 
+test('a non-member cannot connect a domain (403)', async () => {
+  const r = await call('POST', `/stores/${ID}/domains`, bob, { host: 'evil.example.com' });
+  assert.strictEqual(r.status, 403);
+});
+
+test('POST /domains rejects an invalid host (400)', async () => {
+  const r = await call('POST', `/stores/${ID}/domains`, alice, { host: 'not a domain' });
+  assert.strictEqual(r.status, 400);
+});
+
+test('owner connects a custom domain; it is mapped + listed, then removable', async () => {
+  const r = await call('POST', `/stores/${ID}/domains`, alice, { host: 'shop.example.com' });
+  assert.strictEqual(r.status, 201);
+  const listed = (await (await call('GET', `/stores/${ID}/domains`, alice)).json()) as {
+    domains: { host: string; kind: string }[];
+  };
+  const d = listed.domains.find((x) => x.host === 'shop.example.com');
+  assert.ok(d && d.kind === 'custom');
+  const del = (await (
+    await call('DELETE', `/stores/${ID}/domains`, alice, { host: 'shop.example.com' })
+  ).json()) as {
+    removed: boolean;
+  };
+  assert.strictEqual(del.removed, true);
+});
+
 test('a non-owner cannot delete the store', async () => {
   const r = await call('DELETE', `/stores/${ID}`, bob);
   assert.strictEqual(r.status, 403);

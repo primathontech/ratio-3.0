@@ -646,6 +646,68 @@ h2 {
   }
 }
 
+/* Domains panel ----------------------------------------------------------- */
+.domains-panel {
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.domain-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.domain-row a {
+  font-size: 13.5px;
+}
+.domain-row .icon-btn {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+}
+.badge.dot-ok {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: var(--success);
+}
+.badge.dot-warn {
+  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  color: var(--warning);
+}
+.dns-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dns-record {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.dns-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+.dns-name,
+.dns-val {
+  overflow-wrap: anywhere;
+}
+.dns-val {
+  color: var(--accent);
+}
+
 /* Section builder --------------------------------------------------------- */
 .btn-sm {
   height: 30px;

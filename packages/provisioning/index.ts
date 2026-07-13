@@ -103,3 +103,29 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
     client.release();
   }
 }
+
+// Domain management for an existing tenant (custom-domain connect flow). Crosses tenant
+// boundaries like the rest of this module; callers pass a tenantId they've authorized.
+export async function listDomains(tenantId: string): Promise<string[]> {
+  const { rows } = await pool.query<{ host: string }>(
+    `SELECT host FROM domains WHERE tenant_id = $1 ORDER BY (host LIKE '%.localhost'), host`,
+    [tenantId]
+  );
+  return rows.map((r) => r.host);
+}
+
+export async function addDomain(tenantId: string, host: string): Promise<void> {
+  await pool.query(
+    `INSERT INTO domains (host, tenant_id) VALUES ($1,$2)
+     ON CONFLICT (host) DO UPDATE SET tenant_id = EXCLUDED.tenant_id`,
+    [host, tenantId]
+  );
+}
+
+export async function removeDomain(tenantId: string, host: string): Promise<boolean> {
+  const { rowCount } = await pool.query('DELETE FROM domains WHERE tenant_id = $1 AND host = $2', [
+    tenantId,
+    host,
+  ]);
+  return (rowCount ?? 0) > 0;
+}

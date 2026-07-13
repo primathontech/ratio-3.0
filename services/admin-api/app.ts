@@ -1,7 +1,14 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { onboardStore, deleteStore } from '../../packages/provisioning/index';
+import {
+  onboardStore,
+  deleteStore,
+  listDomains,
+  addDomain,
+  removeDomain,
+} from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
+import { cfConfig, connectCustomHostname, customHostnameStatus } from './domains';
 import {
   authMiddleware,
   requireMembership,
@@ -108,6 +115,66 @@ export function createApp(verify: Verifier = clerkVerifier) {
     const pageType = body.pageType || 'page';
     await forTenant(c.req.param('id')).addRoute(body.path, pageType, body.pageConfig);
     return c.json({ path: body.path, pageType, pageConfig: body.pageConfig });
+  });
+
+  // --- Custom domains (OFCE-398 / ADR-013). Membership-gated. Cloudflare-for-SaaS
+  // custom hostnames; platform *.ratiodev.in subdomains are already live via wildcard. ---
+
+  const isPlatformHost = (h: string) => h.endsWith('.ratiodev.in') || h.endsWith('.localhost');
+
+  app.get('/stores/:id/domains', requireMembership, async (c) => {
+    const hosts = await listDomains(c.req.param('id'));
+    const cfg = cfConfig();
+    const domains = await Promise.all(
+      hosts.map(async (host) => {
+        if (isPlatformHost(host))
+          return { host, kind: 'platform', status: 'active', sslStatus: 'active' };
+        if (!cfg)
+          return { host, kind: 'custom', status: 'unconfigured', sslStatus: 'unconfigured' };
+        const s = await customHostnameStatus(cfg, host).catch(() => null);
+        return {
+          host,
+          kind: 'custom',
+          status: s?.status ?? 'pending',
+          sslStatus: s?.sslStatus ?? 'unknown',
+        };
+      })
+    );
+    return c.json({ domains });
+  });
+
+  // Connect a merchant's own domain: map it to the tenant + create the CF custom hostname,
+  // and return the DNS records the merchant must add at their registrar.
+  app.post('/stores/:id/domains', requireMembership, async (c) => {
+    const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
+    if (!host || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
+      return c.json({ error: 'a valid domain is required' }, 400);
+    }
+    await addDomain(c.req.param('id'), host.toLowerCase());
+    const cfg = cfConfig();
+    if (!cfg) {
+      return c.json(
+        {
+          host,
+          configured: false,
+          note: 'Domain mapped. Set CLOUDFLARE_API_TOKEN on the API to enable SSL/custom-hostname provisioning.',
+        },
+        201
+      );
+    }
+    try {
+      const conn = await connectCustomHostname(cfg, host.toLowerCase());
+      return c.json({ ...conn, configured: true }, 201);
+    } catch (e) {
+      return c.json({ host, configured: true, error: (e as Error).message }, 502);
+    }
+  });
+
+  app.delete('/stores/:id/domains', requireMembership, async (c) => {
+    const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
+    if (!host) return c.json({ error: 'host is required' }, 400);
+    const removed = await removeDomain(c.req.param('id'), host);
+    return c.json({ removed });
   });
 
   return app;

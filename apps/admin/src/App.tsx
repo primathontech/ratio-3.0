@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react';
-import { createApi, type Api, type Store, type PageSummary } from './api';
+import {
+  createApi,
+  type Api,
+  type Store,
+  type PageSummary,
+  type DomainInfo,
+  type DomainConnection,
+} from './api';
 import { useTheme } from './theme';
 import { Badge, Dialog, EmptyState, Field, Icon, Spinner, ToastProvider, useToast } from './ui';
 import { SectionEditor, toEditable, type Section } from './sections';
@@ -409,6 +416,8 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
         </div>
       </div>
 
+      <DomainsPanel api={api} store={store} />
+
       <div className="editor">
         <div className="card pane">
           <div className="pane-head">
@@ -545,6 +554,149 @@ function NewPageDialog({
           </button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+function DomainsPanel({ api, store }: { api: Api; store: Store }) {
+  const toast = useToast();
+  const [domains, setDomains] = useState<DomainInfo[] | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  const load = useCallback(() => {
+    api.listDomains(store.id).then(setDomains).catch(() => setDomains([]));
+  }, [api, store.id]);
+  useEffect(load, [load]);
+
+  async function remove(host: string) {
+    await api.removeDomain(store.id, host).catch(() => {});
+    toast('Domain removed');
+    load();
+  }
+
+  const statusBadge = (d: DomainInfo) => {
+    if (d.kind === 'platform') return <span className="badge dot-ok">live</span>;
+    if (d.status === 'active' && d.sslStatus === 'active') return <span className="badge dot-ok">live</span>;
+    if (d.status === 'unconfigured') return <span className="badge">not configured</span>;
+    return <span className="badge dot-warn">pending</span>;
+  };
+
+  return (
+    <div className="card pane domains-panel">
+      <div className="pane-head">
+        <h2>Domains</h2>
+        <button className="btn btn-ghost btn-sm" onClick={() => setConnecting(true)}>
+          <Icon.plus size={14} /> Connect a domain
+        </button>
+      </div>
+      {!domains && <div className="center-pad"><Spinner /></div>}
+      <div className="domain-rows">
+        {domains?.map((d) => (
+          <div className="domain-row" key={d.host}>
+            <a className="mono" href={`https://${d.host}`} target="_blank" rel="noreferrer">
+              {d.host}
+            </a>
+            <span className="badge">{d.kind === 'platform' ? 'Ratio subdomain' : 'custom'}</span>
+            {statusBadge(d)}
+            {d.kind === 'custom' && (
+              <button className="icon-btn" aria-label="Remove domain" onClick={() => remove(d.host)}>
+                <Icon.trash size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+      {connecting && (
+        <ConnectDomainDialog api={api} store={store} onClose={() => setConnecting(false)} onDone={() => { setConnecting(false); load(); }} />
+      )}
+    </div>
+  );
+}
+
+function ConnectDomainDialog({
+  api,
+  store,
+  onClose,
+  onDone,
+}: {
+  api: Api;
+  store: Store;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [host, setHost] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<DomainConnection | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      setResult(await api.connectDomain(store.id, host.trim().toLowerCase()));
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog title="Connect a custom domain" onClose={onClose}>
+      {!result ? (
+        <form onSubmit={submit}>
+          <div className="body">
+            <Field label="Your domain">
+              <input className="input mono" value={host} onChange={(e) => setHost(e.target.value)} placeholder="shop.yourbrand.com" required />
+            </Field>
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              We'll issue an SSL certificate and give you the exact DNS records to add at your registrar.
+            </p>
+            {err && <div className="note note-error">{err}</div>}
+          </div>
+          <div className="actions">
+            <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={busy}>
+              {busy ? <Spinner /> : <Icon.plus />} Connect
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div>
+          <div className="body">
+            {result.records && result.records.length > 0 ? (
+              <>
+                <p style={{ fontSize: 13 }}>
+                  Add these records at your DNS provider for <span className="mono">{result.host}</span>. It goes
+                  live once they propagate and the certificate issues.
+                </p>
+                <div className="dns-records">
+                  {result.records.map((r, i) => (
+                    <div className="dns-record" key={i}>
+                      <span className="badge">{r.type}</span>
+                      <div className="dns-kv">
+                        <div className="mono dns-name">{r.name}</div>
+                        <div className="mono dns-val">{r.value}</div>
+                        <div className="muted">{r.purpose}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="note">{result.note || result.error || 'Domain mapped.'}</div>
+            )}
+          </div>
+          <div className="actions">
+            <button type="button" className="btn btn-primary" onClick={onDone}>
+              <Icon.check /> Done
+            </button>
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 }

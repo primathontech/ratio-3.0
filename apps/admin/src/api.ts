@@ -20,6 +20,29 @@ export interface Page {
   pageConfig: unknown;
 }
 
+export interface DomainInfo {
+  host: string;
+  kind: 'platform' | 'custom';
+  status: string;
+  sslStatus: string;
+}
+export interface DnsRecord {
+  type: string;
+  name: string;
+  value: string;
+  purpose: string;
+}
+export interface DomainConnection {
+  host: string;
+  configured?: boolean;
+  note?: string;
+  error?: string;
+  status?: string;
+  sslStatus?: string;
+  cnameTarget?: string;
+  records?: DnsRecord[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -60,6 +83,12 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
       req<Page>('GET', `/stores/${id}/page?path=${encodeURIComponent(path)}`),
     savePage: (id: string, page: { path: string; pageType?: string; pageConfig: unknown }) =>
       req<Page>('PUT', `/stores/${id}/page`, page),
+    listDomains: (id: string) =>
+      req<{ domains: DomainInfo[] }>('GET', `/stores/${id}/domains`).then((d) => d.domains),
+    connectDomain: (id: string, host: string) =>
+      req<DomainConnection>('POST', `/stores/${id}/domains`, { host }),
+    removeDomain: (id: string, host: string) =>
+      req<{ removed: boolean }>('DELETE', `/stores/${id}/domains`, { host }),
   };
 }
 
