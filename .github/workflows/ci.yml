@@ -172,4 +172,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: '7f06c71e716a0e4a5d38073c16758c60'
-        run: npx --yes wrangler pages deploy dist --project-name=ratio-admin --branch=main
+        run: |
+          # Create the Pages project if it doesn't exist yet (idempotent).
+          npx --yes wrangler pages project create ratio-admin --production-branch=main 2>/dev/null || true
+          npx --yes wrangler pages deploy dist --project-name=ratio-admin --branch=main
