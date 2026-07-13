@@ -48,6 +48,30 @@ test('connectCustomHostname throws on a Cloudflare error', async () => {
   );
 });
 
+test('normalizes host names via PSL for a multi-part TLD (.co.uk)', async () => {
+  const CH2 = {
+    status: 'pending',
+    ssl: {
+      status: 'pending_validation',
+      validation_records: [{ txt_name: '_acme-challenge.brand.co.uk', txt_value: 'v' }],
+    },
+    ownership_verification: { name: '_cf-custom-hostname.brand.co.uk', value: 'o' },
+  };
+  const conn = await connectCustomHostname(cfg, 'brand.co.uk', fakeCf(CH2));
+  assert.strictEqual(conn.apex, true);
+  assert.strictEqual(conn.records[0].type, 'ALIAS');
+  assert.strictEqual(conn.records[0].host, '@');
+  // zone is brand.co.uk (not co.uk) — so the label is stripped correctly
+  assert.strictEqual(conn.records.find((r) => r.value === 'o')!.host, '_cf-custom-hostname');
+});
+
+test('a subdomain on a multi-part TLD is a CNAME with the right host', async () => {
+  const conn = await connectCustomHostname(cfg, 'shop.brand.co.uk', fakeCf(CH));
+  assert.strictEqual(conn.apex, false);
+  assert.strictEqual(conn.records[0].type, 'CNAME');
+  assert.strictEqual(conn.records[0].host, 'shop');
+});
+
 test('customHostnameStatus returns null when the hostname is unknown', async () => {
   const empty = (async (input: RequestInfo | URL) => {
     if (String(input).includes('/zones?name='))

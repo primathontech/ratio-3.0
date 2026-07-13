@@ -3,6 +3,8 @@
 // zone (ratiodev.in), then the merchant CNAMEs their domain to the fallback + adds the DV
 // TXT records. fetch is injected so the API layer is testable without calling Cloudflare.
 
+import { getDomain } from 'tldts';
+
 const CF_API = 'https://api.cloudflare.com/client/v4';
 
 export interface CfConfig {
@@ -40,11 +42,10 @@ export interface DomainConnection {
   records: DnsRecord[];
 }
 
-// Registrable zone (last two labels — good enough for common TLDs; multi-part TLDs like
-// .co.uk are the known edge). Used to show provider-style relative host names.
+// Registrable zone (eTLD+1) via the Public Suffix List, so multi-part TLDs like .co.uk /
+// .com.au resolve correctly. Used to show provider-style relative host names.
 function zoneOf(host: string): string {
-  const parts = host.split('.');
-  return parts.length <= 2 ? host : parts.slice(-2).join('.');
+  return getDomain(host) || host;
 }
 function relName(fqdn: string, zone: string): string {
   if (fqdn === zone) return '@';
