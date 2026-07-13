@@ -15,13 +15,15 @@ export type Verifier = (token: string) => Promise<Identity | null>;
 
 type Vars = { Variables: { userId: string } };
 
-// Production verifier: offline JWT verification against the Clerk instance's JWKS
-// public key (CLERK_JWT_KEY, PEM). No network call, no shared secret in the hot path.
+// Production verifier. Prefers CLERK_JWT_KEY (PEM) for fully offline verification; falls
+// back to CLERK_SECRET_KEY, where @clerk/backend fetches + caches the JWKS itself (the
+// standard, lower-setup path). Either one alone is enough to run.
 export const clerkVerifier: Verifier = async (token) => {
   const jwtKey = process.env.CLERK_JWT_KEY;
-  if (!jwtKey) return null;
+  const secretKey = process.env.CLERK_SECRET_KEY;
+  if (!jwtKey && !secretKey) return null;
   try {
-    const payload = await verifyToken(token, { jwtKey });
+    const payload = await verifyToken(token, jwtKey ? { jwtKey } : { secretKey });
     return payload.sub ? { userId: payload.sub } : null;
   } catch {
     return null;
