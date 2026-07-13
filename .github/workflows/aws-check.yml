@@ -29,8 +29,10 @@ jobs:
             --query 'services[0].loadBalancers' --output json
           TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
             --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+          # NEVER dump environment VALUES here — only names (values include secrets and
+          # GitHub does not reliably mask externally-sourced secret strings in logs).
           aws ecs describe-task-definition --task-definition "$TD" \
-            --query 'taskDefinition.containerDefinitions[0].{image:image,command:command,portMappings:portMappings,env:environment}' --output json
+            --query 'taskDefinition.containerDefinitions[0].{image:image,command:command,portMappings:portMappings,envNames:environment[].name}' --output json
           echo "--- last 12 service events (why tasks fail to place/stabilise) ---"
           aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
             --query 'services[0].events[:12].[createdAt,message]' --output text
