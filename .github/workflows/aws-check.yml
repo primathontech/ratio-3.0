@@ -24,6 +24,13 @@ jobs:
           SVC=$(aws ecs list-services --cluster "$CLUSTER" --query "serviceArns[?contains(@, 'admin-api')] | [0]" --output text)
           echo "admin-api service = $SVC"
           [ "$SVC" = "None" ] && { echo "no admin-api service found"; exit 0; }
+          echo "--- service load-balancer container port + task-def port/env/command ---"
+          aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].loadBalancers' --output json
+          TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
+          aws ecs describe-task-definition --task-definition "$TD" \
+            --query 'taskDefinition.containerDefinitions[0].{image:image,command:command,portMappings:portMappings,env:environment}' --output json
           echo "--- last 12 service events (why tasks fail to place/stabilise) ---"
           aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
             --query 'services[0].events[:12].[createdAt,message]' --output text
