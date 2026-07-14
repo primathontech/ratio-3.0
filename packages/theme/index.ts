@@ -15,6 +15,42 @@ export const esc = (s: unknown): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
+// Authored richText is untrusted. We fully escape it, then restore ONLY a small allowlist
+// of attribute-less formatting tags by literal token replacement. Because escaping runs
+// first, an attribute (e.g. onerror=, href=javascript:) can never survive — a tag with any
+// attribute simply stays escaped. No parser, no dependency, safe on the Worker and origin.
+const RICH_TAGS = [
+  'p',
+  'br',
+  'strong',
+  'em',
+  'b',
+  'i',
+  'u',
+  'ul',
+  'ol',
+  'li',
+  'h2',
+  'h3',
+  'blockquote',
+];
+function safeRichText(html: unknown): string {
+  let out = esc(html);
+  for (const t of RICH_TAGS) {
+    out = out.split(`&lt;${t}&gt;`).join(`<${t}>`).split(`&lt;/${t}&gt;`).join(`</${t}>`);
+  }
+  return out.split('&lt;br/&gt;').join('<br/>').split('&lt;br /&gt;').join('<br/>');
+}
+
+// Only http(s)/mailto/tel and relative/anchor URLs may appear in links and images — any
+// other scheme (javascript:, data:, vbscript:, …) is neutralised to '#'.
+function safeUrl(u: unknown): string {
+  const s = String(u ?? '').trim();
+  if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return '#'; // some other scheme → block
+  return s; // relative path or #anchor
+}
+
 function css(accent: string): string {
   return `
 :root{--accent:${accent}}
@@ -40,15 +76,15 @@ footer.site{padding:28px 24px;color:#888;border-top:1px solid #eee;margin-top:40
 }
 
 function productCard(p: ProductCard): string {
-  return `<a class="card" href="${esc(p.href)}"><div class="ph">${p.image ? `<img src="${esc(p.image)}" alt="${esc(p.title)}" style="width:100%">` : 'image'}</div><div class="body"><div>${esc(p.title)}</div><div class="price">${esc(p.price)}</div></div></a>`;
+  return `<a class="card" href="${esc(safeUrl(p.href))}"><div class="ph">${p.image ? `<img src="${esc(safeUrl(p.image))}" alt="${esc(p.title)}" style="width:100%">` : 'image'}</div><div class="body"><div>${esc(p.title)}</div><div class="price">${esc(p.price)}</div></div></a>`;
 }
 
 function renderSection(s: Section): string {
   switch (s.kind) {
     case 'hero':
-      return `<section class="hero"><h1>${esc(s.heading)}</h1>${s.sub ? `<p>${esc(s.sub)}</p>` : ''}${s.cta ? `<a class="btn" href="${esc(s.cta.href)}">${esc(s.cta.label)}</a>` : ''}</section>`;
+      return `<section class="hero"><h1>${esc(s.heading)}</h1>${s.sub ? `<p>${esc(s.sub)}</p>` : ''}${s.cta ? `<a class="btn" href="${esc(safeUrl(s.cta.href))}">${esc(s.cta.label)}</a>` : ''}</section>`;
     case 'richText':
-      return `<section class="rich">${s.html ?? ''}</section>`; // authored HTML
+      return `<section class="rich">${safeRichText(s.html)}</section>`; // sanitized authored HTML
     case 'productGrid':
       return `<section>${s.heading ? `<h2>${esc(s.heading)}</h2>` : ''}<div class="grid">${(s.products ?? []).map(productCard).join('')}</div></section>`;
     case 'product':
