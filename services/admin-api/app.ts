@@ -18,6 +18,7 @@ import {
   cfConfig,
   connectCustomHostname,
   customHostnameStatus,
+  deleteCustomHostname,
   purgeUrls,
   storeCacheUrls,
 } from './domains';
@@ -269,8 +270,17 @@ export function createApp(
     if (!platformSubdomainAllowed(lcHost, isPlatformAdmin(c.get('userId')))) {
       return c.json({ error: 'that subdomain is reserved — choose another' }, 403);
     }
-    await onboardStore({ id, name, host: lcHost, color, ownerUserId: c.get('userId') });
+    const { hostReclaimedFrom } = await onboardStore({
+      id,
+      name,
+      host: lcHost,
+      color,
+      ownerUserId: c.get('userId'),
+    });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
+    // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
+    const cfg = cfConfig();
+    if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
     return c.json({ id, url: `https://${lcHost}/` }, 201);
   });
 
@@ -475,7 +485,7 @@ export function createApp(
     if (isPlatformHost(host.toLowerCase())) {
       return c.json({ error: 'platform subdomains cannot be connected as a custom domain' }, 400);
     }
-    await addDomain(c.req.param('id'), host.toLowerCase());
+    const { reclaimedFrom } = await addDomain(c.req.param('id'), host.toLowerCase());
     const cfg = cfConfig();
     if (!cfg) {
       return c.json(
@@ -487,6 +497,10 @@ export function createApp(
         201
       );
     }
+    // On a cross-tenant reclaim, delete the prior tenant's stale CF custom hostname so this
+    // claimant can create their own and run DV — otherwise CF's one-object-per-host rule would
+    // permanently block them (OFCE-422). Best-effort; a failure just surfaces as a connect error.
+    if (reclaimedFrom) await deleteCustomHostname(cfg, host.toLowerCase()).catch(() => {});
     try {
       const conn = await connectCustomHostname(cfg, host.toLowerCase());
       // Bind verification to this tenant: only the connector can later be promoted to verified,

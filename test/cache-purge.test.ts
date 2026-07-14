@@ -5,7 +5,7 @@ import assert from 'node:assert';
 
 process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
-import { purgeUrls, storeCacheUrls } from '../services/admin-api/domains';
+import { purgeUrls, storeCacheUrls, deleteCustomHostname } from '../services/admin-api/domains';
 import { app as origin } from '../apps/origin/index';
 import { pool } from '../packages/shared/db';
 
@@ -50,6 +50,35 @@ test('storeCacheUrls builds host×path URLs, skips localhost, always includes ro
   ]);
   assert.deepStrictEqual(storeCacheUrls(['a.example.com'], []), ['https://a.example.com/']);
   assert.deepStrictEqual(storeCacheUrls(['only.localhost'], ['/']), []);
+});
+
+test('deleteCustomHostname looks up the hostname id and DELETEs it (OFCE-422)', async () => {
+  const calls: { method: string; url: string }[] = [];
+  const fakeCf: typeof fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ method: init?.method || 'GET', url });
+    if (url.includes('/zones?name=')) return json({ success: true, result: [{ id: 'ZID' }] });
+    if (url.includes('/custom_hostnames?hostname='))
+      return json({ success: true, result: [{ id: 'CH123' }] });
+    if (url.endsWith('/custom_hostnames/CH123'))
+      return json({ success: true, result: { id: 'CH123' } });
+    return json({ success: false });
+  }) as typeof fetch;
+
+  const ok = await deleteCustomHostname(cfg, 'acme.example.com', fakeCf);
+  assert.strictEqual(ok, true);
+  const del = calls.find((c) => c.method === 'DELETE');
+  assert.ok(del, 'a DELETE was issued');
+  assert.match(del!.url, /\/custom_hostnames\/CH123$/);
+});
+
+test('deleteCustomHostname is a no-op (false) when no such hostname exists', async () => {
+  const fakeCf: typeof fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes('/zones?name=')) return json({ success: true, result: [{ id: 'ZID' }] });
+    return json({ success: true, result: [] }); // no custom hostname
+  }) as typeof fetch;
+  assert.strictEqual(await deleteCustomHostname(cfg, 'none.example.com', fakeCf), false);
 });
 
 test('purgeUrls is a no-op (success) when there are no URLs', async () => {

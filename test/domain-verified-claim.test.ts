@@ -52,11 +52,17 @@ test('a platform host is verified on claim; a custom host starts unverified', as
 });
 
 test('an unverified custom claim is reclaimable by another tenant', async () => {
-  // A holds the unverified claim from the previous test; B reclaims it.
-  await addDomain(B, CUSTOM);
+  // A holds the unverified claim from the previous test; B reclaims it, and addDomain reports
+  // the prior tenant so the handler can clean up its stale CF hostname (OFCE-422).
+  const { reclaimedFrom } = await addDomain(B, CUSTOM);
+  assert.strictEqual(reclaimedFrom, A);
   const row = await verifiedOf(CUSTOM);
   assert.strictEqual(row?.tenant_id, B);
   assert.strictEqual(row?.verified, false);
+  // A fresh (non-reclaim) claim reports null.
+  const fresh = await addDomain(B, 'dvc-fresh.example.com');
+  assert.strictEqual(fresh.reclaimedFrom, null);
+  await pool.query('DELETE FROM domains WHERE host = $1', ['dvc-fresh.example.com']);
 });
 
 test('once verified, the claim is protected from takeover (409)', async () => {
