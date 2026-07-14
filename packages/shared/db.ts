@@ -26,3 +26,10 @@ export const pool = new Pool({
   // Local dev (no managed TLS) needs no SSL.
   ssl: isManagedTls ? { rejectUnauthorized: process.env.DB_INSECURE_TLS !== 'true' } : undefined,
 });
+
+// An idle pooled client can emit 'error' (e.g. Neon drops the connection). With no listener
+// Node treats it as an unhandled 'error' event and crashes the process; the pool discards
+// the bad client on its own, so we only need to observe it (L-3).
+pool.on('error', (err) => {
+  console.error('[db] idle client error:', err.message);
+});

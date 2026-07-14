@@ -25,6 +25,7 @@ import {
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
+import { createRateLimiter } from '../../packages/shared/ratelimit';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { runAssistant, scopeForAssistant } from './assistant';
@@ -36,8 +37,22 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
 type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
 
-export function createApp(verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier)) {
+export interface AppOptions {
+  rateLimit?: number; // per-user requests/min on the control plane
+  assistantRateLimit?: number; // tighter per-user budget on /assistant
+}
+
+export function createApp(
+  verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier),
+  opts: AppOptions = {}
+) {
   const app = new Hono<Vars>();
+
+  // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
+  // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
+  // gets a much tighter budget because each call fans out to several Anthropic requests.
+  const rl = createRateLimiter({ limit: opts.rateLimit ?? 300, windowMs: 60_000 });
+  const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
 
   // The admin SPA lives on a different origin (Cloudflare Pages) and calls this API from
   // the browser with a Bearer token, so it needs CORS. Lock to ADMIN_CORS_ORIGIN in prod
@@ -47,6 +62,17 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
 
   app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
+  // Throttle per authenticated user (after auth so userId is known; public paths have none
+  // and pass through). /assistant draws from its own tighter bucket.
+  app.use('*', async (c, next) => {
+    const userId = c.get('userId');
+    if (!userId) return next();
+    const limiter = c.req.path === '/assistant' ? assistantRl : rl;
+    if (!limiter.check(userId).allowed) {
+      return c.json({ error: 'rate limit exceeded — retry shortly' }, 429);
+    }
+    return next();
+  });
   // Audit every authenticated mutation (ADR-016 Phase 1). After auth so the actor is known.
   app.use('*', auditMiddleware);
   // A conflict is a client-actionable 409. Everything else that reaches here is an
