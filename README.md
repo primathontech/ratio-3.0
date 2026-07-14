@@ -12,7 +12,7 @@ TypeScript. Full architecture, infra, and env/secrets: **[INFRASTRUCTURE.md](./I
 | URL                                                            |                                              |
 | -------------------------------------------------------------- | -------------------------------------------- |
 | `https://acme.ratiodev.in` · `https://beta.ratiodev.in`        | real host→tenant on platform subdomains      |
-| `https://ratio-3-0.ramvishvas-kumar.workers.dev/?store=t_acme` | Worker on workers.dev (tenant via `?store=`) |
+| `http://acme.localhost:8787/?store=t_acme`                     | the `?store=` tenant override is dev-only (localhost); it is refused on public hosts |
 
 ---
 
