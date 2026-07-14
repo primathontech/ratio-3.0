@@ -15,6 +15,64 @@ interface Store {
   set(key: string, value: Entry): void;
 }
 
+interface Queryable {
+  query(
+    text: string,
+    params?: unknown[]
+  ): Promise<{ rows: Array<Record<string, unknown>>; rowCount: number | null }>;
+}
+
+export interface AsyncRateLimiter {
+  check(key: string): Promise<RateResult>;
+}
+
+// Shared (Postgres-backed) fixed-window limiter (audit H-1): the effective limit holds across
+// admin-api instances, unlike the in-memory createRateLimiter. One atomic upsert per check
+// increments the current window, or resets it if the window elapsed. Fails OPEN on any DB
+// error (ADR-008) — a limiter outage must not take down the whole API. Stale keys are swept
+// at most once per window.
+export function createPgRateLimiter(
+  db: Queryable,
+  {
+    limit = 100,
+    windowMs = 60_000,
+    now = () => Date.now(),
+  }: {
+    limit?: number;
+    windowMs?: number;
+    now?: () => number;
+  } = {}
+): AsyncRateLimiter {
+  let lastSweep = now();
+  return {
+    async check(key: string): Promise<RateResult> {
+      if (!key || typeof key !== 'string') throw new Error('rate limit requires a key');
+      try {
+        const t = now();
+        if (t - lastSweep >= windowMs) {
+          lastSweep = t;
+          await db.query('DELETE FROM rate_counters WHERE reset_at < now()').catch(() => {});
+        }
+        // Atomic: start a fresh window (count=1) if none/expired, else increment in place.
+        const { rows } = await db.query(
+          `INSERT INTO rate_counters (key, count, reset_at)
+             VALUES ($1, 1, now() + ($2 * interval '1 millisecond'))
+           ON CONFLICT (key) DO UPDATE SET
+             count = CASE WHEN rate_counters.reset_at < now() THEN 1 ELSE rate_counters.count + 1 END,
+             reset_at = CASE WHEN rate_counters.reset_at < now()
+                             THEN now() + ($2 * interval '1 millisecond') ELSE rate_counters.reset_at END
+           RETURNING count`,
+          [key, windowMs]
+        );
+        const count = Number(rows[0]?.count ?? 1);
+        return { allowed: count <= limit, remaining: Math.max(0, limit - count) };
+      } catch {
+        return { allowed: true, remaining: null, failOpen: true };
+      }
+    },
+  };
+}
+
 export function createRateLimiter({
   limit = 100,
   windowMs = 60_000,
