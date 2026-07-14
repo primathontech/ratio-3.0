@@ -302,16 +302,19 @@ h2 {
   gap: 12px;
   padding: 18px;
   text-align: left;
-  cursor: pointer;
+  /* No pointer/lift on the card: only the name is clickable, so the whole-card affordance
+     was misleading (round-9 M8). A subtle border/shadow hover keeps it feeling live. */
   transition:
     border-color 0.14s,
-    box-shadow 0.14s,
-    transform 0.08s;
+    box-shadow 0.14s;
 }
 .store-card:hover {
   border-color: var(--line-strong);
   box-shadow: var(--shadow-md);
-  transform: translateY(-2px);
+}
+.store-open:hover {
+  color: var(--accent);
+  text-decoration: underline;
 }
 .store-card .top {
   display: flex;
@@ -388,7 +391,7 @@ h2 {
   flex-direction: column;
   gap: 6px;
 }
-.field label {
+.field > span {
   font-size: 12.5px;
   font-weight: 560;
   color: var(--muted);
@@ -520,6 +523,11 @@ h2 {
   border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+}
+/* On a primary (accent-filled) button the accent spinner is near-invisible (M9) — use white. */
+.btn-primary .spinner {
+  border-color: color-mix(in srgb, #fff 40%, transparent);
+  border-top-color: #fff;
 }
 .center-pad {
   display: grid;
@@ -736,7 +744,7 @@ h2 {
   overflow-wrap: anywhere;
 }
 .dns-val {
-  color: var(--accent);
+  color: var(--text);
 }
 .dns-purpose-row td {
   padding-top: 0;

@@ -105,6 +105,11 @@ export function Dialog({
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Keep the latest onClose in a ref so the focus-trap effect can run ONCE on open. Depending
+  // on onClose (a fresh inline arrow from every caller) re-ran this effect on each parent
+  // render — re-yanking focus to the first control and corrupting focus restoration (L3).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     const dialog = ref.current;
     const previouslyFocused = document.activeElement as HTMLElement | null;
@@ -117,7 +122,7 @@ export function Dialog({
     // Move focus into the dialog on open (first control, or the dialog itself).
     (focusables()[0] ?? dialog)?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') return onClose();
+      if (e.key === 'Escape') return onCloseRef.current();
       if (e.key !== 'Tab') return;
       const f = focusables();
       if (f.length === 0) return e.preventDefault(); // nothing to tab to — stay put
@@ -136,7 +141,7 @@ export function Dialog({
       document.removeEventListener('keydown', onKey);
       previouslyFocused?.focus?.(); // restore focus to the trigger on close
     };
-  }, [onClose]);
+  }, []);
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
