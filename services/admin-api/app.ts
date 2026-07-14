@@ -39,7 +39,7 @@ import {
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
-import { createRateLimiter } from '../../packages/shared/ratelimit';
+import { createPgRateLimiter } from '../../packages/shared/ratelimit';
 import {
   createPgIdempotencyStore,
   idempotencyKeyFor,
@@ -147,8 +147,13 @@ export function createApp(
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
   // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
   // gets a much tighter budget because each call fans out to several Anthropic requests.
-  const rl = createRateLimiter({ limit: opts.rateLimit ?? 300, windowMs: 60_000 });
-  const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
+  // Shared (Postgres-backed) so the limit holds across admin-api instances (H-1). Keys are
+  // namespaced per bucket so the general and /assistant counters don't collide for one user.
+  const rl = createPgRateLimiter(pool, { limit: opts.rateLimit ?? 300, windowMs: 60_000 });
+  const assistantRl = createPgRateLimiter(pool, {
+    limit: opts.assistantRateLimit ?? 20,
+    windowMs: 60_000,
+  });
   // Dedupe /assistant runs by idempotency key (OFCE-412).
   // Shared (Postgres-backed) so dedup + single-execution hold across admin-api instances (H-1).
   const idem = createPgIdempotencyStore(pool);
@@ -187,8 +192,10 @@ export function createApp(
     // In-process assistant fan-out (viaSelf) carries the unforgeable per-process marker and is
     // exempt — it's one user action, already throttled at the /assistant edge (L-1).
     if (c.req.header('x-ratio-internal') === internalToken) return next();
-    const limiter = c.req.path === '/assistant' ? assistantRl : rl;
-    if (!limiter.check(userId).allowed) {
+    const isAssistant = c.req.path === '/assistant';
+    const limiter = isAssistant ? assistantRl : rl;
+    const key = (isAssistant ? 'a:' : 'u:') + userId; // namespaced so the buckets don't collide
+    if (!(await limiter.check(key)).allowed) {
       return c.json({ error: 'rate limit exceeded — retry shortly' }, 429);
     }
     return next();

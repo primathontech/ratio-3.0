@@ -1,6 +1,6 @@
 // OFCE-406 (audit M-1): the control plane must throttle per user, with a tighter budget on
 // /assistant. Plus L-3: an idle-client pool error must not crash the process.
-import { test, after } from 'node:test';
+import { test, after, beforeEach } from 'node:test';
 import assert from 'node:assert';
 
 process.env.PLATFORM_ADMIN_IDS = '';
@@ -10,6 +10,10 @@ import { composeVerifiers, agentVerifier, type Verifier } from '../services/admi
 import { pool } from '../packages/shared/db';
 
 const v: Verifier = async (t) => (t === 'tok-x' ? { userId: 'user_rl' } : null);
+
+// The limiter is now Postgres-backed and shared, so its counters persist across tests/runs —
+// reset this user's buckets before each test so the low-limit assertions start clean.
+beforeEach(() => pool.query("DELETE FROM rate_counters WHERE key IN ('u:user_rl', 'a:user_rl')"));
 const caller =
   (app: ReturnType<typeof createApp>) =>
   (path: string, method = 'GET') =>
