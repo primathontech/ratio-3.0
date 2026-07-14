@@ -33,6 +33,31 @@ export function originTarget(base: string, path: string, search: string): string
   return base.replace(/\/+$/, '') + path + search;
 }
 
+// Build the fetch init for proxying to the private origin (OFCE-413): forward the request
+// body for methods that have one (so reserved /cart, /checkout, /api/* handlers receive it)
+// with a safe header allowlist, and inject the trusted x-edge-auth + x-ratio-tenant —
+// never forwarding any client-supplied copy of those.
+export function proxyInit(
+  req: Request,
+  tenantId: string,
+  edgeSecret: string
+): RequestInit & { duplex?: 'half' } {
+  const method = req.method;
+  const hasBody = method !== 'GET' && method !== 'HEAD';
+  const headers = new Headers({ 'x-edge-auth': edgeSecret, 'x-ratio-tenant': tenantId });
+  for (const h of ['content-type', 'accept', 'accept-language']) {
+    const v = req.headers.get(h);
+    if (v) headers.set(h, v);
+  }
+  const init: RequestInit & { duplex?: 'half' } = {
+    method,
+    headers,
+    body: hasBody ? req.body : undefined,
+  };
+  if (hasBody) init.duplex = 'half'; // required when streaming a request body
+  return init;
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -74,17 +99,14 @@ app.all('*', async (c) => {
   const tenantId = await resolveTenant(c);
   if (!tenantId) return c.html('<h1>Store not found</h1><p>No store for this domain.</p>', 404);
 
-  // path B: inject the trusted header + proxy to the private container origin.
+  // path B: inject the trusted header + proxy to the private container origin. EDGE_SECRET
+  // has no default — if unset the origin refuses (fail closed) rather than accept a secret
+  // that lives in the source tree. Body + safe headers are forwarded (OFCE-413).
   if (c.env.ORIGIN_URL) {
-    const res = await fetch(originTarget(c.env.ORIGIN_URL, path, url.search), {
-      method: c.req.method,
-      headers: {
-        // No default: if EDGE_SECRET is unset the origin refuses (fail closed) rather than
-        // accept a secret that lives in the source tree.
-        'x-edge-auth': c.env.EDGE_SECRET ?? '',
-        'x-ratio-tenant': tenantId,
-      },
-    });
+    const res = await fetch(
+      originTarget(c.env.ORIGIN_URL, path, url.search),
+      proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? '')
+    );
     return new Response(res.body, { status: res.status, headers: res.headers });
   }
 
