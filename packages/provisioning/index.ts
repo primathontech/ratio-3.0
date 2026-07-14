@@ -71,13 +71,17 @@ export async function onboardStore({
     // concurrent onboards for the same host both pass the pre-check, so the reassignment
     // must be conditional. Zero rows back = the host is another tenant's → conflict.
     const dom = await client.query(
-      `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,$3)
+      `INSERT INTO domains (host, tenant_id, verified, connected_by) VALUES ($1,$2,$3,$4)
        ON CONFLICT (host) DO UPDATE SET
-           tenant_id = EXCLUDED.tenant_id,
-           verified  = domains.verified OR EXCLUDED.verified
+           tenant_id    = EXCLUDED.tenant_id,
+           verified     = domains.verified OR EXCLUDED.verified,
+           -- keep the connector on a same-tenant re-onboard; reset it on a cross-tenant
+           -- reclaim so the new holder can't inherit the prior tenant's verification (R10-H1)
+           connected_by = CASE WHEN domains.tenant_id = EXCLUDED.tenant_id
+                               THEN domains.connected_by ELSE EXCLUDED.connected_by END
          WHERE domains.tenant_id = EXCLUDED.tenant_id OR domains.verified = false
        RETURNING host`,
-      [host, id, isPlatformHost(host)]
+      [host, id, isPlatformHost(host), isPlatformHost(host) ? id : null]
     );
     if (!dom.rowCount) throw new ConflictError('that domain is already connected to another store');
     await client.query(
@@ -172,24 +176,39 @@ export async function addDomain(tenantId: string, host: string): Promise<void> {
   // Reassign only when the row is already this tenant's OR the existing claim is still
   // unverified (reclaimable). A verified claim by another tenant is protected → 0 rows → 409.
   const { rowCount } = await pool.query(
-    `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,$3)
+    `INSERT INTO domains (host, tenant_id, verified, connected_by) VALUES ($1,$2,$3,$4)
      ON CONFLICT (host) DO UPDATE SET
-         tenant_id = EXCLUDED.tenant_id,
-         verified  = domains.verified OR EXCLUDED.verified
+         tenant_id    = EXCLUDED.tenant_id,
+         verified     = domains.verified OR EXCLUDED.verified,
+         -- reset the connector on a cross-tenant reclaim (R10-H1); keep it on a same-tenant re-add
+         connected_by = CASE WHEN domains.tenant_id = EXCLUDED.tenant_id
+                             THEN domains.connected_by ELSE EXCLUDED.connected_by END
        WHERE domains.tenant_id = EXCLUDED.tenant_id OR domains.verified = false
      RETURNING host`,
-    [host, tenantId, isPlatformHost(host)]
+    [host, tenantId, isPlatformHost(host), isPlatformHost(host) ? tenantId : null]
   );
   if (!rowCount) throw new ConflictError('that domain is already connected to another store');
 }
 
-// Mark a custom-domain claim authoritative once Cloudflare confirms the hostname is active
-// (DV succeeded = the merchant proved ownership). Idempotent; only ever flips false → true.
-export async function markDomainVerified(tenantId: string, host: string): Promise<void> {
-  await pool.query('UPDATE domains SET verified = true WHERE tenant_id = $1 AND host = $2', [
+// Record that THIS tenant initiated the connect/DV flow for a host (they created the CF custom
+// hostname). Only the connector can later be promoted to verified (R10-H1). No-op if the tenant
+// no longer holds the row.
+export async function markDomainConnected(tenantId: string, host: string): Promise<void> {
+  await pool.query('UPDATE domains SET connected_by = $1 WHERE tenant_id = $1 AND host = $2', [
     tenantId,
     host,
   ]);
+}
+
+// Mark a custom-domain claim authoritative once Cloudflare confirms the hostname is active
+// (DV succeeded). Bound to the connector (R10-H1): a tenant that merely reclaimed the row —
+// without running its own connect — is NOT its connector, so it can't inherit the prior
+// holder's DV. Idempotent; only ever flips false → true.
+export async function markDomainVerified(tenantId: string, host: string): Promise<void> {
+  await pool.query(
+    'UPDATE domains SET verified = true WHERE tenant_id = $1 AND host = $2 AND connected_by = $1',
+    [tenantId, host]
+  );
 }
 
 export async function removeDomain(tenantId: string, host: string): Promise<boolean> {
