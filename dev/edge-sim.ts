@@ -16,7 +16,7 @@ async function resolveTenant(host: string): Promise<string | null> {
   const now = Date.now();
   if (hit && hit.exp > now) return hit.tenantId;
   const { rows } = await pool.query<{ tenant_id: string }>(
-    'SELECT tenant_id FROM domains WHERE host = $1',
+    'SELECT tenant_id FROM domains WHERE host = $1 AND verified = true',
     [host]
   );
   const tenantId = rows[0] ? rows[0].tenant_id : null;

@@ -104,7 +104,9 @@ async function resolveTenant(c: {
   const fromQuery = c.req.query('store');
   if (fromQuery && storeOverrideAllowed(host)) return fromQuery;
   const sql = neon(c.env.DATABASE_URL);
-  const d = (await sql`SELECT tenant_id FROM domains WHERE host = ${host}`) as {
+  // Only verified claims are authoritative for routing (H1): an unverified squat on someone
+  // else's domain must not serve content, and stays reclaimable by the real owner.
+  const d = (await sql`SELECT tenant_id FROM domains WHERE host = ${host} AND verified = true`) as {
     tenant_id: string;
   }[];
   return d[0]?.tenant_id ?? null;

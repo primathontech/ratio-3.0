@@ -1,5 +1,10 @@
 import { pool } from '../shared/db';
 
+// Platform hosts are ours (wildcard DNS/TLS), so a claim on one is verified immediately.
+// Custom domains must prove ownership via Cloudflare DV before their claim is authoritative.
+const isPlatformHost = (host: string) =>
+  host.endsWith('.ratiodev.in') || host.endsWith('.localhost');
+
 // Raised when a write would clobber another tenant's resource (store id or host already
 // owned by someone else). Routes map this to HTTP 409 rather than the generic 400.
 export class ConflictError extends Error {
@@ -49,12 +54,13 @@ export async function onboardStore({
       );
       if (!owns.rowCount) throw new ConflictError('a store with that id already exists');
     }
-    // The host must be unclaimed or already this tenant's — never another tenant's.
-    const claimed = await client.query<{ tenant_id: string }>(
-      'SELECT tenant_id FROM domains WHERE host=$1',
+    // The host must be unclaimed, already this tenant's, or a still-unverified claim by another
+    // tenant (reclaimable). A verified claim by someone else is protected (H1).
+    const claimed = await client.query<{ tenant_id: string; verified: boolean }>(
+      'SELECT tenant_id, verified FROM domains WHERE host=$1',
       [host]
     );
-    if (claimed.rowCount && claimed.rows[0].tenant_id !== id) {
+    if (claimed.rowCount && claimed.rows[0].tenant_id !== id && claimed.rows[0].verified) {
       throw new ConflictError('that domain is already connected to another store');
     }
     await client.query(
@@ -65,11 +71,13 @@ export async function onboardStore({
     // concurrent onboards for the same host both pass the pre-check, so the reassignment
     // must be conditional. Zero rows back = the host is another tenant's → conflict.
     const dom = await client.query(
-      `INSERT INTO domains (host, tenant_id) VALUES ($1,$2)
-       ON CONFLICT (host) DO UPDATE SET tenant_id=EXCLUDED.tenant_id
-         WHERE domains.tenant_id = EXCLUDED.tenant_id
+      `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,$3)
+       ON CONFLICT (host) DO UPDATE SET
+           tenant_id = EXCLUDED.tenant_id,
+           verified  = domains.verified OR EXCLUDED.verified
+         WHERE domains.tenant_id = EXCLUDED.tenant_id OR domains.verified = false
        RETURNING host`,
-      [host, id]
+      [host, id, isPlatformHost(host)]
     );
     if (!dom.rowCount) throw new ConflictError('that domain is already connected to another store');
     await client.query(
@@ -161,14 +169,27 @@ export async function listDomains(tenantId: string): Promise<string[]> {
 // the row is already this tenant's, so a merchant can never take over a host mapped to
 // another store. On a foreign claim the WHERE fails, no row returns, and we reject (409).
 export async function addDomain(tenantId: string, host: string): Promise<void> {
+  // Reassign only when the row is already this tenant's OR the existing claim is still
+  // unverified (reclaimable). A verified claim by another tenant is protected → 0 rows → 409.
   const { rowCount } = await pool.query(
-    `INSERT INTO domains (host, tenant_id) VALUES ($1,$2)
-     ON CONFLICT (host) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
-       WHERE domains.tenant_id = EXCLUDED.tenant_id
+    `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,$3)
+     ON CONFLICT (host) DO UPDATE SET
+         tenant_id = EXCLUDED.tenant_id,
+         verified  = domains.verified OR EXCLUDED.verified
+       WHERE domains.tenant_id = EXCLUDED.tenant_id OR domains.verified = false
      RETURNING host`,
-    [host, tenantId]
+    [host, tenantId, isPlatformHost(host)]
   );
   if (!rowCount) throw new ConflictError('that domain is already connected to another store');
+}
+
+// Mark a custom-domain claim authoritative once Cloudflare confirms the hostname is active
+// (DV succeeded = the merchant proved ownership). Idempotent; only ever flips false → true.
+export async function markDomainVerified(tenantId: string, host: string): Promise<void> {
+  await pool.query('UPDATE domains SET verified = true WHERE tenant_id = $1 AND host = $2', [
+    tenantId,
+    host,
+  ]);
 }
 
 export async function removeDomain(tenantId: string, host: string): Promise<boolean> {

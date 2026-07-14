@@ -57,6 +57,9 @@ before(async () => {
     (await call('POST', '/stores', 'tok-victim', { id: TV, name: 'V', host: HV })).status,
     201
   );
+  // Verified (DV-completed) domains are protected from cross-tenant takeover (H1); an
+  // unverified claim is intentionally reclaimable, so mark the victim's host verified.
+  await pool.query('UPDATE domains SET verified = true WHERE host = $1', [HV]);
 });
 after(async () => {
   await cleanup();

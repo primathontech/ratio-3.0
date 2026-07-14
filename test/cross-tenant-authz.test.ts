@@ -70,6 +70,9 @@ before(async () => {
     (await call('POST', '/stores', 'tok-attacker', { id: TA, name: 'Attacker', host: HA })).status,
     201
   );
+  // The victim's custom domain is DV-verified (a real owner). Only verified claims are protected
+  // from cross-tenant takeover (H1); unverified claims are intentionally reclaimable.
+  await pool.query('UPDATE domains SET verified = true WHERE host IN ($1,$2)', [HV, HA]);
 });
 after(async () => {
   await cleanup();

@@ -7,6 +7,7 @@ import {
   listDomains,
   addDomain,
   removeDomain,
+  markDomainVerified,
   ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant, StaleWriteError } from '../../packages/repo/index';
@@ -438,6 +439,9 @@ export function createApp(
         if (!cfg)
           return { host, kind: 'custom', status: 'unconfigured', sslStatus: 'unconfigured' };
         const s = await customHostnameStatus(cfg, host).catch(() => null);
+        // Read-repair: once Cloudflare reports the hostname active, DV succeeded → the merchant
+        // proved ownership, so promote the claim to verified (authoritative for routing). (H1)
+        if (s?.status === 'active') await markDomainVerified(c.req.param('id'), host);
         return {
           host,
           kind: 'custom',
