@@ -21,13 +21,15 @@ import {
   mintAgentToken,
   type Verifier,
 } from './auth';
+import { auditMiddleware } from './audit';
+import { openApiDocument } from './openapi';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
 // Auth is ADR-010: Clerk verifies identity, our memberships table authorizes per store.
 // createApp takes the verifier so tests can inject identity without calling Clerk. The
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
-type Vars = { Variables: { userId: string; scope?: string[] } };
+type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
 
 export function createApp(verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier)) {
   const app = new Hono<Vars>();
@@ -39,12 +41,18 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
   const origins = (process.env.ADMIN_CORS_ORIGIN || '*').split(',').map((o) => o.trim());
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
 
-  app.use('*', authMiddleware(verify));
+  app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
+  // Audit every authenticated mutation (ADR-016 Phase 1). After auth so the actor is known.
+  app.use('*', auditMiddleware);
   app.onError((e, c) => c.json({ error: e.message }, 400));
 
   // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
   app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // The API contract (ADR-016), source of truth for the generated SDK. Public so tooling
+  // and dev portals can read it without a token.
+  app.get('/openapi.json', (c) => c.json(openApiDocument));
 
   // Who am I — also surfaces the caller's Clerk id (for PLATFORM_ADMIN_IDS setup).
   app.get('/me', (c) => {
@@ -72,6 +80,7 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
       color?: string;
     };
     await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
+    if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
     return c.json({ id, url: `https://${host}/` }, 201);
   });
 

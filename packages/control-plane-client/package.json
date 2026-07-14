@@ -1,0 +1,9 @@
+{
+  "name": "@ratio/control-plane-client",
+  "version": "0.1.0",
+  "description": "Typed client for the Ratio control-plane API (ADR-016). Types generated from the OpenAPI contract.",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "license": "UNLICENSED"
+}
