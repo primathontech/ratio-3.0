@@ -620,6 +620,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                 className="preview-frame"
                 src={previewSrc}
                 title="Store preview"
+                sandbox="allow-same-origin"
               />
             </>
           ) : (

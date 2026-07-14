@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import {
@@ -123,6 +124,7 @@ export function platformSubdomainAllowed(host: string, isAdmin: boolean): boolea
 export interface AppOptions {
   rateLimit?: number; // per-user requests/min on the control plane
   assistantRateLimit?: number; // tighter per-user budget on /assistant
+  internalToken?: string; // marks in-process (viaSelf) calls so they skip the limiter (tests inject)
 }
 
 export function createApp(
@@ -138,6 +140,10 @@ export function createApp(
   const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
   // Dedupe /assistant runs by idempotency key (OFCE-412).
   const idem = createIdempotencyStore();
+  // Unforgeable per-process marker for the assistant's in-process (viaSelf) sub-requests, so
+  // they skip the per-user limiter (L-1) — otherwise one assistant run's fan-out drained the
+  // caller's own budget and rate-limited itself. Random by default; never sent to clients.
+  const internalToken = opts.internalToken ?? randomUUID();
 
   // The admin SPA lives on a different origin (Cloudflare Pages) and calls this API from
   // the browser with a Bearer token, so it needs CORS. Lock to ADMIN_CORS_ORIGIN in prod
@@ -152,6 +158,9 @@ export function createApp(
   app.use('*', async (c, next) => {
     const userId = c.get('userId');
     if (!userId) return next();
+    // In-process assistant fan-out (viaSelf) carries the unforgeable per-process marker and is
+    // exempt — it's one user action, already throttled at the /assistant edge (L-1).
+    if (c.req.header('x-ratio-internal') === internalToken) return next();
     const limiter = c.req.path === '/assistant' ? assistantRl : rl;
     if (!limiter.check(userId).allowed) {
       return c.json({ error: 'rate limit exceeded — retry shortly' }, 429);
@@ -269,8 +278,11 @@ export function createApp(
   // D-STR7). We mint a merchant-scoped agent token for the signed-in caller and route the
   // SDK's fetch back at THIS app in-process, so the assistant's edits run through the same
   // auth, membership, and audit as everything else. ANTHROPIC_API_KEY stays server-side.
-  const viaSelf: typeof fetch = ((url: string | URL | Request, init?: RequestInit) =>
-    app.fetch(new Request(url as string, init))) as typeof fetch;
+  const viaSelf: typeof fetch = ((url: string | URL | Request, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    headers.set('x-ratio-internal', internalToken);
+    return app.fetch(new Request(url as string, { ...init, headers }));
+  }) as typeof fetch;
 
   app.post('/assistant', denyNarrowedScope, async (c) => {
     if (!process.env.ANTHROPIC_API_KEY) {
