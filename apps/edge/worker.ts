@@ -72,6 +72,22 @@ export function storeOverrideAllowed(host: string): boolean {
   return h === 'localhost' || h.endsWith('.localhost');
 }
 
+// Internal headers the origin uses for cache tagging / diagnostics — stripped at the edge so
+// they never reach the public (they leak tenant ids + cache-key structure). (M-5)
+const INTERNAL_HEADERS = [
+  'x-tenant',
+  'x-page-type',
+  'x-cache',
+  'x-surrogate-keys',
+  'x-render-count',
+  'x-handler',
+];
+export function publicHeaders(h: Headers): Headers {
+  const out = new Headers(h);
+  for (const k of INTERNAL_HEADERS) out.delete(k);
+  return out;
+}
+
 const STOREFRONT_CSP =
   "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 function setStorefrontSecurity(c: { header: (k: string, v: string) => void }): void {
@@ -97,18 +113,22 @@ async function resolveTenant(c: {
 app.all('*', async (c) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
+  // Internal/diagnostic origin paths (e.g. /__stats) must not be reachable from the public
+  // edge — they'd otherwise leak per-process counters. Ops can still hit the origin directly. (M-5)
+  if (path.startsWith('/__')) return c.text('not found', 404);
   const tenantId = await resolveTenant(c);
   if (!tenantId) return c.html('<h1>Store not found</h1><p>No store for this domain.</p>', 404);
 
   // path B: inject the trusted header + proxy to the private container origin. EDGE_SECRET
   // has no default — if unset the origin refuses (fail closed) rather than accept a secret
-  // that lives in the source tree. Body + safe headers are forwarded (OFCE-413).
+  // that lives in the source tree. Body + safe headers are forwarded (OFCE-413). Internal
+  // x-* headers from the origin are stripped before returning to the public (M-5).
   if (c.env.ORIGIN_URL) {
     const res = await fetch(
       originTarget(c.env.ORIGIN_URL, path, url.search),
       proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? '')
     );
-    return new Response(res.body, { status: res.status, headers: res.headers });
+    return new Response(res.body, { status: res.status, headers: publicHeaders(res.headers) });
   }
 
   // path A: render directly from Neon (staging fallback).
@@ -131,7 +151,6 @@ app.all('*', async (c) => {
     // within minutes even without a purge; the on-write purge (OFCE-411) makes it instant.
     c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
   }
-  c.header('x-tenant', tenantId);
   setStorefrontSecurity(c);
   const page = normalizePage(route.page_config);
   return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));

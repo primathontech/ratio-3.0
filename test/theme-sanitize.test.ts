@@ -43,6 +43,12 @@ test('hero CTA: javascript: href is neutralised, relative href kept', () => {
   assert.match(ok, /href="\/sale"/);
 });
 
+test('hero CTA: protocol-relative //evil.com is neutralised (L-2)', () => {
+  const html = render({ kind: 'hero', heading: 'H', cta: { label: 'Go', href: '//evil.com' } });
+  assert.doesNotMatch(html, /href="\/\/evil\.com"/);
+  assert.match(html, /href="#"/);
+});
+
 test('product card: javascript:/data: in href/image are neutralised', () => {
   const html = render({
     kind: 'productGrid',

@@ -1,4 +1,5 @@
 import { Hono, type Context } from 'hono';
+import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '../../packages/repo/index';
 import { pool } from '../../packages/shared/db';
 import { normalizePage } from '../../packages/content-model/index';
@@ -16,6 +17,15 @@ export function resolveEdgeSecret(env: NodeJS.ProcessEnv = process.env): string 
   if (env.NODE_ENV === 'production') throw new Error('EDGE_SECRET must be set in production');
   return 'private-link-secret';
 }
+// Constant-time compare of the edge secret (L-1) — a plain !== is a timing oracle if the
+// private origin is ever reachable directly. Equal-length guard because timingSafeEqual
+// throws on length mismatch.
+export function edgeAuthOk(provided: string | undefined, secret: string): boolean {
+  const a = Buffer.from(provided ?? '');
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 const RESERVED = ['/cart', '/checkout', '/account'];
 const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
@@ -54,7 +64,7 @@ app.all('*', async (c) => {
     }
   }
 
-  if (c.req.header('x-edge-auth') !== resolveEdgeSecret()) {
+  if (!edgeAuthOk(c.req.header('x-edge-auth'), resolveEdgeSecret())) {
     return c.text('403 — origin is private (no valid edge auth)', 403);
   }
 
@@ -65,7 +75,7 @@ app.all('*', async (c) => {
   if (path.startsWith('/api/') || RESERVED.some((r) => path === r || path.startsWith(r + '/'))) {
     c.header('x-handler', 'reserved');
     c.header('x-cache', 'no-store');
-    return c.text(`[reserved system handler] ${path} (tenant=${tenantId})`);
+    return c.text('reserved'); // don't echo tenant id / path back to the caller (I-4)
   }
 
   const repo = forTenant(tenantId as string); // throws (deny-by-default) if absent

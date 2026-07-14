@@ -1,7 +1,7 @@
 // Origin contract tests — in-process via app.fetch() (no server, real test DB).
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { app } from '../apps/origin/index';
+import { app, edgeAuthOk } from '../apps/origin/index';
 import { pool } from '../packages/shared/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
@@ -10,6 +10,13 @@ const call = (path: string, headers: Record<string, string> = {}) =>
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 
 after(() => pool.end());
+
+test('edgeAuthOk matches only the exact secret, constant-time (L-1)', () => {
+  assert.strictEqual(edgeAuthOk('s3cret', 's3cret'), true);
+  assert.strictEqual(edgeAuthOk('wrong!', 's3cret'), false);
+  assert.strictEqual(edgeAuthOk('s3cre', 's3cret'), false); // length mismatch
+  assert.strictEqual(edgeAuthOk(undefined, 's3cret'), false);
+});
 
 test('origin is private: no edge auth -> 403', async () => {
   const res = await call('/', { 'x-ratio-tenant': 't_acme' });
