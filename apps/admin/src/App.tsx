@@ -8,6 +8,7 @@ import {
   type DomainInfo,
   type DomainConnection,
   type AuditEntry,
+  type AssistantAction,
 } from './api';
 import { useTheme } from './theme';
 import { Badge, Dialog, EmptyState, Field, Icon, Spinner, ToastProvider, useToast } from './ui';
@@ -67,14 +68,111 @@ function useApi(): Api {
 function Dashboard() {
   const api = useApi();
   const [store, setStore] = useState<Store | null>(null);
+  // Bumped after the AI assistant makes a change, so the active view remounts and reloads.
+  const [reloadKey, setReloadKey] = useState(0);
   return (
     <main className="container">
       {store ? (
-        <PageManager api={api} store={store} onBack={() => setStore(null)} />
+        <PageManager key={reloadKey} api={api} store={store} onBack={() => setStore(null)} />
       ) : (
-        <StoreList api={api} onOpen={setStore} />
+        <StoreList key={reloadKey} api={api} onOpen={setStore} />
       )}
+      <AssistantPanel
+        api={api}
+        storeId={store?.id ?? null}
+        onChanged={() => setReloadKey((k) => k + 1)}
+      />
     </main>
+  );
+}
+
+// OFCE-400 Model A: chat with the AI assistant right in the dashboard. It drives the same
+// control-plane the rest of this UI does (server-side), so anything it does — onboard a
+// store, add a page — is real and shows up in "Recent changes". Available whether or not a
+// store is open; when one is open its id is passed so "add a page" needs no repetition.
+function AssistantPanel({
+  api,
+  storeId,
+  onChanged,
+}: {
+  api: Api;
+  storeId: string | null;
+  onChanged: () => void;
+}) {
+  type Turn = { role: 'you' | 'ai'; text: string; actions?: AssistantAction[] };
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput('');
+    setErr(null);
+    setTurns((t) => [...t, { role: 'you', text }]);
+    setBusy(true);
+    try {
+      const r = await api.assistant(text, storeId ?? undefined);
+      setTurns((t) => [...t, { role: 'ai', text: r.reply, actions: r.actions }]);
+      if (r.actions.some((a) => a.ok)) onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card pane" style={{ marginTop: 20 }}>
+      <div className="pane-head">
+        <h2>AI assistant</h2>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Ask in plain English — “Create a store called Acme at acme.ratiodev.in” or “Add an
+        About page”. Changes go live immediately and appear in Recent changes.
+      </p>
+
+      {turns.length > 0 && (
+        <div
+          aria-live="polite"
+          style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '12px 0' }}
+        >
+          {turns.map((t, i) => (
+            <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
+              <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
+              {t.actions && t.actions.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {t.actions.map((a, j) => (
+                    <span key={j} className={a.ok ? 'badge dot-ok' : 'badge dot-warn'}>
+                      {a.tool} {a.ok ? 'done' : 'failed'}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div className="note note-error" role="alert">{err}</div>}
+
+      <form onSubmit={send} className="row" style={{ alignItems: 'flex-end', marginTop: 8 }}>
+        <Field label={storeId ? `Message (editing ${storeId})` : 'Message'}>
+          <input
+            className="input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask the assistant to onboard or edit a store…"
+            disabled={busy}
+          />
+        </Field>
+        <button className="btn btn-primary" type="submit" disabled={busy || !input.trim()}>
+          {busy ? <Spinner /> : <Icon.check />} Send
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -117,7 +215,7 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
         </button>
       </div>
 
-      {error && <div className="note note-error">{error}</div>}
+      {error && <div className="note note-error" role="alert">{error}</div>}
 
       {!stores && !error && (
         <div className="grid">
@@ -274,7 +372,7 @@ function CreateStoreDialog({
               style={{ height: 42, padding: 4 }}
             />
           </Field>
-          {err && <div className="note note-error">{err}</div>}
+          {err && <div className="note note-error" role="alert">{err}</div>}
         </div>
         <div className="actions">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
@@ -481,7 +579,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
               />
             )}
 
-            {err && <div className="note note-error">{err}</div>}
+            {err && <div className="note note-error" role="alert">{err}</div>}
             <div>
               <button className="btn btn-primary" type="submit" disabled={saving}>
                 {saving ? <Spinner /> : <Icon.check />} {saving ? 'Saving…' : 'Save page'}
@@ -602,9 +700,10 @@ function AgentAccessPanel({ api, store }: { api: Api; store: Store }) {
       <p className="muted" style={{ fontSize: 12.5 }}>
         Give an AI assistant a key to edit <strong>this store only</strong>. It expires
         automatically. Anyone with the key can edit this store until it expires — share it
-        carefully, and regenerate to revoke.
+        carefully. Generating a new key does <strong>not</strong> disable an old one; each
+        key stays valid until it expires.
       </p>
-      {err && <div className="note note-error">{err}</div>}
+      {err && <div className="note note-error" role="alert">{err}</div>}
       {key && (
         <div style={{ marginTop: 12 }}>
           <div className="row" style={{ alignItems: 'flex-end' }}>
@@ -652,7 +751,7 @@ function AuditPanel({ api, store }: { api: Api; store: Store }) {
           Refresh
         </button>
       </div>
-      {err && <div className="note note-error">{err}</div>}
+      {err && <div className="note note-error" role="alert">{err}</div>}
       {!entries && !err && (
         <div className="center-pad">
           <Spinner />
@@ -809,7 +908,7 @@ function DomainRecordsDialog({
   return (
     <Dialog title={`DNS records — ${host}`} onClose={onClose}>
       <div className="body">
-        {err && <div className="note note-error">{err}</div>}
+        {err && <div className="note note-error" role="alert">{err}</div>}
         {!result && !err && <div className="center-pad"><Spinner /></div>}
         {result && (
           <>
@@ -872,7 +971,7 @@ function ConnectDomainDialog({
             <p className="muted" style={{ fontSize: 12.5 }}>
               We'll issue an SSL certificate and give you the exact DNS records to add at your registrar.
             </p>
-            {err && <div className="note note-error">{err}</div>}
+            {err && <div className="note note-error" role="alert">{err}</div>}
           </div>
           <div className="actions">
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>

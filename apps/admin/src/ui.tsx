@@ -141,7 +141,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="toaster">
+      <div className="toaster" role="status" aria-live="polite" aria-atomic="true">
         {toasts.map((t) => (
           <div key={t.id} className={t.kind === 'error' ? 'toast error' : 'toast'}>
             <span className="bar" />

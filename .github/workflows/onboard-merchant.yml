@@ -34,16 +34,35 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # All ${{ inputs.* }} / secrets go through env (shell vars), never interpolated into
+      # the run script — otherwise an input like "$(...)" executes on the runner, which
+      # holds DATABASE_URL + CLOUDFLARE_API_TOKEN. The JSON body is built with jq so `sub`
+      # can't break out of it either.
       - name: 1) Create store (Neon)
-        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/onboard.ts "${{ inputs.id }}" "${{ inputs.name }}" "${{ inputs.sub }}.${{ inputs.domain }}" "${{ inputs.color }}"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ID: ${{ inputs.id }}
+          NAME: ${{ inputs.name }}
+          SUB: ${{ inputs.sub }}
+          DOMAIN: ${{ inputs.domain }}
+          COLOR: ${{ inputs.color }}
+        run: npx tsx scripts/onboard.ts "$ID" "$NAME" "$SUB.$DOMAIN" "$COLOR"
       - name: 2) Create proxied DNS record
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          SUB: ${{ inputs.sub }}
+          DOMAIN: ${{ inputs.domain }}
         run: |
-          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.domain }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -r '.result[0].id')
+          body=$(jq -nc --arg name "$SUB" '{type:"A",name:$name,content:"192.0.2.1",proxied:true}')
           resp=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
-            --data "{\"type\":\"A\",\"name\":\"${{ inputs.sub }}\",\"content\":\"192.0.2.1\",\"proxied\":true}")
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+            --data "$body")
           echo "$resp" | jq '{success, errors:(.errors|map(.message))}'
           # OK if it succeeds OR the record already exists (idempotent re-onboard)
           echo "$resp" | jq -e '.success or (.errors|any(.code==81057 or (.message|test("already exist";"i"))))' >/dev/null
       - name: 3) Done
-        run: echo "✅ https://${{ inputs.sub }}.${{ inputs.domain }}  (allow a few min for a brand-new subdomain's DNS to propagate)"
+        env:
+          SUB: ${{ inputs.sub }}
+          DOMAIN: ${{ inputs.domain }}
+        run: echo "✅ https://$SUB.$DOMAIN  (allow a few min for a brand-new subdomain's DNS to propagate)"

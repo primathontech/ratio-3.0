@@ -61,6 +61,15 @@ export interface AuditEntry {
   status: number;
 }
 
+export interface AssistantAction {
+  tool: string;
+  ok: boolean;
+}
+export interface AssistantReply {
+  reply: string;
+  actions: AssistantAction[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -112,6 +121,8 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
     mintAgentToken: (id: string) => req<AgentToken>('POST', `/stores/${id}/agent-tokens`),
     listAudit: (id: string) =>
       req<{ entries: AuditEntry[] }>('GET', `/stores/${id}/audit`).then((d) => d.entries),
+    assistant: (message: string, storeId?: string) =>
+      req<AssistantReply>('POST', '/assistant', { message, storeId }),
   };
 }
 

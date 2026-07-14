@@ -19,27 +19,38 @@ on:
         required: true
         default: ratio-3-0
 
+permissions:
+  contents: read
+
 jobs:
   setup:
     runs-on: ubuntu-latest
-    env:
-      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - name: DNS records + Worker route
+        # Inputs/secret via env (never spliced into the script); subs validated before the
+        # intentional word-split; JSON bodies built with jq.
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DOMAIN: ${{ inputs.domain }}
+          SUBS: ${{ inputs.subs }}
+          SCRIPT: ${{ inputs.script }}
         run: |
-          DOMAIN="${{ inputs.domain }}"
+          case "$SUBS" in
+            *[!a-zA-Z0-9_.\ -]*) echo "Refusing: subs may contain only letters, digits, . _ - and spaces"; exit 1;;
+          esac
           ZONE=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN" -H "Authorization: Bearer $CF_TOKEN")
           ZID=$(echo "$ZONE" | jq -r '.result[0].id')
           echo "zone status: $(echo "$ZONE" | jq -r '.result[0].status')  id: $ZID"
-          for sub in ${{ inputs.subs }}; do
+          # shellcheck disable=SC2086  # word-split is intentional: multiple subs
+          for sub in $SUBS; do
             echo "--- DNS $sub.$DOMAIN (proxied) ---"
             curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/dns_records" \
               -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-              --data "{\"type\":\"A\",\"name\":\"$sub\",\"content\":\"192.0.2.1\",\"proxied\":true}" \
+              --data "$(jq -nc --arg name "$sub" '{type:"A",name:$name,content:"192.0.2.1",proxied:true}')" \
               | jq '{success, errors: (.errors|map(.message))}'
           done
-          echo "--- Worker route *.$DOMAIN/* -> ${{ inputs.script }} ---"
+          echo "--- Worker route *.$DOMAIN/* -> $SCRIPT ---"
           curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$ZID/workers/routes" \
             -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
-            --data "{\"pattern\":\"*.$DOMAIN/*\",\"script\":\"${{ inputs.script }}\"}" \
+            --data "$(jq -nc --arg pattern "*.$DOMAIN/*" --arg script "$SCRIPT" '{pattern:$pattern,script:$script}')" \
             | jq '{success, errors: (.errors|map(.message))}'

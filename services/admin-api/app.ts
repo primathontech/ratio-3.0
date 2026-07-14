@@ -6,6 +6,7 @@ import {
   listDomains,
   addDomain,
   removeDomain,
+  ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
 import { cfConfig, connectCustomHostname, customHostnameStatus } from './domains';
@@ -19,10 +20,14 @@ import {
   agentVerifier,
   composeVerifiers,
   mintAgentToken,
+  denyNarrowedScope,
   type Verifier,
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
+import Anthropic from '@anthropic-ai/sdk';
+import { RatioControlPlane } from '@ratio/control-plane-client';
+import { runAssistant, scopeForAssistant } from './assistant';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
@@ -44,7 +49,15 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
   app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
   // Audit every authenticated mutation (ADR-016 Phase 1). After auth so the actor is known.
   app.use('*', auditMiddleware);
-  app.onError((e, c) => c.json({ error: e.message }, 400));
+  // A conflict is a client-actionable 409. Everything else that reaches here is an
+  // UNEXPECTED throw (bad input is validated at the route with an explicit 400) → 500, and
+  // in production we return a generic message so DB/vendor error strings don't leak to the
+  // browser. Detail stays server-side (dev keeps it for debuggability).
+  app.onError((e, c) => {
+    if (e instanceof ConflictError) return c.json({ error: e.message }, 409);
+    const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
+    return c.json({ error: detail }, 500);
+  });
 
   // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
   app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
@@ -72,13 +85,19 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
 
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
-  app.post('/stores', async (c) => {
+  app.post('/stores', denyNarrowedScope, async (c) => {
     const { id, name, host, color } = (await c.req.json().catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
     };
+    if (!id || !name || !host) {
+      return c.json({ error: 'id, name and host are required' }, 400);
+    }
+    if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
+      return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
+    }
     await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
     return c.json({ id, url: `https://${host}/` }, 201);
@@ -108,6 +127,45 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
       exp: Math.floor(Date.now() / 1000) + expiresIn,
     });
     return c.json({ token, scope: [c.req.param('id')], expiresIn }, 201);
+  });
+
+  // OFCE-400 Model A: in-dashboard AI assistant. Claude runs a server-side tool-use loop
+  // and drives the SAME control-plane the dashboard uses — not a forked code path (ADR-014
+  // D-STR7). We mint a merchant-scoped agent token for the signed-in caller and route the
+  // SDK's fetch back at THIS app in-process, so the assistant's edits run through the same
+  // auth, membership, and audit as everything else. ANTHROPIC_API_KEY stays server-side.
+  const viaSelf: typeof fetch = ((url: string | URL | Request, init?: RequestInit) =>
+    app.fetch(new Request(url as string, init))) as typeof fetch;
+
+  app.post('/assistant', denyNarrowedScope, async (c) => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return c.json({ error: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).' }, 503);
+    }
+    const { message, storeId } = (await c.req.json().catch(() => ({}))) as {
+      message?: string;
+      storeId?: string;
+    };
+    if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
+
+    // Least privilege (N1): scope the token to the open store when there is one; only the
+    // onboarding entry point (no storeId) gets '*' so it can create a brand-new store.
+    const token = mintAgentToken({
+      sub: c.get('userId'),
+      scope: scopeForAssistant(storeId),
+      exp: Math.floor(Date.now() / 1000) + 900,
+    });
+    const client = new RatioControlPlane({
+      baseUrl: new URL(c.req.url).origin,
+      token,
+      fetch: viaSelf,
+    });
+    const result = await runAssistant({
+      anthropic: new Anthropic(),
+      client,
+      message,
+      storeId,
+    });
+    return c.json(result);
   });
 
   // Recent control-plane changes for a store (ADR-016 Phase 1 audit trail) — powers the
@@ -182,6 +240,11 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
       return c.json({ error: 'a valid domain is required' }, 400);
+    }
+    // Platform subdomains (*.ratiodev.in) are assigned at onboarding, never connected as a
+    // "custom domain" — otherwise a merchant could squat an unclaimed platform subdomain.
+    if (isPlatformHost(host.toLowerCase())) {
+      return c.json({ error: 'platform subdomains cannot be connected as a custom domain' }, 400);
     }
     await addDomain(c.req.param('id'), host.toLowerCase());
     const cfg = cfConfig();

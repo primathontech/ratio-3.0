@@ -4,16 +4,24 @@ on:
     inputs:
       zone: { required: true, default: ratiodev.in }
       hostname: { required: true }
+
+permissions:
+  contents: read
+
 jobs:
   r:
     runs-on: ubuntu-latest
     steps:
       - name: Re-trigger validation + status
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZONE: ${{ inputs.zone }}
+          HOSTNAME: ${{ inputs.hostname }}
         run: |
-          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.zone }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
-          CHID=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames?hostname=${{ inputs.hostname }}" -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" | jq -r '.result[0].id')
+          ZID=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$ZONE" -H "Authorization: Bearer $CF_TOKEN" | jq -r '.result[0].id')
+          CHID=$(curl -s "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames?hostname=$HOSTNAME" -H "Authorization: Bearer $CF_TOKEN" | jq -r '.result[0].id')
           echo "custom hostname id: $CHID"
           curl -s -X PATCH "https://api.cloudflare.com/client/v4/zones/$ZID/custom_hostnames/$CHID" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
             --data '{"ssl":{"method":"txt","type":"dv"}}' \
             | jq '.result | {hostname, status, ssl_status:.ssl.status, verification_errors}'

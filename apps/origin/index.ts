@@ -1,20 +1,44 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { forTenant } from '../../packages/repo/index';
 import { pool } from '../../packages/shared/db';
 import { normalizePage } from '../../packages/content-model/index';
-import { renderPage } from '../../packages/theme/index';
+import { renderPage, esc } from '../../packages/theme/index';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
-const EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+
+// The edge<->origin shared secret. Fails closed: in production it MUST be set — we never
+// fall back to a known default, or the private origin would accept a secret that's in the
+// source tree. The dev default keeps local runs frictionless. Reads env at call time (and
+// takes an env for testability).
+export function resolveEdgeSecret(env: NodeJS.ProcessEnv = process.env): string {
+  if (env.EDGE_SECRET) return env.EDGE_SECRET;
+  if (env.NODE_ENV === 'production') throw new Error('EDGE_SECRET must be set in production');
+  return 'private-link-secret';
+}
 const RESERVED = ['/cart', '/checkout', '/account'];
 const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
 
+// Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
+// backstop that contains any HTML/color injection that slips through content validation;
+// inline <style> is the theme's, so style-src allows it. Applied to every storefront HTML
+// response. The edge forwards these headers on the proxied path.
+const STOREFRONT_CSP =
+  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+function setStorefrontSecurity(c: Context): void {
+  c.header('content-security-policy', STOREFRONT_CSP);
+  c.header('x-content-type-options', 'nosniff');
+  c.header('referrer-policy', 'strict-origin-when-cross-origin');
+}
+
 export const app = new Hono();
 
-app.onError((e, c) => c.text('500 — ' + e.message, 500));
+// Don't leak internal error strings to the customer-facing storefront in production.
+app.onError((e, c) =>
+  c.text(process.env.NODE_ENV === 'production' ? '500 — internal error' : '500 — ' + e.message, 500)
+);
 
 app.all('*', async (c) => {
   const path = new URL(c.req.url).pathname;
@@ -30,7 +54,7 @@ app.all('*', async (c) => {
     }
   }
 
-  if (c.req.header('x-edge-auth') !== EDGE_SECRET) {
+  if (c.req.header('x-edge-auth') !== resolveEdgeSecret()) {
     return c.text('403 — origin is private (no valid edge auth)', 403);
   }
 
@@ -54,7 +78,8 @@ app.all('*', async (c) => {
   if (!route) {
     c.header('x-tenant', tenantId as string);
     c.header('x-cache', 'no-store');
-    return c.html(`<h1>404 — ${tenant.name}</h1><p>no route for ${path}</p>`, 404);
+    setStorefrontSecurity(c);
+    return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no route for ${esc(path)}</p>`, 404);
   }
 
   renders++; // the expensive path — a cache HIT must not reach here
@@ -69,6 +94,7 @@ app.all('*', async (c) => {
   c.header('x-cache', cacheable ? 'long' : 'no-store');
   c.header('x-surrogate-keys', surrogateKeys.join(' '));
   c.header('x-render-count', String(renders));
+  setStorefrontSecurity(c);
   const page = normalizePage(route.page_config);
   return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
 });

@@ -20,4 +20,16 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Hard-delete
-        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/delete-store.ts ${{ inputs.ids }}
+        # ids via env (not interpolated into the script), then validated to a safe charset
+        # before the intentional word-split into multiple args. Blocks shell injection into
+        # a destructive, prod-DB command.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          IDS: ${{ inputs.ids }}
+        run: |
+          case "$IDS" in
+            *[!a-zA-Z0-9_\ -]*)
+              echo "Refusing: ids may contain only letters, digits, _ - and spaces"; exit 1;;
+          esac
+          # shellcheck disable=SC2086  # word-split is intentional: multiple ids -> multiple args
+          npx tsx scripts/delete-store.ts $IDS
