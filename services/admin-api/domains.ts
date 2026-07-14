@@ -165,6 +165,33 @@ export async function connectCustomHostname(
   return toConnection(cfg, host, r.result);
 }
 
+// Delete the CF custom hostname for a host (audit R10/OFCE-422). Called on a cross-tenant
+// reclaim so the new claimant can create their own custom hostname and run its DV — otherwise
+// CF's one-object-per-hostname rule lets whoever connected first permanently block everyone
+// else (a legit owner couldn't onboard their own domain). Best-effort; returns false if none.
+export async function deleteCustomHostname(
+  cfg: CfConfig,
+  host: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  const zid = await zoneId(cfg, fetchImpl);
+  const list = await cf(
+    cfg,
+    `/zones/${zid}/custom_hostnames?hostname=${encodeURIComponent(host)}`,
+    { method: 'GET' },
+    fetchImpl
+  );
+  const id = (list.result as unknown as { id: string }[] | undefined)?.[0]?.id;
+  if (!id) return false;
+  const del = await cf(
+    cfg,
+    `/zones/${zid}/custom_hostnames/${id}`,
+    { method: 'DELETE' },
+    fetchImpl
+  );
+  return !!del.success;
+}
+
 // Purge specific storefront URLs from the Cloudflare edge cache. Purge-by-URL works on all
 // plans (unlike Cache-Tags, which need Enterprise). Best-effort: callers ignore failures so
 // a purge outage never fails the underlying write (OFCE-411).

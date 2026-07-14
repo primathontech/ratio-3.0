@@ -30,7 +30,7 @@ export async function onboardStore({
   host?: string;
   color?: string;
   ownerUserId?: string;
-}): Promise<void> {
+}): Promise<{ hostReclaimedFrom: string | null }> {
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
   }
@@ -63,6 +63,10 @@ export async function onboardStore({
     if (claimed.rowCount && claimed.rows[0].tenant_id !== id && claimed.rows[0].verified) {
       throw new ConflictError('that domain is already connected to another store');
     }
+    // A cross-tenant reclaim of an unverified host: the caller must clean up the prior tenant's
+    // stale CF custom hostname so this claimant can run their own DV (OFCE-422).
+    const hostReclaimedFrom =
+      claimed.rowCount && claimed.rows[0].tenant_id !== id ? claimed.rows[0].tenant_id : null;
     await client.query(
       'INSERT INTO tenants (id, name, theme) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, theme=EXCLUDED.theme',
       [id, name, JSON.stringify({ color })]
@@ -103,6 +107,7 @@ export async function onboardStore({
       );
     }
     await client.query('COMMIT');
+    return { hostReclaimedFrom };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
@@ -172,7 +177,14 @@ export async function listDomains(tenantId: string): Promise<string[]> {
 // Claim a host for a tenant. A host is single-owner (PK): the upsert only reassigns when
 // the row is already this tenant's, so a merchant can never take over a host mapped to
 // another store. On a foreign claim the WHERE fails, no row returns, and we reject (409).
-export async function addDomain(tenantId: string, host: string): Promise<void> {
+export async function addDomain(
+  tenantId: string,
+  host: string
+): Promise<{ reclaimedFrom: string | null }> {
+  const prior = await pool.query<{ tenant_id: string }>(
+    'SELECT tenant_id FROM domains WHERE host = $1',
+    [host]
+  );
   // Reassign only when the row is already this tenant's OR the existing claim is still
   // unverified (reclaimable). A verified claim by another tenant is protected → 0 rows → 409.
   const { rowCount } = await pool.query(
@@ -188,6 +200,10 @@ export async function addDomain(tenantId: string, host: string): Promise<void> {
     [host, tenantId, isPlatformHost(host), isPlatformHost(host) ? tenantId : null]
   );
   if (!rowCount) throw new ConflictError('that domain is already connected to another store');
+  return {
+    reclaimedFrom:
+      prior.rowCount && prior.rows[0].tenant_id !== tenantId ? prior.rows[0].tenant_id : null,
+  };
 }
 
 // Record that THIS tenant initiated the connect/DV flow for a host (they created the CF custom
