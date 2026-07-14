@@ -6,7 +6,7 @@
   --surface: #ffffff;
   --surface-2: #f0f2f5;
   --text: #151823;
-  --muted: #69707d;
+  --muted: #5c6370;
   --badge-text: #565d6b;
   --line: #e4e7ec;
   --line-strong: #d4d8df;
@@ -54,7 +54,7 @@
   --surface: #ffffff;
   --surface-2: #f0f2f5;
   --text: #151823;
-  --muted: #69707d;
+  --muted: #5c6370;
   --badge-text: #565d6b;
   --line: #e4e7ec;
   --line-strong: #d4d8df;
@@ -350,6 +350,17 @@ h2 {
 }
 
 /* Badges ----------------------------------------------------------------- */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .badge {
   display: inline-flex;
   align-items: center;

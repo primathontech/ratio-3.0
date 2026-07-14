@@ -17,6 +17,9 @@ import { SectionEditor, toEditable, type Section } from './sections';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
+// Screen-reader-only cue for links that open a new tab (L4 / WCAG G201).
+const NewTabHint = () => <span className="sr-only"> (opens in a new tab)</span>;
+
 export function App() {
   const { resolved, cycle } = useTheme();
   return (
@@ -139,12 +142,18 @@ function AssistantPanel({
         About page”. Changes go live immediately and appear in Recent changes.
       </p>
 
-      {turns.length > 0 && (
-        <div
-          aria-live="polite"
-          style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '12px 0' }}
-        >
-          {turns.map((t, i) => (
+      {/* Always mounted (M6): a live region must exist before its content changes, or the
+          first assistant reply isn't announced to screen readers. */}
+      <div
+        aria-live="polite"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+          margin: turns.length ? '12px 0' : 0,
+        }}
+      >
+        {turns.map((t, i) => (
             <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
               <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
               {t.actions && t.actions.length > 0 && (
@@ -158,8 +167,7 @@ function AssistantPanel({
               )}
             </div>
           ))}
-        </div>
-      )}
+      </div>
 
       {err && <div className="note note-error" role="alert">{err}</div>}
 
@@ -223,7 +231,8 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
       {error && <div className="note note-error" role="alert">{error}</div>}
 
       {!stores && !error && (
-        <div className="grid">
+        <div className="grid" role="status" aria-busy="true">
+          <span className="sr-only">Loading stores…</span>
           {[0, 1, 2].map((i) => (
             <div key={i} className="card store-card">
               <div className="skeleton" style={{ height: 34, width: 34, borderRadius: 9 }} />
@@ -295,6 +304,7 @@ function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
               {hosts.map((h) => (
                 <a key={h} className="host" href={`https://${h}`} target="_blank" rel="noreferrer">
                   {h} <Icon.external size={11} />
+                  <NewTabHint />
                 </a>
               ))}
             </div>
@@ -529,6 +539,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
               {hosts.map((h) => (
                 <a key={h} href={`https://${h}`} target="_blank" rel="noreferrer">
                   {h} <Icon.external size={12} />
+                  <NewTabHint />
                 </a>
               ))}
             </p>
@@ -556,6 +567,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
               <button
                 key={p.path}
                 className={p.path === path ? 'active' : ''}
+                aria-current={p.path === path ? 'true' : undefined}
                 onClick={() => openPage(p.path)}
               >
                 <span className="mono">{p.path}</span>
@@ -588,10 +600,20 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
             <div className="editor-head">
               <span className="field-label">Content</span>
               <div className="seg">
-                <button type="button" className={mode === 'visual' ? 'on' : ''} onClick={() => switchMode('visual')}>
+                <button
+                  type="button"
+                  className={mode === 'visual' ? 'on' : ''}
+                  aria-pressed={mode === 'visual'}
+                  onClick={() => switchMode('visual')}
+                >
                   Visual
                 </button>
-                <button type="button" className={mode === 'json' ? 'on' : ''} onClick={() => switchMode('json')}>
+                <button
+                  type="button"
+                  className={mode === 'json' ? 'on' : ''}
+                  aria-pressed={mode === 'json'}
+                  onClick={() => switchMode('json')}
+                >
                   JSON
                 </button>
               </div>
@@ -623,6 +645,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
             {previewSrc && (
               <a className="btn btn-subtle" href={`https://${previewHost}${path}`} target="_blank" rel="noreferrer">
                 Open <Icon.external size={13} />
+                <NewTabHint />
               </a>
             )}
           </div>
@@ -868,6 +891,7 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
           <div className="domain-row" key={d.host}>
             <a className="mono" href={`https://${d.host}`} target="_blank" rel="noreferrer">
               {d.host}
+              <NewTabHint />
             </a>
             <span className="badge">{d.kind === 'platform' ? 'Ratio subdomain' : 'custom'}</span>
             {statusBadge(d)}
