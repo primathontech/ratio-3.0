@@ -7,6 +7,7 @@
   --surface-2: #f0f2f5;
   --text: #151823;
   --muted: #69707d;
+  --badge-text: #565d6b;
   --line: #e4e7ec;
   --line-strong: #d4d8df;
   --accent: #4f46e5;
@@ -32,6 +33,7 @@
     --surface-2: #1b1f28;
     --text: #e7e9ee;
     --muted: #98a0ad;
+  --badge-text: #aab2bf;
     --line: #252a34;
     --line-strong: #313846;
     --accent: #818cf8;
@@ -53,6 +55,7 @@
   --surface-2: #f0f2f5;
   --text: #151823;
   --muted: #69707d;
+  --badge-text: #565d6b;
   --line: #e4e7ec;
   --line-strong: #d4d8df;
   --accent: #4f46e5;
@@ -72,6 +75,7 @@
   --surface-2: #1b1f28;
   --text: #e7e9ee;
   --muted: #98a0ad;
+  --badge-text: #aab2bf;
   --line: #252a34;
   --line-strong: #313846;
   --accent: #818cf8;
@@ -356,8 +360,18 @@ h2 {
   font-weight: 600;
   letter-spacing: 0.02em;
   background: var(--surface-2);
-  color: var(--muted);
+  color: var(--badge-text); /* ≥4.5:1 on --surface-2 (M-4); --muted fell just short */
   text-transform: capitalize;
+}
+.store-open {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .badge-accent {
   background: var(--accent-weak);

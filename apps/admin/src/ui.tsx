@@ -173,7 +173,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {children}
       <div className="toaster" role="status" aria-live="polite" aria-atomic="true">
         {toasts.map((t) => (
-          <div key={t.id} className={t.kind === 'error' ? 'toast error' : 'toast'}>
+          <div
+            key={t.id}
+            className={t.kind === 'error' ? 'toast error' : 'toast'}
+            role={t.kind === 'error' ? 'alert' : undefined}
+          >
             <span className="bar" />
             <span>{t.msg}</span>
           </div>
