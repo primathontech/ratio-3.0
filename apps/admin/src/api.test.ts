@@ -51,4 +51,17 @@ describe('admin api client', () => {
     await api.listStores();
     expect(seen?.headers.get('authorization')).toBeNull();
   });
+
+  test('mintAgentToken POSTs to the store agent-tokens endpoint and returns the key', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(201, { token: 'rat_abc', scope: ['t_x'], expiresIn: 3600 }, (r) => (seen = r))
+    );
+    const res = await api.mintAgentToken('t_x');
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x/agent-tokens');
+    expect(res).toEqual({ token: 'rat_abc', scope: ['t_x'], expiresIn: 3600 });
+  });
 });
