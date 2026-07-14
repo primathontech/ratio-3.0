@@ -705,27 +705,26 @@ h2 {
   color: var(--warning);
 }
 .dns-table {
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   overflow: hidden;
-}
-.dns-th,
-.dns-tr {
-  display: grid;
-  grid-template-columns: 62px 1fr 1.5fr 52px;
-  gap: 10px;
-  padding: 9px 11px;
-  align-items: center;
   font-size: 12px;
 }
-.dns-th {
+.dns-table th,
+.dns-table td {
+  padding: 9px 11px;
+  text-align: left;
+  vertical-align: top;
+}
+.dns-table thead th {
   background: var(--surface-2);
   color: var(--muted);
   font-weight: 600;
 }
-.dns-tr {
+.dns-data-row td {
   border-top: 1px solid var(--line);
 }
 .dns-host,
@@ -735,10 +734,11 @@ h2 {
 .dns-val {
   color: var(--accent);
 }
+.dns-purpose-row td {
+  padding-top: 0;
+}
 .dns-purpose {
-  grid-column: 1 / -1;
   font-size: 11px;
-  margin-top: -3px;
 }
 
 /* Section builder --------------------------------------------------------- */

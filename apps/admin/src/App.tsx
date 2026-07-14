@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react';
 import {
   createApi,
@@ -917,23 +917,43 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
         Add these records at your DNS provider for <span className="mono">{result.host}</span>. Most
         UIs ask for <em>Host/Name</em> (the part before your domain) — that's the middle column.
       </p>
-      <div className="dns-table" role="table">
-        <div className="dns-th" role="row">
-          <span>Type</span>
-          <span>Host / Name</span>
-          <span>Value</span>
-          <span>TTL</span>
-        </div>
-        {result.records.map((r, i) => (
-          <div className="dns-tr" role="row" key={i}>
-            <span className="badge">{r.type}</span>
-            <span className="mono dns-host">{r.host}</span>
-            <span className="mono dns-val">{r.value}</span>
-            <span className="muted">{r.ttl}</span>
-            <span className="dns-purpose muted">{r.purpose}</span>
-          </div>
-        ))}
-      </div>
+      <table className="dns-table">
+        <colgroup>
+          <col style={{ width: '62px' }} />
+          <col />
+          <col style={{ width: '40%' }} />
+          <col style={{ width: '52px' }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">Type</th>
+            <th scope="col">Host / Name</th>
+            <th scope="col">Value</th>
+            <th scope="col">TTL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {result.records.map((r, i) => (
+            <Fragment key={i}>
+              <tr className="dns-data-row">
+                <td>
+                  <span className="badge">{r.type}</span>
+                </td>
+                <td className="mono dns-host">{r.host}</td>
+                <td className="mono dns-val">{r.value}</td>
+                <td className="muted">{r.ttl}</td>
+              </tr>
+              {r.purpose && (
+                <tr className="dns-purpose-row">
+                  <td className="dns-purpose muted" colSpan={4}>
+                    {r.purpose}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          ))}
+        </tbody>
+      </table>
     </>
   );
 }
