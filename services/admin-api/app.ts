@@ -26,6 +26,7 @@ import {
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import { createRateLimiter } from '../../packages/shared/ratelimit';
+import { createIdempotencyStore } from './idempotency';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { runAssistant, scopeForAssistant } from './assistant';
@@ -53,6 +54,8 @@ export function createApp(
   // gets a much tighter budget because each call fans out to several Anthropic requests.
   const rl = createRateLimiter({ limit: opts.rateLimit ?? 300, windowMs: 60_000 });
   const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
+  // Dedupe /assistant runs by idempotency key (OFCE-412).
+  const idem = createIdempotencyStore();
 
   // The admin SPA lives on a different origin (Cloudflare Pages) and calls this API from
   // the browser with a Bearer token, so it needs CORS. Lock to ADMIN_CORS_ORIGIN in prod
@@ -169,29 +172,33 @@ export function createApp(
     if (!process.env.ANTHROPIC_API_KEY) {
       return c.json({ error: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).' }, 503);
     }
-    const { message, storeId } = (await c.req.json().catch(() => ({}))) as {
+    const { message, storeId, idempotencyKey } = (await c.req.json().catch(() => ({}))) as {
       message?: string;
       storeId?: string;
+      idempotencyKey?: string;
     };
     if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
 
-    // Least privilege (N1): scope the token to the open store when there is one; only the
-    // onboarding entry point (no storeId) gets '*' so it can create a brand-new store.
-    const token = mintAgentToken({
-      sub: c.get('userId'),
-      scope: scopeForAssistant(storeId),
-      exp: Math.floor(Date.now() / 1000) + 900,
-    });
-    const client = new RatioControlPlane({
-      baseUrl: new URL(c.req.url).origin,
-      token,
-      fetch: viaSelf,
-    });
-    const result = await runAssistant({
-      anthropic: new Anthropic(),
-      client,
-      message,
-      storeId,
+    // Dedupe by idempotency key (OFCE-412): a retry / refresh / double-submit re-uses the
+    // first run instead of firing the tool loop again and duplicating stores/pages. Scoped
+    // per user so keys can't collide across callers. Accept a header or a body field.
+    const rawKey = c.req.header('idempotency-key') || idempotencyKey;
+    const idemKey = rawKey ? `${c.get('userId')}:${rawKey}` : null;
+
+    const result = await idem.run(idemKey, () => {
+      // Least privilege (N1): scope the token to the open store when there is one; only the
+      // onboarding entry point (no storeId) gets '*' so it can create a brand-new store.
+      const token = mintAgentToken({
+        sub: c.get('userId'),
+        scope: scopeForAssistant(storeId),
+        exp: Math.floor(Date.now() / 1000) + 900,
+      });
+      const client = new RatioControlPlane({
+        baseUrl: new URL(c.req.url).origin,
+        token,
+        fetch: viaSelf,
+      });
+      return runAssistant({ anthropic: new Anthropic(), client, message, storeId });
     });
     return c.json(result);
   });

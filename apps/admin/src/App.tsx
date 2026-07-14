@@ -115,7 +115,8 @@ function AssistantPanel({
     setTurns((t) => [...t, { role: 'you', text }]);
     setBusy(true);
     try {
-      const r = await api.assistant(text, storeId ?? undefined);
+      // Per-send idempotency key so a retry/refresh can't run the tool loop twice (OFCE-412).
+      const r = await api.assistant(text, storeId ?? undefined, crypto.randomUUID());
       setTurns((t) => [...t, { role: 'ai', text: r.reply, actions: r.actions }]);
       if (r.actions.some((a) => a.ok)) onChanged();
     } catch (e) {
