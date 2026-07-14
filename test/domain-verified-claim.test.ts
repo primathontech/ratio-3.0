@@ -8,6 +8,7 @@ import {
   onboardStore,
   addDomain,
   markDomainVerified,
+  markDomainConnected,
   ConflictError,
 } from '../packages/provisioning/index';
 import { pool } from '../packages/shared/db';
@@ -15,9 +16,10 @@ import { pool } from '../packages/shared/db';
 const A = 't_dvc_a';
 const B = 't_dvc_b';
 const CUSTOM = 'dvc-brand.com';
+const HIJACK = 'dvc-hijack.com';
 
 async function cleanup() {
-  await pool.query('DELETE FROM domains WHERE host = $1', [CUSTOM]);
+  await pool.query('DELETE FROM domains WHERE host = ANY($1)', [[CUSTOM, HIJACK]]);
   for (const id of [A, B]) {
     await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [id]);
     await pool.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
@@ -58,9 +60,30 @@ test('an unverified custom claim is reclaimable by another tenant', async () => 
 });
 
 test('once verified, the claim is protected from takeover (409)', async () => {
+  await markDomainConnected(B, CUSTOM); // B ran its own connect/DV
   await markDomainVerified(B, CUSTOM);
   await assert.rejects(() => addDomain(A, CUSTOM), ConflictError);
   assert.strictEqual((await verifiedOf(CUSTOM))?.tenant_id, B); // still B's
+});
+
+test("a reclaimer cannot inherit the prior tenant's DV — verification is connector-bound (R10-H1)", async () => {
+  // Victim connects (DV pending) but is not yet verified.
+  await addDomain(A, HIJACK);
+  await markDomainConnected(A, HIJACK);
+  // Attacker reclaims the still-unverified row.
+  await addDomain(B, HIJACK);
+  assert.strictEqual((await verifiedOf(HIJACK))?.tenant_id, B);
+  // Even if Cloudflare now reports the hostname active, the attacker didn't connect it, so a
+  // verify attempt is a no-op — the hijack is blocked.
+  await markDomainVerified(B, HIJACK);
+  assert.strictEqual((await verifiedOf(HIJACK))?.verified, false);
+  // The row stays reclaimable, so the real owner can take it back and verify properly.
+  await addDomain(A, HIJACK);
+  await markDomainConnected(A, HIJACK);
+  await markDomainVerified(A, HIJACK);
+  const row = await verifiedOf(HIJACK);
+  assert.strictEqual(row?.tenant_id, A);
+  assert.strictEqual(row?.verified, true);
 });
 
 test('the data-plane resolution only returns verified claims (routing gate)', async () => {

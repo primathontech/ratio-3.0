@@ -9,6 +9,7 @@ import {
   addDomain,
   removeDomain,
   markDomainVerified,
+  markDomainConnected,
   ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant, StaleWriteError } from '../../packages/repo/index';
@@ -488,6 +489,9 @@ export function createApp(
     }
     try {
       const conn = await connectCustomHostname(cfg, host.toLowerCase());
+      // Bind verification to this tenant: only the connector can later be promoted to verified,
+      // so a reclaim can't inherit another tenant's DV (R10-H1).
+      await markDomainConnected(c.req.param('id'), host.toLowerCase());
       return c.json({ ...conn, configured: true }, 201);
     } catch (e) {
       return c.json({ host, configured: true, error: (e as Error).message }, 502);
