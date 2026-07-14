@@ -95,6 +95,9 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
     if (!id || !name || !host) {
       return c.json({ error: 'id, name and host are required' }, 400);
     }
+    if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
+      return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
+    }
     await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
     return c.json({ id, url: `https://${host}/` }, 201);

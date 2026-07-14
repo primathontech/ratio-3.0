@@ -50,11 +50,12 @@ test('H2: resolveEdgeSecret fails closed in production and defaults only in dev'
   assert.strictEqual(resolveEdgeSecret({} as NodeJS.ProcessEnv), 'private-link-secret');
 });
 
-test('H3: ?store= override is allowed only on dev/staging hosts, never customer domains', () => {
+test('H3/C-1: ?store= override is allowed only on localhost, never any public host', () => {
   assert.strictEqual(storeOverrideAllowed('shop.ratiodev.in'), false);
   assert.strictEqual(storeOverrideAllowed('acme.com'), false);
   assert.strictEqual(storeOverrideAllowed('brand.example.com:443'), false);
-  assert.strictEqual(storeOverrideAllowed('ratio.workers.dev'), true);
+  // workers.dev is publicly reachable in prod (workers_dev=true) — must NOT allow override.
+  assert.strictEqual(storeOverrideAllowed('ratio.workers.dev'), false);
   assert.strictEqual(storeOverrideAllowed('localhost:8787'), true);
   assert.strictEqual(storeOverrideAllowed('acme.localhost'), true);
 });
