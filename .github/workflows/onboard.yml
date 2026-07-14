@@ -1,5 +1,8 @@
 name: Onboard merchant
 
+permissions:
+  contents: read
+
 # Manual: onboard a store as DATA (tenant + host mapping + home route) into Neon.
 # "Merchant = data" — no deploy, no code change.
 on:

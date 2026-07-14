@@ -1,5 +1,8 @@
 name: Onboard merchant (one-click)
 
+permissions:
+  contents: read
+
 # One run = a fully live merchant on a platform subdomain:
 #   1. insert tenant + host + home route into Neon (merchant = data)
 #   2. create the proxied DNS record (the *.<domain>/* Worker route already serves it)

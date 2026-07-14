@@ -1,5 +1,8 @@
 name: CF wildcard DNS
 
+permissions:
+  contents: read
+
 # Adds a proxied wildcard *.ratiodev.in DNS record so EVERY store subdomain resolves to
 # Cloudflare, where the edge Worker maps host -> tenant from the DB. Mirrors acme's record
 # shape (acme is known-good). Idempotent. Run from the Actions tab.
