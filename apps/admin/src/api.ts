@@ -52,6 +52,15 @@ export interface AgentToken {
   expiresIn: number;
 }
 
+export interface AuditEntry {
+  at: string;
+  actor: string;
+  actorKind: string;
+  action: string;
+  method: string;
+  status: number;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -101,6 +110,8 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
     removeDomain: (id: string, host: string) =>
       req<{ removed: boolean }>('DELETE', `/stores/${id}/domains`, { host }),
     mintAgentToken: (id: string) => req<AgentToken>('POST', `/stores/${id}/agent-tokens`),
+    listAudit: (id: string) =>
+      req<{ entries: AuditEntry[] }>('GET', `/stores/${id}/audit`).then((d) => d.entries),
   };
 }
 

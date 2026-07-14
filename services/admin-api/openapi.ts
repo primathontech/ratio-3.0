@@ -131,6 +131,23 @@ export const openApiDocument = {
         },
       },
     },
+    '/stores/{id}/audit': {
+      parameters: [idParam],
+      get: {
+        operationId: 'listAudit',
+        summary: 'Recent control-plane changes for the store (newest first)',
+        responses: {
+          '200': {
+            description: 'ok',
+            content: json({
+              type: 'object',
+              properties: { entries: { type: 'array', items: ref('AuditEntry') } },
+              required: ['entries'],
+            }),
+          },
+        },
+      },
+    },
     '/stores/{id}/agent-tokens': {
       parameters: [idParam],
       post: {
@@ -251,6 +268,18 @@ export const openApiDocument = {
           expiresIn: { type: 'integer' },
         },
         required: ['token', 'scope', 'expiresIn'],
+      },
+      AuditEntry: {
+        type: 'object',
+        properties: {
+          at: { type: 'string' },
+          actor: { type: 'string' },
+          actorKind: { type: 'string' },
+          action: { type: 'string' },
+          method: { type: 'string' },
+          status: { type: 'integer' },
+        },
+        required: ['at', 'actor', 'actorKind', 'action'],
       },
       DeleteProof: {
         type: 'object',

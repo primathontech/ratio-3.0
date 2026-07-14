@@ -98,6 +98,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/stores/{id}/audit': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    /** Recent control-plane changes for the store (newest first) */
+    get: operations['listAudit'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/stores/{id}/agent-tokens': {
     parameters: {
       query?: never;
@@ -191,6 +211,14 @@ export interface components {
       token: string;
       scope: string[];
       expiresIn: number;
+    };
+    AuditEntry: {
+      at: string;
+      actor: string;
+      actorKind: string;
+      action: string;
+      method?: string;
+      status?: number;
     };
     DeleteProof: {
       residual: number;
@@ -457,6 +485,31 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  listAudit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description ok */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            entries: components['schemas']['AuditEntry'][];
+          };
+        };
       };
     };
   };

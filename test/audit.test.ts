@@ -124,3 +124,14 @@ test('an unauthenticated (401) attempt writes no audit row', async () => {
   assert.strictEqual(r.status, 401);
   assert.strictEqual((await auditRows()).length, before);
 });
+
+test('GET /stores/:id/audit returns recent entries (newest first), membership-gated', async () => {
+  const r = await call('GET', `/stores/${ID}/audit`, 'tok-alice');
+  assert.strictEqual(r.status, 200);
+  const { entries } = (await r.json()) as { entries: { action: string; actorKind: string }[] };
+  assert.ok(entries.length > 0);
+  assert.ok(entries.some((e) => e.action === SCOPES.PAGES_WRITE));
+  // a non-member is denied
+  const forbidden = await call('GET', `/stores/${ID}/audit`, undefined);
+  assert.strictEqual(forbidden.status, 401);
+});

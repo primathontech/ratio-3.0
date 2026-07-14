@@ -81,6 +81,12 @@ test('the SDK mints an agent token and a second SDK client drives the API with i
   assert.strictEqual(page.path, '/via-sdk-agent');
 });
 
+test('the SDK reads the store audit trail', async () => {
+  const { entries } = await client.listAudit(ID);
+  assert.ok(Array.isArray(entries) && entries.length > 0);
+  assert.ok(entries.some((e) => e.action === 'pages:write'));
+});
+
 test('an unauthenticated SDK call rejects with a typed 401 error', async () => {
   const anon = new RatioControlPlane({ baseUrl: 'http://cp', fetch: viaApp });
   await assert.rejects(

@@ -29,6 +29,25 @@ export async function recordAudit(e: AuditEntry): Promise<void> {
   );
 }
 
+export interface AuditRow {
+  at: string;
+  actor: string;
+  actorKind: string;
+  action: string;
+  method: string;
+  status: number;
+}
+
+// Most-recent changes for a store, newest first — powers the dashboard's "Recent changes".
+export async function recentAudit(tenantId: string, limit = 50): Promise<AuditRow[]> {
+  const { rows } = await pool.query<AuditRow>(
+    `SELECT at, actor, actor_kind AS "actorKind", action, method, status
+       FROM audit_log WHERE tenant_id=$1 ORDER BY id DESC LIMIT $2`,
+    [tenantId, limit]
+  );
+  return rows;
+}
+
 export const auditMiddleware: MiddlewareHandler<Vars> = async (c, next) => {
   await next();
   if (!MUTATING.has(c.req.method)) return;

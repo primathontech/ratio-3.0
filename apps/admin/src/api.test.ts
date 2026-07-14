@@ -64,4 +64,10 @@ describe('admin api client', () => {
     expect(new URL(seen!.url).pathname).toBe('/stores/t_x/agent-tokens');
     expect(res).toEqual({ token: 'rat_abc', scope: ['t_x'], expiresIn: 3600 });
   });
+
+  test('listAudit unwraps the entries array', async () => {
+    const entries = [{ at: 't', actor: 'u', actorKind: 'user', action: 'pages:write', method: 'PUT', status: 200 }];
+    const api = createApi('http://api', async () => 't', fakeFetch(200, { entries }));
+    expect(await api.listAudit('t_x')).toEqual(entries);
+  });
 });

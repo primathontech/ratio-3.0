@@ -21,7 +21,7 @@ import {
   mintAgentToken,
   type Verifier,
 } from './auth';
-import { auditMiddleware } from './audit';
+import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
@@ -108,6 +108,13 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
       exp: Math.floor(Date.now() / 1000) + expiresIn,
     });
     return c.json({ token, scope: [c.req.param('id')], expiresIn }, 201);
+  });
+
+  // Recent control-plane changes for a store (ADR-016 Phase 1 audit trail) — powers the
+  // dashboard's "Recent changes". Membership-gated; a read, so not itself audited.
+  app.get('/stores/:id/audit', requireMembership, async (c) => {
+    const entries = await recentAudit(c.req.param('id'));
+    return c.json({ entries });
   });
 
   // --- Content CRUD (OFCE-362 slice 2). All membership-gated. The storefront renders
