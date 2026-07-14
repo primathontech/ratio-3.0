@@ -199,19 +199,31 @@ export async function listStoresForUser(userId: string): Promise<StoreRow[]> {
   return rows;
 }
 
-// Route guard: the authenticated user must have a membership on :id, else 403.
-export const requireMembership: MiddlewareHandler<Vars> = async (c, next) => {
-  const userId = c.get('userId');
-  const tenantId = c.req.param('id');
-  // Agent tokens (ADR-007) carry a tenant scope that only NARROWS access — checked before
-  // the platform-admin bypass so a scoped token can't reach beyond its list even if minted
-  // for staff. A '*' element means all the principal's stores.
-  const scope = c.get('scope');
-  if (scope && !scope.includes('*') && (!tenantId || !scope.includes(tenantId))) {
-    return c.json({ error: 'out of scope' }, 403);
-  }
-  if (isPlatformAdmin(userId)) return next(); // super-admin: access to every store
-  const m = tenantId ? await getMembership(userId, tenantId) : null;
-  if (!m) return c.json({ error: 'forbidden' }, 403);
-  return next();
-};
+// Route guard factory: the authenticated user must have a membership on :id (else 403), and
+// — when one or more allowed roles are given — that membership's role must be among them
+// (M-4). Destructive/privileged verbs (delete, token-mint, domain writes) require 'owner';
+// reads and page edits accept any member. Enforcing role now (before member-invite ships)
+// keeps a future editor/viewer from inheriting owner-only powers.
+export function requireRole(...allowed: string[]): MiddlewareHandler<Vars> {
+  return async (c, next) => {
+    const userId = c.get('userId');
+    const tenantId = c.req.param('id');
+    // Agent tokens (ADR-007) carry a tenant scope that only NARROWS access — checked before
+    // the platform-admin bypass so a scoped token can't reach beyond its list even if minted
+    // for staff. A '*' element means all the principal's stores.
+    const scope = c.get('scope');
+    if (scope && !scope.includes('*') && (!tenantId || !scope.includes(tenantId))) {
+      return c.json({ error: 'out of scope' }, 403);
+    }
+    if (isPlatformAdmin(userId)) return next(); // super-admin: access to every store
+    const m = tenantId ? await getMembership(userId, tenantId) : null;
+    if (!m) return c.json({ error: 'forbidden' }, 403);
+    if (allowed.length > 0 && !allowed.includes(m.role)) {
+      return c.json({ error: 'insufficient role for this action' }, 403);
+    }
+    return next();
+  };
+}
+
+// Any member (no role restriction) — reads + page edits.
+export const requireMembership: MiddlewareHandler<Vars> = requireRole();
