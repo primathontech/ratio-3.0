@@ -18,6 +18,7 @@ export interface Page {
   path: string;
   pageType: string;
   pageConfig: unknown;
+  version?: number;
 }
 
 export interface DomainInfo {
@@ -108,8 +109,10 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
       req<{ pages: PageSummary[] }>('GET', `/stores/${id}/pages`).then((d) => d.pages),
     getPage: (id: string, path: string) =>
       req<Page>('GET', `/stores/${id}/page?path=${encodeURIComponent(path)}`),
-    savePage: (id: string, page: { path: string; pageType?: string; pageConfig: unknown }) =>
-      req<Page>('PUT', `/stores/${id}/page`, page),
+    savePage: (
+      id: string,
+      page: { path: string; pageType?: string; pageConfig: unknown; version?: number }
+    ) => req<Page>('PUT', `/stores/${id}/page`, page),
     listDomains: (id: string) =>
       req<{ domains: DomainInfo[] }>('GET', `/stores/${id}/domains`).then((d) => d.domains),
     connectDomain: (id: string, host: string) =>

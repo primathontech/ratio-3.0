@@ -8,7 +8,7 @@ import {
   removeDomain,
   ConflictError,
 } from '../../packages/provisioning/index';
-import { forTenant } from '../../packages/repo/index';
+import { forTenant, StaleWriteError } from '../../packages/repo/index';
 import { cfConfig, connectCustomHostname, customHostnameStatus, purgeUrls } from './domains';
 import {
   authMiddleware,
@@ -80,7 +80,9 @@ export function createApp(
   // in production we return a generic message so DB/vendor error strings don't leak to the
   // browser. Detail stays server-side (dev keeps it for debuggability).
   app.onError((e, c) => {
-    if (e instanceof ConflictError) return c.json({ error: e.message }, 409);
+    if (e instanceof ConflictError || e instanceof StaleWriteError) {
+      return c.json({ error: e.message }, 409);
+    }
     const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
     return c.json({ error: detail }, 500);
   });
@@ -214,7 +216,12 @@ export function createApp(
     if (!path) return c.json({ error: 'path query param required' }, 400);
     const route = await forTenant(c.req.param('id')).getRoute(path);
     if (!route) return c.json({ error: 'not found' }, 404);
-    return c.json({ path: route.path, pageType: route.page_type, pageConfig: route.page_config });
+    return c.json({
+      path: route.path,
+      pageType: route.page_type,
+      pageConfig: route.page_config,
+      version: route.version,
+    });
   });
 
   app.put('/stores/:id/page', requireMembership, async (c) => {
@@ -222,6 +229,7 @@ export function createApp(
       path?: string;
       pageType?: string;
       pageConfig?: unknown;
+      version?: number;
     };
     if (!body.path || !body.path.startsWith('/')) {
       return c.json({ error: 'path is required and must start with /' }, 400);
@@ -231,7 +239,14 @@ export function createApp(
     }
     const pageType = body.pageType || 'page';
     const id = c.req.param('id');
-    await forTenant(id).addRoute(body.path, pageType, body.pageConfig);
+    // Optimistic concurrency (OFCE-409): if the client sent the version it loaded, a stale
+    // write (someone saved in between) → StaleWriteError → 409 via onError.
+    const version = await forTenant(id).addRoute(
+      body.path,
+      pageType,
+      body.pageConfig,
+      body.version
+    );
     // Make the edit go live: purge the edge cache for this route on every real domain
     // (OFCE-411). Best-effort and non-blocking — a purge failure must not fail the save.
     const cfg = cfConfig();
@@ -241,7 +256,7 @@ export function createApp(
         .map((h) => `https://${h}${body.path}`);
       void purgeUrls(cfg, urls).catch(() => {});
     }
-    return c.json({ path: body.path, pageType, pageConfig: body.pageConfig });
+    return c.json({ path: body.path, pageType, pageConfig: body.pageConfig, version });
   });
 
   // --- Custom domains (OFCE-398 / ADR-013). Membership-gated. Cloudflare-for-SaaS

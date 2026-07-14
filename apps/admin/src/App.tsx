@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react';
 import {
   createApi,
+  ApiError,
   type Api,
   type Store,
   type PageSummary,
@@ -402,6 +403,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   const [err, setErr] = useState<string | null>(null);
   const [previewBump, setPreviewBump] = useState(0);
   const [creating, setCreating] = useState(false);
+  // Version of the currently-open page (optimistic concurrency, OFCE-409). Sent on save;
+  // a stale value → 409 so a second tab / the AI assistant can't be silently clobbered.
+  const [version, setVersion] = useState<number | undefined>(undefined);
 
   const loadPages = useCallback(() => {
     api.listPages(store.id).then(setPages).catch((e: Error) => setErr(e.message));
@@ -417,6 +421,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
       setPageType(page.pageType);
       setTitle(editable.title ?? '');
       setSections(editable.sections);
+      setVersion(page.version);
       setMode('visual');
     } catch (e) {
       setErr((e as Error).message);
@@ -476,13 +481,24 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
     }
     setSaving(true);
     try {
-      await api.savePage(store.id, { path, pageType, pageConfig: built.pageConfig });
+      const saved = await api.savePage(store.id, {
+        path,
+        pageType,
+        pageConfig: built.pageConfig,
+        version,
+      });
+      setVersion(saved.version);
       toast('Saved — live on your store');
       setPreviewBump((n) => n + 1);
       loadPages();
     } catch (e) {
-      setErr((e as Error).message);
-      toast('Save failed', 'error');
+      if (e instanceof ApiError && e.status === 409) {
+        setErr('This page changed since you opened it (another tab or the AI assistant saved). Reopen it to get the latest, then re-apply your changes.');
+        toast('Save conflict — reload the page', 'error');
+      } else {
+        setErr((e as Error).message);
+        toast('Save failed', 'error');
+      }
     } finally {
       setSaving(false);
     }
