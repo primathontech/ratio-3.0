@@ -9,7 +9,7 @@ import {
   ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
-import { cfConfig, connectCustomHostname, customHostnameStatus } from './domains';
+import { cfConfig, connectCustomHostname, customHostnameStatus, purgeUrls } from './domains';
 import {
   authMiddleware,
   requireMembership,
@@ -230,7 +230,17 @@ export function createApp(
       return c.json({ error: 'pageConfig must be an object' }, 400);
     }
     const pageType = body.pageType || 'page';
-    await forTenant(c.req.param('id')).addRoute(body.path, pageType, body.pageConfig);
+    const id = c.req.param('id');
+    await forTenant(id).addRoute(body.path, pageType, body.pageConfig);
+    // Make the edit go live: purge the edge cache for this route on every real domain
+    // (OFCE-411). Best-effort and non-blocking — a purge failure must not fail the save.
+    const cfg = cfConfig();
+    if (cfg) {
+      const urls = (await listDomains(id))
+        .filter((h) => !h.endsWith('.localhost'))
+        .map((h) => `https://${h}${body.path}`);
+      void purgeUrls(cfg, urls).catch(() => {});
+    }
     return c.json({ path: body.path, pageType, pageConfig: body.pageConfig });
   });
 

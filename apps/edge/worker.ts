@@ -102,7 +102,9 @@ app.all('*', async (c) => {
   }
 
   if (CACHEABLE.has(route.page_type)) {
-    c.header('cache-control', 'public, s-maxage=31536000');
+    // Short TTL + stale-while-revalidate (aligned with the origin path): edits surface
+    // within minutes even without a purge; the on-write purge (OFCE-411) makes it instant.
+    c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
   }
   c.header('x-tenant', tenantId);
   setStorefrontSecurity(c);

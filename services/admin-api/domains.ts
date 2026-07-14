@@ -165,6 +165,25 @@ export async function connectCustomHostname(
   return toConnection(cfg, host, r.result);
 }
 
+// Purge specific storefront URLs from the Cloudflare edge cache. Purge-by-URL works on all
+// plans (unlike Cache-Tags, which need Enterprise). Best-effort: callers ignore failures so
+// a purge outage never fails the underlying write (OFCE-411).
+export async function purgeUrls(
+  cfg: CfConfig,
+  urls: string[],
+  fetchImpl: typeof fetch = fetch
+): Promise<boolean> {
+  if (urls.length === 0) return true;
+  const zid = await zoneId(cfg, fetchImpl);
+  const r = await cf(
+    cfg,
+    `/zones/${zid}/purge_cache`,
+    { method: 'POST', body: JSON.stringify({ files: urls }) },
+    fetchImpl
+  );
+  return !!r.success;
+}
+
 export async function customHostnameStatus(
   cfg: CfConfig,
   host: string,
