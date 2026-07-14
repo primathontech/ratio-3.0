@@ -83,6 +83,7 @@ export class ApiError extends Error {
 
 export interface ApiOptions {
   timeoutMs?: number; // abort a request that stalls, so the UI never hangs forever (M1)
+  assistantTimeoutMs?: number; // the assistant runs a multi-step tool loop; it needs longer (R12 M-1)
 }
 
 // Pull a required array field out of a list response; a missing/renamed field is a
@@ -101,10 +102,16 @@ export function createApi(
   opts: ApiOptions = {}
 ) {
   const timeoutMs = opts.timeoutMs ?? 15000;
-  async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const assistantTimeoutMs = opts.assistantTimeoutMs ?? 90000;
+  async function req<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutOverrideMs?: number
+  ): Promise<T> {
     const token = await getToken();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutOverrideMs ?? timeoutMs);
     let res: Response;
     try {
       res = await fetchImpl(baseUrl + path, {
@@ -169,7 +176,7 @@ export function createApi(
         pickArray<AuditEntry>(d, 'entries')
       ),
     assistant: (message: string, storeId?: string, idempotencyKey?: string) =>
-      req<AssistantReply>('POST', '/assistant', { message, storeId, idempotencyKey }),
+      req<AssistantReply>('POST', '/assistant', { message, storeId, idempotencyKey }, assistantTimeoutMs),
   };
 }
 

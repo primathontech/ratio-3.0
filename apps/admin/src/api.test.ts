@@ -99,6 +99,26 @@ describe('admin api client', () => {
     await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
   });
 
+  test('assistant() uses its own (longer) timeout, not the default (R12 M-1)', async () => {
+    const hang: typeof fetch = ((_i: RequestInfo | URL, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const e = new Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        });
+      })) as typeof fetch;
+    // Default timeout tiny, assistant timeout larger: a default call aborts fast; assistant
+    // survives past the default window (proving it's on the separate, longer budget).
+    const api = createApi('http://api', async () => 't', hang, {
+      timeoutMs: 10,
+      assistantTimeoutMs: 200,
+    });
+    const start = Date.now();
+    await expect(api.assistant('hi')).rejects.toBeInstanceOf(ApiError);
+    expect(Date.now() - start).toBeGreaterThan(50); // did not abort at the 10ms default
+  });
+
   test('wraps a network failure in a clean ApiError (M1)', async () => {
     const boom: typeof fetch = (async () => {
       throw new TypeError('Failed to fetch');

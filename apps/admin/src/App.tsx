@@ -121,8 +121,10 @@ function AssistantPanel({
     setTurns((t) => [...t, { role: 'you', text }]);
     setBusy(true);
     try {
-      // Per-send idempotency key so a retry/refresh can't run the tool loop twice (OFCE-412).
-      const r = await api.assistant(text, storeId ?? undefined, crypto.randomUUID());
+      // No client key (R12 M-2): a fresh per-send UUID defeated the server's content-derived
+      // dedup, so a resend after a client timeout re-ran the tool loop. Omitting it lets the
+      // server key on (user, store, message) so an identical resend dedupes within the window.
+      const r = await api.assistant(text, storeId ?? undefined);
       setTurns((t) => [...t, { role: 'ai', text: r.reply, actions: r.actions }]);
       if (r.actions.some((a) => a.ok)) onChanged();
     } catch (e) {
