@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { forTenant } from '../../packages/repo/index';
 import { pool } from '../../packages/shared/db';
 import { normalizePage } from '../../packages/content-model/index';
@@ -20,6 +20,18 @@ const RESERVED = ['/cart', '/checkout', '/account'];
 const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
+
+// Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
+// backstop that contains any HTML/color injection that slips through content validation;
+// inline <style> is the theme's, so style-src allows it. Applied to every storefront HTML
+// response. The edge forwards these headers on the proxied path.
+const STOREFRONT_CSP =
+  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+function setStorefrontSecurity(c: Context): void {
+  c.header('content-security-policy', STOREFRONT_CSP);
+  c.header('x-content-type-options', 'nosniff');
+  c.header('referrer-policy', 'strict-origin-when-cross-origin');
+}
 
 export const app = new Hono();
 
@@ -66,6 +78,7 @@ app.all('*', async (c) => {
   if (!route) {
     c.header('x-tenant', tenantId as string);
     c.header('x-cache', 'no-store');
+    setStorefrontSecurity(c);
     return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no route for ${esc(path)}</p>`, 404);
   }
 
@@ -81,6 +94,7 @@ app.all('*', async (c) => {
   c.header('x-cache', cacheable ? 'long' : 'no-store');
   c.header('x-surrogate-keys', surrogateKeys.join(' '));
   c.header('x-render-count', String(renders));
+  setStorefrontSecurity(c);
   const page = normalizePage(route.page_config);
   return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
 });

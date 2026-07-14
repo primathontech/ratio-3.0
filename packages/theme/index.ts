@@ -58,8 +58,14 @@ function renderSection(s: Section): string {
   }
 }
 
+// Only a hex colour may reach the <style> block. Anything else (e.g. a stored
+// "#000}</style><script>…") falls back to the default, so the accent can never break out
+// of the stylesheet — the last line of defence behind boundary validation.
+const HEX_COLOR = /^#[0-9a-fA-F]{3,8}$/;
+
 export function renderPage(page: PageConfig, ctx: RenderCtx): string {
-  const accent = ctx.tenant.theme?.color ?? '#111111';
+  const raw = ctx.tenant.theme?.color;
+  const accent = raw && HEX_COLOR.test(raw) ? raw : '#111111';
   const name = esc(ctx.tenant.name);
   const main = page.sections.map(renderSection).join('\n');
   return (

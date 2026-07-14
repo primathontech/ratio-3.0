@@ -9,12 +9,18 @@ on:
         required: true
         default: ratiodev.in
 
+permissions:
+  contents: read
+
 jobs:
   info:
     runs-on: ubuntu-latest
     steps:
       - name: Zone info
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DOMAIN: ${{ inputs.domain }}
         run: |
-          resp=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=${{ inputs.domain }}" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}")
+          resp=$(curl -s "https://api.cloudflare.com/client/v4/zones?name=$DOMAIN" \
+            -H "Authorization: Bearer $CF_TOKEN")
           echo "$resp" | jq '{success, errors, name: .result[0].name, status: .result[0].status, name_servers: .result[0].name_servers, original_name_servers: .result[0].original_name_servers}'

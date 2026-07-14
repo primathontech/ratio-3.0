@@ -10,14 +10,22 @@ on:
         required: true
         default: ratiodev.in
 
+permissions:
+  contents: read
+
 jobs:
   add-zone:
     runs-on: ubuntu-latest
     steps:
       - name: Create zone
+        # Inputs/secrets via env (never interpolated into the run script); JSON built with jq.
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          DOMAIN: ${{ inputs.domain }}
         run: |
+          body=$(jq -nc --arg name "$DOMAIN" '{name:$name,account:{id:"7f06c71e716a0e4a5d38073c16758c60"},type:"full"}')
           resp=$(curl -s -X POST https://api.cloudflare.com/client/v4/zones \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Authorization: Bearer $CF_TOKEN" \
             -H "Content-Type: application/json" \
-            --data "{\"name\":\"${{ inputs.domain }}\",\"account\":{\"id\":\"7f06c71e716a0e4a5d38073c16758c60\"},\"type\":\"full\"}")
+            --data "$body")
           echo "$resp" | jq '{success, errors, messages, name: .result.name, status: .result.status, name_servers: .result.name_servers}'

@@ -37,12 +37,21 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
-// The ?store= override is a demo selector for dev/staging surfaces only. On a customer
-// domain it would let any visitor render an arbitrary tenant (and poison the CDN cache),
-// so it's gated to workers.dev / localhost and never honoured on real hostnames.
+// The ?store= override is a local-dev selector only. It must NOT be honoured on any
+// publicly reachable host — including *.workers.dev, which is live in production
+// (wrangler workers_dev = true) — or any visitor could render an arbitrary tenant by id
+// and poison the 1-year CDN cache. Localhost only.
 export function storeOverrideAllowed(host: string): boolean {
   const h = (host || '').split(':')[0].toLowerCase();
-  return h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.workers.dev');
+  return h === 'localhost' || h.endsWith('.localhost');
+}
+
+const STOREFRONT_CSP =
+  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
+function setStorefrontSecurity(c: { header: (k: string, v: string) => void }): void {
+  c.header('content-security-policy', STOREFRONT_CSP);
+  c.header('x-content-type-options', 'nosniff');
+  c.header('referrer-policy', 'strict-origin-when-cross-origin');
 }
 
 async function resolveTenant(c: {
@@ -87,13 +96,16 @@ app.all('*', async (c) => {
   const r =
     (await sql`SELECT page_type, page_config FROM routes WHERE tenant_id = ${tenantId} AND path = ${path}`) as RouteRow[];
   const route = r[0];
-  if (!route)
+  if (!route) {
+    setStorefrontSecurity(c);
     return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no route for ${esc(path)}</p>`, 404);
+  }
 
   if (CACHEABLE.has(route.page_type)) {
     c.header('cache-control', 'public, s-maxage=31536000');
   }
   c.header('x-tenant', tenantId);
+  setStorefrontSecurity(c);
   const page = normalizePage(route.page_config);
   return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
 });

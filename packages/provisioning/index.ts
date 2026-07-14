@@ -29,6 +29,11 @@ export async function onboardStore({
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
   }
+  // Colour is interpolated into the storefront's CSS — only a hex value may pass (defence
+  // in depth behind the admin-api boundary; the render layer also falls back safely).
+  if (!/^#[0-9a-f]{3,8}$/i.test(color)) {
+    throw new Error('color must be a hex value');
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -55,10 +60,17 @@ export async function onboardStore({
       'INSERT INTO tenants (id, name, theme) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, theme=EXCLUDED.theme',
       [id, name, JSON.stringify({ color })]
     );
-    await client.query(
-      'INSERT INTO domains (host, tenant_id) VALUES ($1,$2) ON CONFLICT (host) DO UPDATE SET tenant_id=EXCLUDED.tenant_id',
+    // Guard the upsert itself (not just the SELECT above): under READ COMMITTED two
+    // concurrent onboards for the same host both pass the pre-check, so the reassignment
+    // must be conditional. Zero rows back = the host is another tenant's → conflict.
+    const dom = await client.query(
+      `INSERT INTO domains (host, tenant_id) VALUES ($1,$2)
+       ON CONFLICT (host) DO UPDATE SET tenant_id=EXCLUDED.tenant_id
+         WHERE domains.tenant_id = EXCLUDED.tenant_id
+       RETURNING host`,
       [host, id]
     );
+    if (!dom.rowCount) throw new ConflictError('that domain is already connected to another store');
     await client.query(
       `INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES ($1,'/','home',$2)
        ON CONFLICT (tenant_id, path) DO UPDATE SET page_config=EXCLUDED.page_config`,
