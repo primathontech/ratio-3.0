@@ -10,6 +10,7 @@ import {
   ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant, StaleWriteError } from '../../packages/repo/index';
+import { pool } from '../../packages/shared/db';
 import {
   cfConfig,
   connectCustomHostname,
@@ -153,7 +154,7 @@ export function createApp(
   const origins = (process.env.ADMIN_CORS_ORIGIN || '*').split(',').map((o) => o.trim());
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
 
-  app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
+  app.use('*', authMiddleware(verify, ['/health', '/ready', '/', '/openapi.json']));
   // Reject cross-site cookie-authenticated mutations (I-1). After auth so a bad session 401s
   // first; before mutations run.
   app.use('*', csrfGuard(origins));
@@ -188,6 +189,16 @@ export function createApp(
   // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
   app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  // Readiness (vs liveness /health): probe the DB so an orchestrator doesn't route traffic
+  // to an instance that can't reach Postgres. Pre-auth so probes need no credentials (L-7).
+  app.get('/ready', async (c) => {
+    try {
+      await pool.query('SELECT 1');
+      return c.json({ status: 'ready' });
+    } catch {
+      return c.json({ status: 'unavailable' }, 503);
+    }
+  });
 
   // The API contract (ADR-016), source of truth for the generated SDK. Public so tooling
   // and dev portals can read it without a token.
@@ -220,6 +231,14 @@ export function createApp(
     };
     if (!id || !name || !host) {
       return c.json({ error: 'id, name and host are required' }, 400);
+    }
+    // The id becomes the tenant_id — it flows into routing, cache-purge URLs, and agent-token
+    // scopes (where '*' is the wildcard sentinel). Constrain it to a safe slug at the boundary.
+    if (!/^[a-z][a-z0-9_-]{1,62}$/.test(id)) {
+      return c.json(
+        { error: 'id must be 2–63 chars: a lowercase letter, then letters, digits, _ or -' },
+        400
+      );
     }
     if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
       return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
