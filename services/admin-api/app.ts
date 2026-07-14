@@ -23,6 +23,9 @@ import {
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
+import Anthropic from '@anthropic-ai/sdk';
+import { RatioControlPlane } from '@ratio/control-plane-client';
+import { runAssistant } from './assistant';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
@@ -108,6 +111,45 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
       exp: Math.floor(Date.now() / 1000) + expiresIn,
     });
     return c.json({ token, scope: [c.req.param('id')], expiresIn }, 201);
+  });
+
+  // OFCE-400 Model A: in-dashboard AI assistant. Claude runs a server-side tool-use loop
+  // and drives the SAME control-plane the dashboard uses — not a forked code path (ADR-014
+  // D-STR7). We mint a merchant-scoped agent token for the signed-in caller and route the
+  // SDK's fetch back at THIS app in-process, so the assistant's edits run through the same
+  // auth, membership, and audit as everything else. ANTHROPIC_API_KEY stays server-side.
+  const viaSelf: typeof fetch = ((url: string | URL | Request, init?: RequestInit) =>
+    app.fetch(new Request(url as string, init))) as typeof fetch;
+
+  app.post('/assistant', async (c) => {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return c.json({ error: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).' }, 503);
+    }
+    const { message, storeId } = (await c.req.json().catch(() => ({}))) as {
+      message?: string;
+      storeId?: string;
+    };
+    if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
+
+    // Scope '*' = all the caller's stores, so the assistant can onboard a brand-new store
+    // (id not known ahead of time) AND edit existing ones — still bounded by memberships.
+    const token = mintAgentToken({
+      sub: c.get('userId'),
+      scope: ['*'],
+      exp: Math.floor(Date.now() / 1000) + 900,
+    });
+    const client = new RatioControlPlane({
+      baseUrl: new URL(c.req.url).origin,
+      token,
+      fetch: viaSelf,
+    });
+    const result = await runAssistant({
+      anthropic: new Anthropic(),
+      client,
+      message,
+      storeId,
+    });
+    return c.json(result);
   });
 
   // Recent control-plane changes for a store (ADR-016 Phase 1 audit trail) — powers the

@@ -8,6 +8,7 @@ import {
   type DomainInfo,
   type DomainConnection,
   type AuditEntry,
+  type AssistantAction,
 } from './api';
 import { useTheme } from './theme';
 import { Badge, Dialog, EmptyState, Field, Icon, Spinner, ToastProvider, useToast } from './ui';
@@ -67,14 +68,108 @@ function useApi(): Api {
 function Dashboard() {
   const api = useApi();
   const [store, setStore] = useState<Store | null>(null);
+  // Bumped after the AI assistant makes a change, so the active view remounts and reloads.
+  const [reloadKey, setReloadKey] = useState(0);
   return (
     <main className="container">
       {store ? (
-        <PageManager api={api} store={store} onBack={() => setStore(null)} />
+        <PageManager key={reloadKey} api={api} store={store} onBack={() => setStore(null)} />
       ) : (
-        <StoreList api={api} onOpen={setStore} />
+        <StoreList key={reloadKey} api={api} onOpen={setStore} />
       )}
+      <AssistantPanel
+        api={api}
+        storeId={store?.id ?? null}
+        onChanged={() => setReloadKey((k) => k + 1)}
+      />
     </main>
+  );
+}
+
+// OFCE-400 Model A: chat with the AI assistant right in the dashboard. It drives the same
+// control-plane the rest of this UI does (server-side), so anything it does — onboard a
+// store, add a page — is real and shows up in "Recent changes". Available whether or not a
+// store is open; when one is open its id is passed so "add a page" needs no repetition.
+function AssistantPanel({
+  api,
+  storeId,
+  onChanged,
+}: {
+  api: Api;
+  storeId: string | null;
+  onChanged: () => void;
+}) {
+  type Turn = { role: 'you' | 'ai'; text: string; actions?: AssistantAction[] };
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send(e: React.FormEvent) {
+    e.preventDefault();
+    const text = input.trim();
+    if (!text || busy) return;
+    setInput('');
+    setErr(null);
+    setTurns((t) => [...t, { role: 'you', text }]);
+    setBusy(true);
+    try {
+      const r = await api.assistant(text, storeId ?? undefined);
+      setTurns((t) => [...t, { role: 'ai', text: r.reply, actions: r.actions }]);
+      if (r.actions.some((a) => a.ok)) onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card pane" style={{ marginTop: 20 }}>
+      <div className="pane-head">
+        <h2>AI assistant</h2>
+      </div>
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Ask in plain English — “Create a store called Acme at acme.ratiodev.in” or “Add an
+        About page”. Changes go live immediately and appear in Recent changes.
+      </p>
+
+      {turns.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, margin: '12px 0' }}>
+          {turns.map((t, i) => (
+            <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
+              <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
+              {t.actions && t.actions.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                  {t.actions.map((a, j) => (
+                    <span key={j} className={a.ok ? 'badge dot-ok' : 'badge dot-warn'}>
+                      {a.tool}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div className="note note-error">{err}</div>}
+
+      <form onSubmit={send} className="row" style={{ alignItems: 'flex-end', marginTop: 8 }}>
+        <Field label={storeId ? `Message (editing ${storeId})` : 'Message'}>
+          <input
+            className="input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask the assistant to onboard or edit a store…"
+            disabled={busy}
+          />
+        </Field>
+        <button className="btn btn-primary" type="submit" disabled={busy || !input.trim()}>
+          {busy ? <Spinner /> : <Icon.check />} Send
+        </button>
+      </form>
+    </div>
   );
 }
 
