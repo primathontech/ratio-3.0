@@ -318,13 +318,6 @@ h2 {
   align-items: center;
   gap: 12px;
 }
-.swatch {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  flex: none;
-}
 .store-card .name {
   font-weight: 620;
   font-size: 15px;

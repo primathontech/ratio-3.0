@@ -25,7 +25,7 @@ flowchart LR
 ```
 
 - **Edge** = Cloudflare Worker (`apps/edge/worker.ts`, Hono). Resolves `host → tenantId`
-  (from Neon, or `?store=` demo fallback), then **path B**: injects the trusted
+  (from Neon; a `?store=` override is honored on localhost only), then **path B**: injects the trusted
   `x-edge-auth` + `x-ratio-tenant` headers and proxies to the private ECS origin;
   **path A** (no `ORIGIN_URL`): renders directly from Neon (staging fallback).
 - **Origin** = AWS **ECS Express Mode** container (`apps/origin/server.ts`, Hono + `pg`).
@@ -43,8 +43,8 @@ Hono (framework) · TypeScript · `tsx` (run) · `node:test` (tests) · Docker.
 
 | URL                                                            | What                                       |
 | -------------------------------------------------------------- | ------------------------------------------ |
-| `https://ratio-3-0.ramvishvas-kumar.workers.dev/?store=t_acme` | Worker (workers.dev), tenant via `?store=` |
 | `https://acme.ratiodev.in` / `https://beta.ratiodev.in`        | real host→tenant on platform subdomains    |
+| `http://acme.localhost:8787/?store=t_acme`                     | `?store=` tenant override — dev/localhost only (refused on public hosts) |
 | `https://<tenant>.ratiodev.in`                                 | any onboarded merchant subdomain           |
 
 ## Cloud accounts / identifiers (non-secret)
