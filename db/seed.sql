@@ -4,11 +4,11 @@ INSERT INTO tenants (id, name, theme) VALUES
   ('t_beta', 'Beta', '{"color":"#2471a3"}')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO domains (host, tenant_id) VALUES
-  ('acme.localhost', 't_acme'),
-  ('beta.localhost', 't_beta'),
-  ('acme.ratiodev.in', 't_acme'),
-  ('beta.ratiodev.in', 't_beta')
+INSERT INTO domains (host, tenant_id, verified) VALUES
+  ('acme.localhost', 't_acme', true),
+  ('beta.localhost', 't_beta', true),
+  ('acme.ratiodev.in', 't_acme', true),
+  ('beta.ratiodev.in', 't_beta', true)
 ON CONFLICT (host) DO NOTHING;
 
 INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES
