@@ -40,7 +40,11 @@ import {
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import { createRateLimiter } from '../../packages/shared/ratelimit';
-import { createIdempotencyStore, idempotencyKeyFor } from './idempotency';
+import {
+  createPgIdempotencyStore,
+  idempotencyKeyFor,
+  IdempotencyInProgressError,
+} from './idempotency';
 import { createReadiness } from './readiness';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
@@ -146,7 +150,8 @@ export function createApp(
   const rl = createRateLimiter({ limit: opts.rateLimit ?? 300, windowMs: 60_000 });
   const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
   // Dedupe /assistant runs by idempotency key (OFCE-412).
-  const idem = createIdempotencyStore();
+  // Shared (Postgres-backed) so dedup + single-execution hold across admin-api instances (H-1).
+  const idem = createPgIdempotencyStore(pool);
   // Cached DB readiness probe (L1): /ready is public + limiter-exempt, so cache the query.
   const readiness = createReadiness(() => pool.query('SELECT 1').then(() => undefined));
   // Unforgeable per-process marker for the assistant's in-process (viaSelf) sub-requests, so
@@ -195,7 +200,11 @@ export function createApp(
   // in production we return a generic message so DB/vendor error strings don't leak to the
   // browser. Detail stays server-side (dev keeps it for debuggability).
   app.onError((e, c) => {
-    if (e instanceof ConflictError || e instanceof StaleWriteError) {
+    if (
+      e instanceof ConflictError ||
+      e instanceof StaleWriteError ||
+      e instanceof IdempotencyInProgressError
+    ) {
       return c.json({ error: e.message }, 409);
     }
     const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
