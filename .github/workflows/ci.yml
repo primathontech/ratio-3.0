@@ -123,10 +123,29 @@ jobs:
             aws ecs update-service --cluster "$CLUSTER" --service "$SVC" \
               --task-definition "$NEW_TD" --force-new-deployment >/dev/null
           done
-          echo "waiting for all services to stabilise…"
-          aws ecs wait services-stable --cluster "$CLUSTER" \
-            --services $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text)
-          echo "ECS rolled to new task-def + stable"
+          # Wait on the deployment's rolloutState, not `wait services-stable`. The latter's
+          # fixed ~10-min cap waits for the OLD tasks to fully drain (one-deployment steady),
+          # which our multi-service rolling drain routinely exceeds — reddening successful
+          # deploys. rolloutState=COMPLETED fires when the NEW tasks are healthy (the real
+          # "done" signal), and FAILED (deployment circuit breaker) lets us fail fast.
+          echo "waiting for rollouts to complete…"
+          deadline=$(( $(date +%s) + 900 ))   # 15 min ceiling
+          for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
+            name=${SVC##*/}
+            while :; do
+              ROLL=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
+                --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' --output text)
+              case "$ROLL" in
+                COMPLETED) echo "$name: rollout complete"; break ;;
+                FAILED)    echo "::error::$name: deployment rollout FAILED"; exit 1 ;;
+              esac
+              if [ "$(date +%s)" -ge "$deadline" ]; then
+                echo "::error::$name: rollout not complete within 15m (state=$ROLL)"; exit 1
+              fi
+              sleep 15
+            done
+          done
+          echo "ECS rolled to new task-def; all rollouts COMPLETED"
 
   # Purge the Cloudflare edge cache after a deploy so cached pages pick up new
   # content. Dormant until repo var PURGE_CACHE=true + token has Zone:CachePurge:Edit.
