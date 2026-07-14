@@ -15,10 +15,14 @@ try {
 
 const connectionString = process.env.DATABASE_URL || 'postgres://poc:poc@localhost:5433/poc';
 
+const isManagedTls = /neon\.tech|sslmode=require/.test(connectionString);
+
 export const pool = new Pool({
   connectionString,
-  // Managed Postgres (Neon) requires TLS; local dev does not.
-  ssl: /neon\.tech|sslmode=require/.test(connectionString)
-    ? { rejectUnauthorized: false }
-    : undefined,
+  // Managed Postgres (Neon) requires TLS and MUST verify the server certificate (H-4) —
+  // otherwise a network MITM can impersonate the DB carrying every tenant's data. Neon's
+  // chain is publicly trusted, so Node's system CA store suffices. DB_INSECURE_TLS=true is
+  // an emergency-only escape hatch (see OFCE-407) if a CA surprise appears in staging.
+  // Local dev (no managed TLS) needs no SSL.
+  ssl: isManagedTls ? { rejectUnauthorized: process.env.DB_INSECURE_TLS !== 'true' } : undefined,
 });
