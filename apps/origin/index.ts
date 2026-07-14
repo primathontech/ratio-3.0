@@ -74,6 +74,12 @@ app.all('*', async (c) => {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
   }
+  // A suspended store stops serving (OFCE-410). 404 (don't reveal it exists), no-store so
+  // re-activation takes effect immediately.
+  if (tenant.status !== 'active') {
+    c.header('x-cache', 'no-store');
+    return c.text('unknown tenant', 404);
+  }
   const route = await repo.getRoute(path);
   if (!route) {
     c.header('x-tenant', tenantId as string);

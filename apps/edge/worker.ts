@@ -19,6 +19,7 @@ interface Env {
 interface TenantRow {
   id: string;
   name: string;
+  status: string;
   theme: { color?: string } | null;
 }
 interface RouteRow {
@@ -112,9 +113,11 @@ app.all('*', async (c) => {
 
   // path A: render directly from Neon (staging fallback).
   const sql = neon(c.env.DATABASE_URL);
-  const t = (await sql`SELECT id, name, theme FROM tenants WHERE id = ${tenantId}`) as TenantRow[];
+  const t =
+    (await sql`SELECT id, name, status, theme FROM tenants WHERE id = ${tenantId}`) as TenantRow[];
   const tenant = t[0];
-  if (!tenant) return c.html('<h1>Store not found</h1>', 404);
+  // Unknown or suspended (OFCE-410) → not found; don't reveal a suspended store exists.
+  if (!tenant || tenant.status !== 'active') return c.html('<h1>Store not found</h1>', 404);
   const r =
     (await sql`SELECT page_type, page_config FROM routes WHERE tenant_id = ${tenantId} AND path = ${path}`) as RouteRow[];
   const route = r[0];

@@ -41,3 +41,17 @@ test('unknown tenant -> 404 no-store', async () => {
   assert.strictEqual(res.status, 404);
   assert.strictEqual(res.headers.get('x-cache'), 'no-store');
 });
+
+test('a suspended tenant is not served (OFCE-410)', async () => {
+  await pool.query(
+    `INSERT INTO tenants (id, name, status, theme) VALUES ('t_susp','Susp','suspended','{}'::jsonb)
+     ON CONFLICT (id) DO UPDATE SET status='suspended'`
+  );
+  try {
+    const res = await call('/', edge({ 'x-ratio-tenant': 't_susp' }));
+    assert.strictEqual(res.status, 404);
+    assert.strictEqual(res.headers.get('x-cache'), 'no-store');
+  } finally {
+    await pool.query("DELETE FROM tenants WHERE id='t_susp'");
+  }
+});
