@@ -8,7 +8,12 @@ process.env.AGENT_TOKEN_SECRET = 'test-role-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp } from '../services/admin-api/app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../services/admin-api/auth';
+import {
+  composeVerifiers,
+  agentVerifier,
+  mintAgentToken,
+  type Verifier,
+} from '../services/admin-api/auth';
 import { pool } from '../packages/shared/db';
 
 const OWNER = 'user_role_owner';
@@ -83,4 +88,16 @@ test('an editor cannot connect or remove a domain (owner-only)', async () => {
 
 test('the owner retains all privileged actions', async () => {
   assert.strictEqual((await call('POST', `/stores/${ID}/agent-tokens`, 'tok-owner')).status, 201);
+});
+
+test('an agent token cannot mint another agent token (M5 — no privilege persistence)', async () => {
+  // A token whose principal is the owner passes requireRole('owner'), but minting from it would
+  // let a leaked token renew itself forever. Only human sessions (no scope) may mint.
+  const agentTok = mintAgentToken({
+    sub: OWNER,
+    scope: [ID],
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  const res = await call('POST', `/stores/${ID}/agent-tokens`, agentTok);
+  assert.strictEqual(res.status, 403);
 });

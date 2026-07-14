@@ -26,6 +26,7 @@ export function createRateLimiter({
   now?: () => number;
   store?: Store;
 } = {}) {
+  let lastSweep = now();
   return {
     check(tenantId: string): RateResult {
       if (!tenantId || typeof tenantId !== 'string') {
@@ -33,6 +34,13 @@ export function createRateLimiter({
       }
       try {
         const t = now();
+        // Evict expired windows so the map doesn't grow unboundedly (one entry per distinct
+        // key, never removed otherwise) (L1). Bounded to once per window so the O(n) sweep
+        // stays amortized-cheap; only the in-memory default Map is iterable/deletable.
+        if (store instanceof Map && t - lastSweep >= windowMs) {
+          for (const [k, e] of store) if (t >= e.reset) store.delete(k);
+          lastSweep = t;
+        }
         const entry = store.get(tenantId);
         if (!entry || t >= entry.reset) {
           store.set(tenantId, { count: 1, reset: t + windowMs });

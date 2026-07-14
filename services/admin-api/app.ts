@@ -243,6 +243,12 @@ export function createApp(
     if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
       return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
     }
+    // Host format at the boundary (H1) — symmetric with POST /stores/:id/domains. Blocks junk
+    // domain rows in the global routing table. (This does NOT prove ownership of a custom
+    // domain — squatting mitigation is a separate, verified-claim design; see OFCE backlog.)
+    if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
+      return c.json({ error: 'host must be a valid domain like shop.example.com' }, 400);
+    }
     // Hosts are case-insensitive; store + serve them lowercase so a mixed-case onboard
     // isn't a dead row the (lowercase) browser Host never matches (M-5).
     const lcHost = host.toLowerCase();
@@ -287,6 +293,12 @@ export function createApp(
   // can delegate the AI agent access to the same API. Membership-gated; scope is exactly
   // this tenant and inherits the caller's principal — it can only narrow, never widen.
   app.post('/stores/:id/agent-tokens', requireRole('owner'), (c) => {
+    // Only a first-party human session may mint (M5): letting an agent token mint fresh agent
+    // tokens would defeat the short-lived guarantee — a single leaked token could renew itself
+    // indefinitely. Agent tokens carry a scope; human Clerk sessions don't.
+    if (c.get('scope')) {
+      return c.json({ error: 'agent tokens cannot mint agent tokens' }, 403);
+    }
     const expiresIn = 3600;
     const token = mintAgentToken({
       sub: c.get('userId'),
