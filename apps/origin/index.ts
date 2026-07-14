@@ -92,6 +92,10 @@ app.all('*', async (c) => {
   c.header('x-tenant', tenantId as string);
   c.header('x-page-type', route.page_type);
   c.header('x-cache', cacheable ? 'long' : 'no-store');
+  // Real Cache-Control so the edge actually caches this (path B was previously uncached),
+  // with a short TTL + stale-while-revalidate so edits surface within minutes even if the
+  // on-write purge (OFCE-411) isn't configured; a configured purge makes it instant.
+  if (cacheable) c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
   c.header('x-surrogate-keys', surrogateKeys.join(' '));
   c.header('x-render-count', String(renders));
   setStorefrontSecurity(c);
