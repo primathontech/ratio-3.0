@@ -81,32 +81,72 @@ export class ApiError extends Error {
   }
 }
 
-export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof fetch = fetch) {
+export interface ApiOptions {
+  timeoutMs?: number; // abort a request that stalls, so the UI never hangs forever (M1)
+}
+
+// Pull a required array field out of a list response; a missing/renamed field is a
+// malformed response, not an empty list — surface it as an error rather than letting the
+// caller setState(undefined) and hang on its loading branch forever (M2).
+function pickArray<T>(obj: unknown, key: string): T[] {
+  const v = (obj as Record<string, unknown> | null)?.[key];
+  if (!Array.isArray(v)) throw new ApiError(0, `The server returned an unexpected response.`);
+  return v as T[];
+}
+
+export function createApi(
+  baseUrl: string,
+  getToken: GetToken,
+  fetchImpl: typeof fetch = fetch,
+  opts: ApiOptions = {}
+) {
+  const timeoutMs = opts.timeoutMs ?? 15000;
   async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
     const token = await getToken();
-    const res = await fetchImpl(baseUrl + path, {
-      method,
-      headers: {
-        'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetchImpl(baseUrl + path, {
+        method,
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (e) {
+      // Timeout and network failures both land here — turn them into a clean, retryable
+      // error instead of a rejected fetch the loaders would otherwise hang on (M1).
+      const timedOut = (e as Error).name === 'AbortError';
+      throw new ApiError(0, timedOut ? 'The request timed out. Please try again.' : 'Network error — check your connection and try again.');
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new ApiError(res.status, text || res.statusText);
     }
-    return (res.status === 204 ? null : await res.json()) as T;
+    if (res.status === 204) return null as T;
+    try {
+      return (await res.json()) as T;
+    } catch {
+      throw new ApiError(res.status, 'The server returned an unexpected response.'); // I6
+    }
   }
 
   return {
     me: () => req<{ userId: string; isPlatformAdmin: boolean }>('GET', '/me'),
-    listStores: () => req<{ stores: Store[] }>('GET', '/stores').then((d) => d.stores),
+    listStores: () =>
+      req<Record<string, unknown>>('GET', '/stores').then((d) => pickArray<Store>(d, 'stores')),
     createStore: (s: { id: string; name: string; host: string; color?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
     listPages: (id: string) =>
-      req<{ pages: PageSummary[] }>('GET', `/stores/${id}/pages`).then((d) => d.pages),
+      req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>
+        pickArray<PageSummary>(d, 'pages')
+      ),
     getPage: (id: string, path: string) =>
       req<Page>('GET', `/stores/${id}/page?path=${encodeURIComponent(path)}`),
     savePage: (
@@ -114,7 +154,9 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
       page: { path: string; pageType?: string; pageConfig: unknown; version?: number }
     ) => req<Page>('PUT', `/stores/${id}/page`, page),
     listDomains: (id: string) =>
-      req<{ domains: DomainInfo[] }>('GET', `/stores/${id}/domains`).then((d) => d.domains),
+      req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
+        pickArray<DomainInfo>(d, 'domains')
+      ),
     connectDomain: (id: string, host: string) =>
       req<DomainConnection>('POST', `/stores/${id}/domains`, { host }),
     getDomain: (id: string, host: string) =>
@@ -123,7 +165,9 @@ export function createApi(baseUrl: string, getToken: GetToken, fetchImpl: typeof
       req<{ removed: boolean }>('DELETE', `/stores/${id}/domains`, { host }),
     mintAgentToken: (id: string) => req<AgentToken>('POST', `/stores/${id}/agent-tokens`),
     listAudit: (id: string) =>
-      req<{ entries: AuditEntry[] }>('GET', `/stores/${id}/audit`).then((d) => d.entries),
+      req<Record<string, unknown>>('GET', `/stores/${id}/audit`).then((d) =>
+        pickArray<AuditEntry>(d, 'entries')
+      ),
     assistant: (message: string, storeId?: string, idempotencyKey?: string) =>
       req<AssistantReply>('POST', '/assistant', { message, storeId, idempotencyKey }),
   };

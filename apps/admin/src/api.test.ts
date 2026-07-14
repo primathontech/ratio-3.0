@@ -70,4 +70,40 @@ describe('admin api client', () => {
     const api = createApi('http://api', async () => 't', fakeFetch(200, { entries }));
     expect(await api.listAudit('t_x')).toEqual(entries);
   });
+
+  test('rejects with a clean ApiError when the request times out (M1)', async () => {
+    const hang: typeof fetch = ((_i: RequestInfo | URL, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          const e = new Error('aborted');
+          e.name = 'AbortError';
+          reject(e);
+        });
+      })) as typeof fetch;
+    const api = createApi('http://api', async () => 't', hang, { timeoutMs: 10 });
+    await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
+  });
+
+  test('rejects (not infinite-loads) when a list response is missing its array (M2)', async () => {
+    const api = createApi('http://api', async () => 't', fakeFetch(200, { wrong: [] }));
+    await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
+  });
+
+  test('rejects with a clean ApiError on a non-JSON 2xx body (I6)', async () => {
+    const html: typeof fetch = (async () =>
+      new Response('<html>oops</html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      })) as typeof fetch;
+    const api = createApi('http://api', async () => 't', html);
+    await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
+  });
+
+  test('wraps a network failure in a clean ApiError (M1)', async () => {
+    const boom: typeof fetch = (async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof fetch;
+    const api = createApi('http://api', async () => 't', boom);
+    await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
+  });
 });
