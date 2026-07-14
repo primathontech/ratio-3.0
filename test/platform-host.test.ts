@@ -57,3 +57,12 @@ test('POST /stores still allows a normal merchant *.ratiodev.in subdomain', asyn
   const res = await call({ id: 't_ph_ok', name: 'OK', host: 'phok.ratiodev.in' });
   assert.strictEqual(res.status, 201);
 });
+
+test('POST /stores rejects a malformed host (400) and creates nothing (H1)', async () => {
+  for (const host of ['notadomain', 'has space.com', 'javascript:alert(1)']) {
+    const res = await call({ id: 't_ph_bad', name: 'Bad', host });
+    assert.strictEqual(res.status, 400, `host ${host} should be rejected`);
+  }
+  const { rows } = await pool.query('SELECT id FROM tenants WHERE id=$1', ['t_ph_bad']);
+  assert.strictEqual(rows.length, 0);
+});
