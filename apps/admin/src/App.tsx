@@ -44,7 +44,7 @@ export function App() {
       </header>
 
       <SignedOut>
-        <div className="signin-wrap">
+        <main className="signin-wrap">
           <div className="signin-card">
             <div style={{ textAlign: 'center' }}>
               <h1>Manage your store</h1>
@@ -54,7 +54,7 @@ export function App() {
             </div>
             <SignIn routing="hash" />
           </div>
-        </div>
+        </main>
       </SignedOut>
 
       <SignedIn>
@@ -197,6 +197,11 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   const [creating, setCreating] = useState(false);
   const [me, setMe] = useState<{ userId: string; isPlatformAdmin: boolean } | null>(null);
 
+  // Focus the heading when the list view (re)opens — e.g. returning via "All stores" — so
+  // focus isn't dropped to <body> on the transition (M5 / WCAG 2.4.3).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => headingRef.current?.focus(), []);
+
   const load = useCallback(() => {
     setError(null);
     api
@@ -213,7 +218,11 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
     <>
       <div className="page-head">
         <div>
-          <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h1
+            ref={headingRef}
+            tabIndex={-1}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, outline: 'none' }}
+          >
             {me?.isPlatformAdmin ? 'All stores' : 'Your stores'}
             {me?.isPlatformAdmin && <Badge accent>Admin · all stores</Badge>}
           </h1>
@@ -418,6 +427,10 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   // Monotonic load counter (M3): if two openPage calls overlap, only the latest may write state,
   // so a slow earlier response can't overwrite the page the user actually selected.
   const loadSeq = useRef(0);
+  // Move focus to the store heading when this view opens so keyboard/SR users aren't dropped
+  // to <body> on the transition (M5 / WCAG 2.4.3).
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => headingRef.current?.focus(), []);
 
   const loadPages = useCallback(() => {
     api.listPages(store.id).then(setPages).catch((e: Error) => setErr(e.message));
@@ -533,7 +546,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
       </button>
       <div className="page-head">
         <div>
-          <h1>{store.name}</h1>
+          <h1 ref={headingRef} tabIndex={-1} style={{ outline: 'none' }}>
+            {store.name}
+          </h1>
           {hosts.length > 0 && (
             <p className="hosts">
               {hosts.map((h) => (
@@ -562,7 +577,12 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
             </button>
           </div>
           {!pages && <div className="center-pad"><Spinner /></div>}
-          <div className="pagelist">
+          {pages && pages.length === 0 && (
+            <p className="muted" style={{ padding: '6px 2px' }}>
+              No pages yet — create one to get started.
+            </p>
+          )}
+          <nav className="pagelist" aria-label="Pages">
             {pages?.map((p) => (
               <button
                 key={p.path}
@@ -574,7 +594,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                 <Badge>{p.page_type}</Badge>
               </button>
             ))}
-          </div>
+          </nav>
 
           <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="row">
@@ -685,15 +705,22 @@ function NewPageDialog({
 }) {
   const [p, setP] = useState('/');
   const [t, setT] = useState('page');
+  const [err, setErr] = useState<string | null>(null);
   return (
     <Dialog title="New page" onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (p.startsWith('/')) onCreate(p, t || 'page');
+          // Don't silently no-op on a bad path (L4) — tell the user why nothing happened.
+          if (!p.startsWith('/')) {
+            setErr('The path must start with a slash, e.g. /about.');
+            return;
+          }
+          onCreate(p, t || 'page');
         }}
       >
         <div className="body">
+          {err && <div className="note note-error" role="alert">{err}</div>}
           <Field label="Path (must start with /)">
             <input className="input mono" value={p} onChange={(e) => setP(e.target.value)} placeholder="/about" required />
           </Field>
@@ -738,8 +765,13 @@ function AgentAccessPanel({ api, store }: { api: Api; store: Store }) {
 
   async function copy() {
     if (!key) return;
-    await navigator.clipboard.writeText(key.token).catch(() => {});
-    toast('Access key copied');
+    try {
+      await navigator.clipboard.writeText(key.token);
+      toast('Access key copied');
+    } catch {
+      // Don't claim success when the copy failed (M3) — the token is shown only once.
+      toast('Copy failed — select the key and copy it manually', 'error');
+    }
   }
 
   return (
@@ -787,12 +819,18 @@ function AgentAccessPanel({ api, store }: { api: Api; store: Store }) {
 function AuditPanel({ api, store }: { api: Api; store: Store }) {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
     setErr(null);
+    const seq = ++loadSeq.current; // latest-wins: a slow earlier load can't overwrite (M4)
     api
       .listAudit(store.id)
-      .then(setEntries)
-      .catch((e: Error) => setErr(e.message));
+      .then((e) => {
+        if (seq === loadSeq.current) setEntries(e);
+      })
+      .catch((e: Error) => {
+        if (seq === loadSeq.current) setErr(e.message);
+      });
   }, [api, store.id]);
   useEffect(load, [load]);
 
@@ -842,12 +880,17 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
 
   // Distinguish a failed load from an empty list (OFCE-414): on error show the error, not
   // a misleading "no domains" state.
+  const loadSeq = useRef(0);
   const load = useCallback(() => {
     setErr(null);
+    const seq = ++loadSeq.current; // latest-wins (M4): a stale response can't re-add a removed domain
     api
       .listDomains(store.id)
-      .then(setDomains)
+      .then((d) => {
+        if (seq === loadSeq.current) setDomains(d);
+      })
       .catch((e: Error) => {
+        if (seq !== loadSeq.current) return;
         setDomains([]);
         setErr(e.message);
       });
@@ -926,7 +969,7 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
             <button type="button" className="btn btn-ghost" onClick={() => setRemoving(null)}>
               Cancel
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => remove(removing)}>
+            <button type="button" className="btn btn-danger" onClick={() => remove(removing)}>
               <Icon.trash size={14} /> Remove domain
             </button>
           </div>
