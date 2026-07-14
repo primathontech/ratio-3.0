@@ -36,7 +36,7 @@ import {
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import { createRateLimiter } from '../../packages/shared/ratelimit';
-import { createIdempotencyStore } from './idempotency';
+import { createIdempotencyStore, idempotencyKeyFor } from './idempotency';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { runAssistant, scopeForAssistant } from './assistant';
@@ -319,10 +319,16 @@ export function createApp(
     if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
 
     // Dedupe by idempotency key (OFCE-412): a retry / refresh / double-submit re-uses the
-    // first run instead of firing the tool loop again and duplicating stores/pages. Scoped
-    // per user so keys can't collide across callers. Accept a header or a body field.
+    // first run instead of firing the tool loop again and duplicating stores/pages. A client
+    // key (header or body) wins; otherwise fall back to a content-derived key (L-2) so callers
+    // that send no key still get dedup on an identical resubmit. Scoped per user throughout.
     const rawKey = c.req.header('idempotency-key') || idempotencyKey;
-    const idemKey = rawKey ? `${c.get('userId')}:${rawKey}` : null;
+    const idemKey = idempotencyKeyFor({
+      userId: c.get('userId'),
+      storeId,
+      message,
+      clientKey: rawKey,
+    });
 
     const result = await idem.run(idemKey, () => {
       // Least privilege (N1): scope the token to the open store when there is one; only the
