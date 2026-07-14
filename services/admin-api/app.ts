@@ -6,6 +6,7 @@ import {
   listDomains,
   addDomain,
   removeDomain,
+  ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant } from '../../packages/repo/index';
 import { cfConfig, connectCustomHostname, customHostnameStatus } from './domains';
@@ -19,6 +20,7 @@ import {
   agentVerifier,
   composeVerifiers,
   mintAgentToken,
+  denyNarrowedScope,
   type Verifier,
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
@@ -47,7 +49,15 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
   app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
   // Audit every authenticated mutation (ADR-016 Phase 1). After auth so the actor is known.
   app.use('*', auditMiddleware);
-  app.onError((e, c) => c.json({ error: e.message }, 400));
+  // A conflict is a client-actionable 409. Everything else that reaches here is an
+  // UNEXPECTED throw (bad input is validated at the route with an explicit 400) → 500, and
+  // in production we return a generic message so DB/vendor error strings don't leak to the
+  // browser. Detail stays server-side (dev keeps it for debuggability).
+  app.onError((e, c) => {
+    if (e instanceof ConflictError) return c.json({ error: e.message }, 409);
+    const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
+    return c.json({ error: detail }, 500);
+  });
 
   // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
   app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
@@ -75,13 +85,16 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
 
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
-  app.post('/stores', async (c) => {
+  app.post('/stores', denyNarrowedScope, async (c) => {
     const { id, name, host, color } = (await c.req.json().catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
     };
+    if (!id || !name || !host) {
+      return c.json({ error: 'id, name and host are required' }, 400);
+    }
     await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
     return c.json({ id, url: `https://${host}/` }, 201);
@@ -121,7 +134,7 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
   const viaSelf: typeof fetch = ((url: string | URL | Request, init?: RequestInit) =>
     app.fetch(new Request(url as string, init))) as typeof fetch;
 
-  app.post('/assistant', async (c) => {
+  app.post('/assistant', denyNarrowedScope, async (c) => {
     if (!process.env.ANTHROPIC_API_KEY) {
       return c.json({ error: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).' }, 503);
     }
@@ -224,6 +237,11 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
       return c.json({ error: 'a valid domain is required' }, 400);
+    }
+    // Platform subdomains (*.ratiodev.in) are assigned at onboarding, never connected as a
+    // "custom domain" — otherwise a merchant could squat an unclaimed platform subdomain.
+    if (isPlatformHost(host.toLowerCase())) {
+      return c.json({ error: 'platform subdomains cannot be connected as a custom domain' }, 400);
     }
     await addDomain(c.req.param('id'), host.toLowerCase());
     const cfg = cfConfig();
