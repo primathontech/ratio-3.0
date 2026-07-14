@@ -38,6 +38,81 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
 type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
 
+// Reserved platform labels: infra + auth surfaces that must never be self-served on the
+// platform's own domain (H-1 — subdomain squat: e.g. login.ratiodev.in served attacker
+// content on Ratio's trusted domain). Merchants may take any OTHER single-label
+// *.ratiodev.in; the apex, multi-label, and these labels are platform-admin-only.
+const RESERVED_PLATFORM_LABELS = new Set([
+  'www',
+  'api',
+  'admin',
+  'app',
+  'apps',
+  'login',
+  'logout',
+  'signin',
+  'signup',
+  'auth',
+  'account',
+  'accounts',
+  'mail',
+  'smtp',
+  'imap',
+  'pop',
+  'ftp',
+  'ns',
+  'ns1',
+  'ns2',
+  'dns',
+  'mx',
+  'cdn',
+  'assets',
+  'static',
+  'media',
+  'img',
+  'images',
+  'files',
+  'downloads',
+  'dashboard',
+  'portal',
+  'console',
+  'support',
+  'help',
+  'status',
+  'docs',
+  'blog',
+  'store',
+  'shop',
+  'dev',
+  'staging',
+  'stage',
+  'test',
+  'qa',
+  'preview',
+  'internal',
+  'root',
+  'ratio',
+  'ratiodev',
+  'billing',
+  'pay',
+  'payments',
+]);
+const PLATFORM_SUFFIX = '.ratiodev.in';
+
+// Whether a merchant may self-serve this host at onboarding. Custom domains pass through
+// (host-ownership is guarded separately). Platform hosts are limited to a single
+// non-reserved label; the apex, multi-label, and reserved labels require a platform admin.
+export function platformSubdomainAllowed(host: string, isAdmin: boolean): boolean {
+  const h = (host || '').toLowerCase();
+  const isPlatform = h === 'ratiodev.in' || h.endsWith(PLATFORM_SUFFIX);
+  if (!isPlatform) return true; // custom domain — not our subdomain space
+  if (isAdmin) return true; // ops assign platform hosts (login., www., the apex, …)
+  if (h === 'ratiodev.in') return false; // apex
+  const sub = h.slice(0, -PLATFORM_SUFFIX.length);
+  if (sub.includes('.')) return false; // only single-label subdomains are self-served
+  return !RESERVED_PLATFORM_LABELS.has(sub);
+}
+
 export interface AppOptions {
   rateLimit?: number; // per-user requests/min on the control plane
   assistantRateLimit?: number; // tighter per-user budget on /assistant
@@ -128,6 +203,12 @@ export function createApp(
     }
     if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
       return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
+    }
+    // H-1: reserved/apex/multi-label platform subdomains are not self-serviceable — they'd
+    // let a merchant serve content on Ratio's own trusted domain (phishing/brand). Ops
+    // (platform admins) assign those; merchants get a single non-reserved *.ratiodev.in.
+    if (!platformSubdomainAllowed(host, isPlatformAdmin(c.get('userId')))) {
+      return c.json({ error: 'that subdomain is reserved — choose another' }, 403);
     }
     await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
