@@ -416,6 +416,12 @@ h2 {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
+/* Read-only inputs look distinct from editable ones so it's clear why typing does nothing (L-3). */
+.input[readonly] {
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: default;
+}
 .textarea {
   font-family: var(--mono);
   font-size: 12.5px;
@@ -565,13 +571,17 @@ h2 {
   background: var(--danger-weak);
   color: var(--danger);
 }
+/* Body text uses --text for guaranteed AA contrast (M-3): --success/--warning as text on their
+   own tint fell below 4.5:1 in light mode. The tint + a bold accent bar carry the semantics. */
 .note-ok {
   background: color-mix(in srgb, var(--success) 14%, transparent);
-  color: var(--success);
+  color: var(--text);
+  border-left: 3px solid var(--success);
 }
 .note-warn {
   background: color-mix(in srgb, var(--warning) 15%, transparent);
-  color: var(--warning);
+  color: var(--text);
+  border-left: 3px solid var(--warning);
   line-height: 1.5;
 }
 
@@ -848,5 +858,17 @@ h2 {
   }
   .page-head {
     flex-direction: column;
+  }
+  /* Let a long custom domain wrap onto its own line instead of pushing the actions off-screen
+     (M-5 / WCAG 1.4.10 reflow). */
+  .domain-row {
+    flex-wrap: wrap;
+  }
+  .domain-row a {
+    flex-basis: 100%;
+  }
+  /* Stack the product-grid editor's inputs on narrow screens (M-5). */
+  .product-row {
+    grid-template-columns: 1fr;
   }
 }
