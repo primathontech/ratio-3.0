@@ -1,5 +1,8 @@
 name: Delete stores
 
+permissions:
+  contents: read
+
 # Manual, destructive: hard-deletes stores from the PRODUCTION database by tenant id
 # (atomic purge + zero-residual proof via deleteStore). Run from the Actions tab.
 on:

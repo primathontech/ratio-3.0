@@ -1,5 +1,8 @@
 name: AWS check
 
+permissions:
+  contents: read
+
 # Manual, non-destructive: verifies the AWS keys work and dumps the ECS service's
 # image wiring so we can see whether the running task actually tracks ECR :latest.
 # Creates nothing. Run from the Actions tab or `gh workflow run`.
