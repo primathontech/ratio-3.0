@@ -85,4 +85,7 @@ export class RatioControlPlane {
   mintAgentToken(id: string) {
     return this.req<Schemas['AgentToken']>('POST', `/stores/${enc(id)}/agent-tokens`);
   }
+  listAudit(id: string) {
+    return this.req<{ entries: Schemas['AuditEntry'][] }>('GET', `/stores/${enc(id)}/audit`);
+  }
 }

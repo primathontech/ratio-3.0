@@ -12,6 +12,7 @@ export const SCOPES = {
   DOMAINS_READ: 'domains:read',
   DOMAINS_WRITE: 'domains:write',
   TOKENS_MINT: 'tokens:mint',
+  AUDIT_READ: 'audit:read',
 } as const;
 
 export type Scope = (typeof SCOPES)[keyof typeof SCOPES];
@@ -30,6 +31,7 @@ const ROUTE_SCOPES: Record<string, Scope> = {
   'POST /stores/:id/domains': SCOPES.DOMAINS_WRITE,
   'DELETE /stores/:id/domains': SCOPES.DOMAINS_WRITE,
   'GET /stores/:id/domain': SCOPES.DOMAINS_READ,
+  'GET /stores/:id/audit': SCOPES.AUDIT_READ,
 };
 
 export function scopeFor(method: string, routePath: string): Scope | null {
