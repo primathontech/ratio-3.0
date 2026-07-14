@@ -9,7 +9,13 @@ import {
   ConflictError,
 } from '../../packages/provisioning/index';
 import { forTenant, StaleWriteError } from '../../packages/repo/index';
-import { cfConfig, connectCustomHostname, customHostnameStatus, purgeUrls } from './domains';
+import {
+  cfConfig,
+  connectCustomHostname,
+  customHostnameStatus,
+  purgeUrls,
+  storeCacheUrls,
+} from './domains';
 import {
   authMiddleware,
   requireMembership,
@@ -205,15 +211,18 @@ export function createApp(
     if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
       return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
     }
+    // Hosts are case-insensitive; store + serve them lowercase so a mixed-case onboard
+    // isn't a dead row the (lowercase) browser Host never matches (M-5).
+    const lcHost = host.toLowerCase();
     // H-1: reserved/apex/multi-label platform subdomains are not self-serviceable — they'd
     // let a merchant serve content on Ratio's own trusted domain (phishing/brand). Ops
     // (platform admins) assign those; merchants get a single non-reserved *.ratiodev.in.
-    if (!platformSubdomainAllowed(host, isPlatformAdmin(c.get('userId')))) {
+    if (!platformSubdomainAllowed(lcHost, isPlatformAdmin(c.get('userId')))) {
       return c.json({ error: 'that subdomain is reserved — choose another' }, 403);
     }
-    await onboardStore({ id, name, host, color, ownerUserId: c.get('userId') });
+    await onboardStore({ id, name, host: lcHost, color, ownerUserId: c.get('userId') });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
-    return c.json({ id, url: `https://${host}/` }, 201);
+    return c.json({ id, url: `https://${lcHost}/` }, 201);
   });
 
   // Read a store — caller must have a membership on it.
@@ -225,8 +234,21 @@ export function createApp(
 
   // Provably-complete hard-delete (ADR-010 D-SEC4) — owner-only (M-4).
   app.delete('/stores/:id', requireRole('owner'), async (c) => {
-    const proof = await deleteStore(c.req.param('id'));
-    return c.json(proof);
+    const id = c.req.param('id');
+    const cfg = cfConfig();
+    // Gather cache targets BEFORE the rows are purged.
+    const urls = cfg
+      ? storeCacheUrls(
+          await listDomains(id),
+          (await forTenant(id).listRoutes()).map((r) => r.path)
+        )
+      : [];
+    const proof = await deleteStore(id);
+    // Purge the edge cache so a hard-deleted store stops serving cached content immediately
+    // (M-1) — completes the "provably complete" delete. Awaited so it's reportable.
+    const cachePurged =
+      cfg && urls.length ? await purgeUrls(cfg, urls).catch(() => false) : undefined;
+    return c.json({ ...proof, cachePurged });
   });
 
   // Mint a short-lived agent token scoped to THIS store (ADR-007 / OFCE-399), so the owner
@@ -409,7 +431,14 @@ export function createApp(
   app.delete('/stores/:id/domains', requireRole('owner'), async (c) => {
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host) return c.json({ error: 'host is required' }, 400);
-    const removed = await removeDomain(c.req.param('id'), host);
+    const id = c.req.param('id');
+    const removed = await removeDomain(id, host);
+    // Purge the removed host's cached pages so it stops serving after unmapping (M-1).
+    const cfg = cfConfig();
+    if (removed && cfg && !host.toLowerCase().endsWith('.localhost')) {
+      const paths = (await forTenant(id).listRoutes()).map((r) => r.path);
+      void purgeUrls(cfg, storeCacheUrls([host.toLowerCase()], paths)).catch(() => {});
+    }
     return c.json({ removed });
   });
 

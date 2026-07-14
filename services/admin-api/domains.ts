@@ -168,6 +168,15 @@ export async function connectCustomHostname(
 // Purge specific storefront URLs from the Cloudflare edge cache. Purge-by-URL works on all
 // plans (unlike Cache-Tags, which need Enterprise). Best-effort: callers ignore failures so
 // a purge outage never fails the underlying write (OFCE-411).
+// Cacheable storefront URLs for a store's real (non-localhost) domains × its route paths —
+// the set to purge when the whole store changes (delete / suspend / domain removal). Root is
+// always included even if there are no routes yet.
+export function storeCacheUrls(hosts: string[], paths: string[]): string[] {
+  const real = hosts.filter((h) => !h.endsWith('.localhost'));
+  const ps = paths.length ? Array.from(new Set(['/', ...paths])) : ['/'];
+  return real.flatMap((h) => ps.map((p) => `https://${h}${p}`));
+}
+
 export async function purgeUrls(
   cfg: CfConfig,
   urls: string[],

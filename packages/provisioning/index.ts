@@ -29,6 +29,7 @@ export async function onboardStore({
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
   }
+  host = host.toLowerCase(); // hosts are case-insensitive; store lowercase (M-5)
   // Colour is interpolated into the storefront's CSS — only a hex value may pass (defence
   // in depth behind the admin-api boundary; the render layer also falls back safely).
   if (!/^#[0-9a-f]{3,8}$/i.test(color)) {

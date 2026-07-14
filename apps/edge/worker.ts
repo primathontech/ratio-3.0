@@ -100,7 +100,7 @@ async function resolveTenant(c: {
   env: Env;
   req: { query: (k: string) => string | undefined; header: (k: string) => string | undefined };
 }): Promise<string | null> {
-  const host = (c.req.header('host') || '').split(':')[0];
+  const host = (c.req.header('host') || '').split(':')[0].toLowerCase();
   const fromQuery = c.req.query('store');
   if (fromQuery && storeOverrideAllowed(host)) return fromQuery;
   const sql = neon(c.env.DATABASE_URL);
