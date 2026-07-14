@@ -27,7 +27,7 @@ import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
-import { runAssistant } from './assistant';
+import { runAssistant, scopeForAssistant } from './assistant';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
@@ -144,11 +144,11 @@ export function createApp(verify: Verifier = composeVerifiers(agentVerifier, cle
     };
     if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
 
-    // Scope '*' = all the caller's stores, so the assistant can onboard a brand-new store
-    // (id not known ahead of time) AND edit existing ones — still bounded by memberships.
+    // Least privilege (N1): scope the token to the open store when there is one; only the
+    // onboarding entry point (no storeId) gets '*' so it can create a brand-new store.
     const token = mintAgentToken({
       sub: c.get('userId'),
-      scope: ['*'],
+      scope: scopeForAssistant(storeId),
       exp: Math.floor(Date.now() / 1000) + 900,
     });
     const client = new RatioControlPlane({

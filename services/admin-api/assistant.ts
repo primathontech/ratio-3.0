@@ -27,6 +27,14 @@ export interface AssistantResult {
 export const ASSISTANT_MODEL = 'claude-sonnet-5';
 const MAX_STEPS = 8;
 
+// Least privilege (audit N1): when the assistant is opened on a specific store, its agent
+// token is scoped to THAT store only — so a prompt-injected or buggy agent can't reach the
+// merchant's other stores. Only the onboarding entry point (no store yet) gets '*', which
+// is what create_store needs.
+export function scopeForAssistant(storeId?: string): string[] {
+  return storeId ? [storeId] : ['*'];
+}
+
 const TOOLS: Anthropic.Tool[] = [
   {
     name: 'list_stores',
@@ -149,6 +157,10 @@ export async function runAssistant(opts: {
     ? `${SYSTEM}\n\nThe merchant is currently viewing store ${storeId}.`
     : SYSTEM;
 
+  // With a store already open the token is store-scoped, so onboarding is out of scope —
+  // don't offer create_store (it would only 403). Onboarding sessions (no storeId) keep it.
+  const tools = storeId ? TOOLS.filter((t) => t.name !== 'create_store') : TOOLS;
+
   const messages: Anthropic.MessageParam[] = [{ role: 'user', content: message }];
   const actions: AssistantAction[] = [];
 
@@ -157,7 +169,7 @@ export async function runAssistant(opts: {
       model: ASSISTANT_MODEL,
       max_tokens: 4096,
       system,
-      tools: TOOLS,
+      tools,
       messages,
     });
     messages.push({ role: 'assistant', content: res.content });
