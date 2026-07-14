@@ -126,6 +126,17 @@ export function authMiddleware(
   };
 }
 
+// Routes that create a store or run the assistant have no :id for requireMembership to
+// bind an agent token's scope against. A narrowing scope (present, not including '*') is
+// meaningless here and must be rejected — otherwise a "this store only" key could create
+// or overwrite arbitrary stores, or escalate to a full-access assistant. Human sessions
+// (no scope) and '*'-scoped tokens pass. Global granted∩role∩tenant is Phase 2 (OFCE-402).
+export const denyNarrowedScope: MiddlewareHandler<Vars> = async (c, next) => {
+  const scope = c.get('scope');
+  if (scope && !scope.includes('*')) return c.json({ error: 'out of scope' }, 403);
+  return next();
+};
+
 export interface Membership {
   role: string;
 }

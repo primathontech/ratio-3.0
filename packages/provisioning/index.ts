@@ -1,7 +1,18 @@
 import { pool } from '../shared/db';
 
-// Provisioning (crosses tenant boundaries): create a tenant + host mapping + home
-// route atomically. A merchant is data: no fork, no server, no deploy. Idempotent.
+// Raised when a write would clobber another tenant's resource (store id or host already
+// owned by someone else). Routes map this to HTTP 409 rather than the generic 400.
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
+// Provisioning (crosses tenant boundaries): create a tenant + host mapping + home route
+// atomically. A merchant is data: no fork, no server, no deploy. Idempotent FOR THE OWNER
+// only — an authenticated create must never overwrite another merchant's store or steal a
+// host (the upserts below are guarded by the ownership/claim checks up front).
 export async function onboardStore({
   id,
   name,
@@ -21,6 +32,25 @@ export async function onboardStore({
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Re-onboarding an existing id is allowed only for an existing owner (idempotent) or a
+    // trusted internal caller with no principal (scripts/seed). An authenticated create
+    // must never clobber another merchant's store.
+    const existing = await client.query('SELECT 1 FROM tenants WHERE id=$1', [id]);
+    if (existing.rowCount && ownerUserId) {
+      const owns = await client.query(
+        "SELECT 1 FROM memberships WHERE clerk_user_id=$1 AND tenant_id=$2 AND role='owner'",
+        [ownerUserId, id]
+      );
+      if (!owns.rowCount) throw new ConflictError('a store with that id already exists');
+    }
+    // The host must be unclaimed or already this tenant's — never another tenant's.
+    const claimed = await client.query<{ tenant_id: string }>(
+      'SELECT tenant_id FROM domains WHERE host=$1',
+      [host]
+    );
+    if (claimed.rowCount && claimed.rows[0].tenant_id !== id) {
+      throw new ConflictError('that domain is already connected to another store');
+    }
     await client.query(
       'INSERT INTO tenants (id, name, theme) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, theme=EXCLUDED.theme',
       [id, name, JSON.stringify({ color })]
@@ -114,12 +144,18 @@ export async function listDomains(tenantId: string): Promise<string[]> {
   return rows.map((r) => r.host);
 }
 
+// Claim a host for a tenant. A host is single-owner (PK): the upsert only reassigns when
+// the row is already this tenant's, so a merchant can never take over a host mapped to
+// another store. On a foreign claim the WHERE fails, no row returns, and we reject (409).
 export async function addDomain(tenantId: string, host: string): Promise<void> {
-  await pool.query(
+  const { rowCount } = await pool.query(
     `INSERT INTO domains (host, tenant_id) VALUES ($1,$2)
-     ON CONFLICT (host) DO UPDATE SET tenant_id = EXCLUDED.tenant_id`,
+     ON CONFLICT (host) DO UPDATE SET tenant_id = EXCLUDED.tenant_id
+       WHERE domains.tenant_id = EXCLUDED.tenant_id
+     RETURNING host`,
     [host, tenantId]
   );
+  if (!rowCount) throw new ConflictError('that domain is already connected to another store');
 }
 
 export async function removeDomain(tenantId: string, host: string): Promise<boolean> {

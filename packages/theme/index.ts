@@ -8,7 +8,7 @@ export interface RenderCtx {
   tenant: { name: string; theme?: { color?: string } | null };
 }
 
-const esc = (s: unknown): string =>
+export const esc = (s: unknown): string =>
   String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
