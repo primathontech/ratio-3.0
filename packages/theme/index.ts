@@ -46,6 +46,7 @@ function safeRichText(html: unknown): string {
 // other scheme (javascript:, data:, vbscript:, …) is neutralised to '#'.
 function safeUrl(u: unknown): string {
   const s = String(u ?? '').trim();
+  if (/^\/[/\\]/.test(s)) return '#'; // protocol-relative (//evil.com, /\evil) → off-site
   if (/^(https?:|mailto:|tel:)/i.test(s)) return s;
   if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return '#'; // some other scheme → block
   return s; // relative path or #anchor

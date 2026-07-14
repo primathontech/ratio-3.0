@@ -1,7 +1,7 @@
 // The edge->origin URL join must not double-slash when ORIGIN_URL has a trailing "/".
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { originTarget, proxyInit } from '../apps/edge/worker';
+import { originTarget, proxyInit, publicHeaders } from '../apps/edge/worker';
 
 test('joins base + path without a double slash (trailing slash on base)', () => {
   assert.strictEqual(
@@ -19,6 +19,26 @@ test('preserves path + query', () => {
     originTarget('https://x.com/', '/products/red', '?store=t_acme'),
     'https://x.com/products/red?store=t_acme'
   );
+});
+
+test('publicHeaders strips internal x-* but keeps public response headers (M-5)', () => {
+  const h = new Headers({
+    'content-type': 'text/html',
+    'cache-control': 'public, s-maxage=300',
+    'content-security-policy': "default-src 'none'",
+    'x-surrogate-keys': 't:t_acme t:t_acme:route:/',
+    'x-tenant': 't_acme',
+    'x-render-count': '5',
+    'x-page-type': 'home',
+  });
+  const out = publicHeaders(h);
+  assert.strictEqual(out.get('content-type'), 'text/html');
+  assert.strictEqual(out.get('cache-control'), 'public, s-maxage=300');
+  assert.match(out.get('content-security-policy') || '', /default-src/);
+  assert.strictEqual(out.get('x-surrogate-keys'), null);
+  assert.strictEqual(out.get('x-tenant'), null);
+  assert.strictEqual(out.get('x-render-count'), null);
+  assert.strictEqual(out.get('x-page-type'), null);
 });
 
 test('proxyInit: GET forwards no body and injects the trusted tenant/secret', () => {
