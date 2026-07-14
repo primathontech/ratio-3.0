@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react';
 import {
   createApi,
@@ -74,7 +74,10 @@ function Dashboard() {
   return (
     <main className="container">
       {store ? (
-        <PageManager key={reloadKey} api={api} store={store} onBack={() => setStore(null)} />
+        // No key here (M2): remounting the open editor on an assistant change discarded the
+        // merchant's unsaved edits. The editor keeps its state; a stale save is caught by the
+        // page's optimistic-concurrency version check (409 → "reload").
+        <PageManager api={api} store={store} onBack={() => setStore(null)} />
       ) : (
         <StoreList key={reloadKey} api={api} onOpen={setStore} />
       )}
@@ -402,6 +405,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   // Version of the currently-open page (optimistic concurrency, OFCE-409). Sent on save;
   // a stale value → 409 so a second tab / the AI assistant can't be silently clobbered.
   const [version, setVersion] = useState<number | undefined>(undefined);
+  // Monotonic load counter (M3): if two openPage calls overlap, only the latest may write state,
+  // so a slow earlier response can't overwrite the page the user actually selected.
+  const loadSeq = useRef(0);
 
   const loadPages = useCallback(() => {
     api.listPages(store.id).then(setPages).catch((e: Error) => setErr(e.message));
@@ -410,8 +416,10 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
 
   async function openPage(p: string) {
     setErr(null);
+    const seq = ++loadSeq.current;
     try {
       const page = await api.getPage(store.id, p);
+      if (seq !== loadSeq.current) return; // a newer openPage superseded this load
       const editable = toEditable(page.pageConfig);
       setPath(page.path);
       setPageType(page.pageType);
@@ -420,6 +428,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
       setVersion(page.version);
       setMode('visual');
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setErr((e as Error).message);
     }
   }
@@ -558,7 +567,15 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div className="row">
               <Field label="Path">
-                <input className="input mono" value={path} onChange={(e) => setPath(e.target.value)} />
+                {/* Read-only once a page is loaded (M4): editing the path here would silently
+                    save to a different route (duplicate page) while sending this page's version.
+                    Renaming is a separate, explicit operation. */}
+                <input
+                  className="input mono"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  readOnly={version !== undefined}
+                />
               </Field>
               <Field label="Type">
                 <input className="input" value={pageType} onChange={(e) => setPageType(e.target.value)} />
