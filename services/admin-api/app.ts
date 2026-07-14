@@ -450,8 +450,19 @@ export function createApp(
   const isPlatformHost = (h: string) => h.endsWith('.ratiodev.in') || h.endsWith('.localhost');
 
   app.get('/stores/:id/domains', requireMembership, async (c) => {
-    const hosts = await listDomains(c.req.param('id'));
+    const id = c.req.param('id');
+    const hosts = await listDomains(id);
     const cfg = cfConfig();
+    // Which hosts are already verified — so we skip the redundant read-repair write on every
+    // load once a domain is verified (L-2 write amplification).
+    const verified = new Set(
+      (
+        await pool.query<{ host: string }>(
+          'SELECT host FROM domains WHERE tenant_id = $1 AND verified = true',
+          [id]
+        )
+      ).rows.map((r) => r.host)
+    );
     const domains = await Promise.all(
       hosts.map(async (host) => {
         if (isPlatformHost(host))
@@ -459,9 +470,9 @@ export function createApp(
         if (!cfg)
           return { host, kind: 'custom', status: 'unconfigured', sslStatus: 'unconfigured' };
         const s = await customHostnameStatus(cfg, host).catch(() => null);
-        // Read-repair: once Cloudflare reports the hostname active, DV succeeded → the merchant
-        // proved ownership, so promote the claim to verified (authoritative for routing). (H1)
-        if (s?.status === 'active') await markDomainVerified(c.req.param('id'), host);
+        // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
+        // claim to verified. Skip the write if it's already verified (L-2). (H1)
+        if (s?.status === 'active' && !verified.has(host)) await markDomainVerified(id, host);
         return {
           host,
           kind: 'custom',
@@ -508,7 +519,20 @@ export function createApp(
       await markDomainConnected(c.req.param('id'), host.toLowerCase());
       return c.json({ ...conn, configured: true }, 201);
     } catch (e) {
-      return c.json({ host, configured: true, error: (e as Error).message }, 502);
+      // Don't leak raw Cloudflare error text to the merchant in production (L-1); log detail
+      // server-side, return a generic message.
+      if (process.env.NODE_ENV !== 'production') console.error('connectCustomHostname failed:', e);
+      return c.json(
+        {
+          host,
+          configured: true,
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'could not reach the domain provider — please try again'
+              : (e as Error).message,
+        },
+        502
+      );
     }
   });
 
@@ -554,7 +578,20 @@ export function createApp(
         (await customHostnameStatus(cfg, host)) ?? (await connectCustomHostname(cfg, host));
       return c.json({ ...conn, configured: true });
     } catch (e) {
-      return c.json({ host, configured: true, error: (e as Error).message }, 502);
+      // Don't leak raw Cloudflare error text to the merchant in production (L-1); log detail
+      // server-side, return a generic message.
+      if (process.env.NODE_ENV !== 'production') console.error('connectCustomHostname failed:', e);
+      return c.json(
+        {
+          host,
+          configured: true,
+          error:
+            process.env.NODE_ENV === 'production'
+              ? 'could not reach the domain provider — please try again'
+              : (e as Error).message,
+        },
+        502
+      );
     }
   });
 
