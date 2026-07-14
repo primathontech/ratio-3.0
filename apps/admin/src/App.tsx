@@ -784,16 +784,36 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
   const [domains, setDomains] = useState<DomainInfo[] | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [viewing, setViewing] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null); // host pending confirmation
+  const [err, setErr] = useState<string | null>(null);
 
+  // Distinguish a failed load from an empty list (OFCE-414): on error show the error, not
+  // a misleading "no domains" state.
   const load = useCallback(() => {
-    api.listDomains(store.id).then(setDomains).catch(() => setDomains([]));
+    setErr(null);
+    api
+      .listDomains(store.id)
+      .then(setDomains)
+      .catch((e: Error) => {
+        setDomains([]);
+        setErr(e.message);
+      });
   }, [api, store.id]);
   useEffect(load, [load]);
 
+  // Only claim success when the server actually confirms it, and surface real failures
+  // (OFCE-414) — no more unconditional "Domain removed".
   async function remove(host: string) {
-    await api.removeDomain(store.id, host).catch(() => {});
-    toast('Domain removed');
-    load();
+    setRemoving(null);
+    setErr(null);
+    try {
+      const { removed } = await api.removeDomain(store.id, host);
+      toast(removed ? 'Domain removed' : 'Domain was already removed');
+      load();
+    } catch (e) {
+      setErr((e as Error).message);
+      toast('Could not remove the domain', 'error');
+    }
   }
 
   const statusBadge = (d: DomainInfo) => {
@@ -811,7 +831,8 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
           <Icon.plus size={14} /> Connect a domain
         </button>
       </div>
-      {!domains && <div className="center-pad"><Spinner /></div>}
+      {err && <div className="note note-error" role="alert">{err}</div>}
+      {!domains && !err && <div className="center-pad"><Spinner /></div>}
       <div className="domain-rows">
         {domains?.map((d) => (
           <div className="domain-row" key={d.host}>
@@ -825,7 +846,7 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
                 <button className="btn btn-subtle btn-sm" onClick={() => setViewing(d.host)}>
                   View DNS records
                 </button>
-                <button className="icon-btn" aria-label="Remove domain" onClick={() => remove(d.host)}>
+                <button className="icon-btn" aria-label="Remove domain" onClick={() => setRemoving(d.host)}>
                   <Icon.trash size={14} />
                 </button>
               </div>
@@ -838,6 +859,24 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
       )}
       {viewing && (
         <DomainRecordsDialog api={api} store={store} host={viewing} onClose={() => { setViewing(null); load(); }} />
+      )}
+      {removing && (
+        <Dialog title="Remove this domain?" onClose={() => setRemoving(null)}>
+          <div className="body">
+            <p>
+              Remove <span className="mono">{removing}</span> from this store? The store will
+              stop serving on it immediately until you reconnect it.
+            </p>
+          </div>
+          <div className="actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setRemoving(null)}>
+              Cancel
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => remove(removing)}>
+              <Icon.trash size={14} /> Remove domain
+            </button>
+          </div>
+        </Dialog>
       )}
     </div>
   );
