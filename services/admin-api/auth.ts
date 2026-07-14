@@ -110,6 +110,27 @@ function extractToken(c: Context): string | null {
   return cm ? decodeURIComponent(cm[1]) : null;
 }
 
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+// CSRF (I-1): the API also accepts auth via the __session cookie, which a browser attaches on
+// cross-site requests. So a state-changing request relying on that ambient cookie (rather than
+// an explicit Authorization: Bearer header, which browsers never attach cross-site) must prove
+// same-origin via the Origin header against the CORS allowlist. Bearer/API clients and safe
+// methods are exempt; a '*' allowlist (dev only) disables the check.
+export function csrfGuard(allowedOrigins: string[]): MiddlewareHandler<Vars> {
+  const allowAll = allowedOrigins.includes('*');
+  const allowed = new Set(allowedOrigins);
+  return async (c, next) => {
+    if (allowAll || CSRF_SAFE_METHODS.has(c.req.method)) return next();
+    if (/^Bearer\s+/i.test(c.req.header('authorization') || '')) return next();
+    const origin = c.req.header('origin');
+    if (!origin || !allowed.has(origin)) {
+      return c.json({ error: 'cross-site request blocked' }, 403);
+    }
+    return next();
+  };
+}
+
 // Verifies the session and sets c.get('userId'); 401 otherwise. Public paths skip auth.
 export function authMiddleware(
   verify: Verifier,

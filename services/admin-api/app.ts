@@ -19,6 +19,7 @@ import {
 } from './domains';
 import {
   authMiddleware,
+  csrfGuard,
   requireMembership,
   requireRole,
   listStoresForUser,
@@ -153,6 +154,9 @@ export function createApp(
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
 
   app.use('*', authMiddleware(verify, ['/health', '/', '/openapi.json']));
+  // Reject cross-site cookie-authenticated mutations (I-1). After auth so a bad session 401s
+  // first; before mutations run.
+  app.use('*', csrfGuard(origins));
   // Throttle per authenticated user (after auth so userId is known; public paths have none
   // and pass through). /assistant draws from its own tighter bucket.
   app.use('*', async (c, next) => {
