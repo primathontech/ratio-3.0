@@ -30,4 +30,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Onboard into Neon
-        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npx tsx scripts/onboard.ts "${{ inputs.id }}" "${{ inputs.name }}" "${{ inputs.host }}" "${{ inputs.color }}"
+        # Inputs go through env (shell vars), never interpolated into the run script — a
+        # ${{ inputs.* }} value like "$(...)" would otherwise execute on the runner, which
+        # holds DATABASE_URL. See GitHub's script-injection guidance.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ID: ${{ inputs.id }}
+          NAME: ${{ inputs.name }}
+          HOST: ${{ inputs.host }}
+          COLOR: ${{ inputs.color }}
+        run: npx tsx scripts/onboard.ts "$ID" "$NAME" "$HOST" "$COLOR"
