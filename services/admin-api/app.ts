@@ -13,6 +13,7 @@ import { cfConfig, connectCustomHostname, customHostnameStatus, purgeUrls } from
 import {
   authMiddleware,
   requireMembership,
+  requireRole,
   listStoresForUser,
   listAllStores,
   isPlatformAdmin,
@@ -222,8 +223,8 @@ export function createApp(
     return c.json({ id: tenant.id, name: tenant.name, theme: tenant.theme });
   });
 
-  // Provably-complete hard-delete (ADR-010 D-SEC4) — caller must have a membership.
-  app.delete('/stores/:id', requireMembership, async (c) => {
+  // Provably-complete hard-delete (ADR-010 D-SEC4) — owner-only (M-4).
+  app.delete('/stores/:id', requireRole('owner'), async (c) => {
     const proof = await deleteStore(c.req.param('id'));
     return c.json(proof);
   });
@@ -231,7 +232,7 @@ export function createApp(
   // Mint a short-lived agent token scoped to THIS store (ADR-007 / OFCE-399), so the owner
   // can delegate the AI agent access to the same API. Membership-gated; scope is exactly
   // this tenant and inherits the caller's principal — it can only narrow, never widen.
-  app.post('/stores/:id/agent-tokens', requireMembership, (c) => {
+  app.post('/stores/:id/agent-tokens', requireRole('owner'), (c) => {
     const expiresIn = 3600;
     const token = mintAgentToken({
       sub: c.get('userId'),
@@ -375,7 +376,7 @@ export function createApp(
 
   // Connect a merchant's own domain: map it to the tenant + create the CF custom hostname,
   // and return the DNS records the merchant must add at their registrar.
-  app.post('/stores/:id/domains', requireMembership, async (c) => {
+  app.post('/stores/:id/domains', requireRole('owner'), async (c) => {
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
       return c.json({ error: 'a valid domain is required' }, 400);
@@ -405,7 +406,7 @@ export function createApp(
     }
   });
 
-  app.delete('/stores/:id/domains', requireMembership, async (c) => {
+  app.delete('/stores/:id/domains', requireRole('owner'), async (c) => {
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host) return c.json({ error: 'host is required' }, 400);
     const removed = await removeDomain(c.req.param('id'), host);
