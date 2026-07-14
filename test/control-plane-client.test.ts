@@ -9,7 +9,7 @@ process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp } from '../services/admin-api/app';
 import { composeVerifiers, agentVerifier, type Verifier } from '../services/admin-api/auth';
-import { RatioControlPlane, ControlPlaneError } from '../packages/control-plane-client/index';
+import { RatioControlPlane, ControlPlaneError } from '@ratio/control-plane-client';
 import { pool } from '../packages/shared/db';
 
 const ALICE = 'user_alice_sdk';
