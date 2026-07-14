@@ -211,7 +211,22 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   }, [api]);
   useEffect(load, [load]);
   useEffect(() => {
-    api.me().then(setMe).catch(() => {});
+    // Retry once so a transient /me failure doesn't silently strip the admin UI for the whole
+    // session (L2); after that, degrade quietly to the non-admin view. Guarded against unmount.
+    let cancelled = false;
+    const loadMe = (attempt = 0) =>
+      api
+        .me()
+        .then((m) => {
+          if (!cancelled) setMe(m);
+        })
+        .catch(() => {
+          if (!cancelled && attempt < 1) loadMe(attempt + 1);
+        });
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
   }, [api]);
 
   return (
