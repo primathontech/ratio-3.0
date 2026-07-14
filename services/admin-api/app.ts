@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
 import {
   onboardStore,
   deleteStore,
@@ -38,6 +39,7 @@ import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import { createRateLimiter } from '../../packages/shared/ratelimit';
 import { createIdempotencyStore, idempotencyKeyFor } from './idempotency';
+import { createReadiness } from './readiness';
 import Anthropic from '@anthropic-ai/sdk';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { runAssistant, scopeForAssistant } from './assistant';
@@ -143,6 +145,8 @@ export function createApp(
   const assistantRl = createRateLimiter({ limit: opts.assistantRateLimit ?? 20, windowMs: 60_000 });
   // Dedupe /assistant runs by idempotency key (OFCE-412).
   const idem = createIdempotencyStore();
+  // Cached DB readiness probe (L1): /ready is public + limiter-exempt, so cache the query.
+  const readiness = createReadiness(() => pool.query('SELECT 1').then(() => undefined));
   // Unforgeable per-process marker for the assistant's in-process (viaSelf) sub-requests, so
   // they skip the per-user limiter (L-1) — otherwise one assistant run's fan-out drained the
   // caller's own budget and rate-limited itself. Random by default; never sent to clients.
@@ -154,6 +158,15 @@ export function createApp(
   // preflight OPTIONS isn't rejected by the 401 gate.
   const origins = (process.env.ADMIN_CORS_ORIGIN || '*').split(',').map((o) => o.trim());
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
+  // Cap request bodies so a member can't PUT a multi-MB pageConfig (storage/render abuse) or
+  // exhaust memory (L11). 1 MB is generous for a page document.
+  app.use(
+    '*',
+    bodyLimit({
+      maxSize: 1024 * 1024,
+      onError: (c) => c.json({ error: 'request body too large' }, 413),
+    })
+  );
 
   app.use('*', authMiddleware(verify, ['/health', '/ready', '/', '/openapi.json']));
   // Reject cross-site cookie-authenticated mutations (I-1). After auth so a bad session 401s
@@ -193,12 +206,8 @@ export function createApp(
   // Readiness (vs liveness /health): probe the DB so an orchestrator doesn't route traffic
   // to an instance that can't reach Postgres. Pre-auth so probes need no credentials (L-7).
   app.get('/ready', async (c) => {
-    try {
-      await pool.query('SELECT 1');
-      return c.json({ status: 'ready' });
-    } catch {
-      return c.json({ status: 'unavailable' }, 503);
-    }
+    const ok = await readiness();
+    return c.json({ status: ok ? 'ready' : 'unavailable' }, ok ? 200 : 503);
   });
 
   // The API contract (ADR-016), source of truth for the generated SDK. Public so tooling
