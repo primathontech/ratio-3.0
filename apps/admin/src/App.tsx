@@ -279,23 +279,18 @@ function hostsOf(store: Store): string[] {
 function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
   const hosts = hostsOf(store);
   return (
-    <div className="card store-card" onClick={onOpen} role="button" tabIndex={0}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onOpen()}>
+    <div className="card store-card">
       <div className="top">
-        <span className="swatch" style={{ background: 'var(--surface-2)' }} />
         <div>
-          <div className="name">{store.name}</div>
+          {/* The store name is the primary action (a real button — keyboard/SR correct);
+              host links are siblings, not nested inside an interactive element (M-2/L-4). */}
+          <button type="button" className="name store-open" onClick={onOpen}>
+            {store.name}
+          </button>
           {hosts.length > 0 ? (
             <div className="hosts">
               {hosts.map((h) => (
-                <a
-                  key={h}
-                  className="host"
-                  href={`https://${h}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <a key={h} className="host" href={`https://${h}`} target="_blank" rel="noreferrer">
                   {h} <Icon.external size={11} />
                 </a>
               ))}
