@@ -5,7 +5,7 @@ import assert from 'node:assert';
 
 process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
-import { purgeUrls } from '../services/admin-api/domains';
+import { purgeUrls, storeCacheUrls } from '../services/admin-api/domains';
 import { app as origin } from '../apps/origin/index';
 import { pool } from '../packages/shared/db';
 
@@ -41,6 +41,15 @@ test('purgeUrls POSTs purge_cache with the given files and reports success', asy
     'https://acme.example.com/',
     'https://acme.example.com/about',
   ]);
+});
+
+test('storeCacheUrls builds host×path URLs, skips localhost, always includes root (M-1)', () => {
+  assert.deepStrictEqual(storeCacheUrls(['acme.ratiodev.in', 'x.localhost'], ['/about']), [
+    'https://acme.ratiodev.in/',
+    'https://acme.ratiodev.in/about',
+  ]);
+  assert.deepStrictEqual(storeCacheUrls(['a.example.com'], []), ['https://a.example.com/']);
+  assert.deepStrictEqual(storeCacheUrls(['only.localhost'], ['/']), []);
 });
 
 test('purgeUrls is a no-op (success) when there are no URLs', async () => {
