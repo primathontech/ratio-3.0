@@ -1,12 +1,43 @@
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
+  type ErrorInfo,
   type ReactNode,
 } from 'react';
+
+/* Error boundary --------------------------------------------------------- */
+// A render-time throw (e.g. a malformed pageConfig reaching the editor) would otherwise unmount
+// the whole app to a blank screen (M-4). Contain it to a scoped, recoverable fallback.
+export class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('UI error boundary caught:', error, info.componentStack);
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div className="empty" role="alert">
+        <div className="emoji">⚠️</div>
+        <strong style={{ color: 'var(--text)' }}>Something went wrong</strong>
+        <p className="muted">This view hit an unexpected error.</p>
+        <button className="btn btn-ghost" onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    );
+  }
+}
 
 /* Icons (inline SVG, currentColor) --------------------------------------- */
 type IconProps = { size?: number };

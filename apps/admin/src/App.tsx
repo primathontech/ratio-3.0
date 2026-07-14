@@ -12,7 +12,17 @@ import {
   type AssistantAction,
 } from './api';
 import { useTheme } from './theme';
-import { Badge, Dialog, EmptyState, Field, Icon, Spinner, ToastProvider, useToast } from './ui';
+import {
+  Badge,
+  Dialog,
+  EmptyState,
+  ErrorBoundary,
+  Field,
+  Icon,
+  Spinner,
+  ToastProvider,
+  useToast,
+} from './ui';
 import { SectionEditor, toEditable, type Section } from './sections';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
@@ -58,7 +68,9 @@ export function App() {
       </SignedOut>
 
       <SignedIn>
-        <Dashboard />
+        <ErrorBoundary>
+          <Dashboard />
+        </ErrorBoundary>
       </SignedIn>
     </ToastProvider>
   );
@@ -622,7 +634,14 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
                   readOnly={version !== undefined}
+                  aria-describedby={version !== undefined ? 'path-readonly-hint' : undefined}
+                  title={version !== undefined ? 'The path is fixed once a page is loaded' : undefined}
                 />
+                {version !== undefined && (
+                  <span id="path-readonly-hint" className="muted" style={{ fontSize: 11.5 }}>
+                    Fixed — create a new page to use a different path.
+                  </span>
+                )}
               </Field>
               <Field label="Type">
                 <input className="input" value={pageType} onChange={(e) => setPageType(e.target.value)} />
