@@ -50,3 +50,14 @@ test('entries expire after the TTL', async () => {
   await store.run('k', thunk);
   assert.strictEqual(calls, 2);
 });
+
+test('expired entries are swept, not just skipped — memory stays bounded (M-1)', async () => {
+  let t = 0;
+  const store = createIdempotencyStore({ ttlMs: 100, now: () => t });
+  await store.run('a', async () => 1);
+  await store.run('b', async () => 1);
+  assert.strictEqual(store.size(), 2);
+  t = 201; // past TTL for a and b
+  await store.run('c', async () => 1); // sweeps a + b, then adds c
+  assert.strictEqual(store.size(), 1);
+});

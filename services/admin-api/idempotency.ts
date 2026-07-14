@@ -6,6 +6,7 @@
 
 export interface IdempotencyStore {
   run<T>(key: string | null, thunk: () => Promise<T>): Promise<T>;
+  size(): number; // live entry count (for tests / observability)
 }
 
 export function createIdempotencyStore({
@@ -13,11 +14,18 @@ export function createIdempotencyStore({
   now = () => Date.now(),
 }: { ttlMs?: number; now?: () => number } = {}): IdempotencyStore {
   const map = new Map<string, { at: number; promise: Promise<unknown> }>();
+  // Drop everything past its TTL. Bounds memory (M-1): without this, successful entries were
+  // never evicted and the map grew forever (a fresh UUID key per assistant send).
+  const sweep = () => {
+    const t = now();
+    for (const [k, v] of map) if (t - v.at >= ttlMs) map.delete(k);
+  };
   return {
     run<T>(key: string | null, thunk: () => Promise<T>): Promise<T> {
       if (!key) return thunk(); // no key → no dedup
+      sweep();
       const hit = map.get(key);
-      if (hit && now() - hit.at < ttlMs) return hit.promise as Promise<T>;
+      if (hit) return hit.promise as Promise<T>; // still-live entries only (sweep removed stale)
       const promise = thunk();
       map.set(key, { at: now(), promise });
       // Don't cache a failure — drop it so the caller can retry a genuinely failed attempt.
@@ -26,5 +34,6 @@ export function createIdempotencyStore({
       });
       return promise;
     },
+    size: () => map.size,
   };
 }
