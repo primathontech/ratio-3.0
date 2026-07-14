@@ -104,18 +104,48 @@ export function Dialog({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const dialog = ref.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),textarea,input:not([disabled]),select,[tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((el) => el.offsetParent !== null);
+    // Move focus into the dialog on open (first control, or the dialog itself).
+    (focusables()[0] ?? dialog)?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return onClose();
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (f.length === 0) return e.preventDefault(); // nothing to tab to — stay put
+      const first = f[0];
+      const last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      previouslyFocused?.focus?.(); // restore focus to the trigger on close
+    };
   }, [onClose]);
   return (
     <div className="overlay" onMouseDown={onClose}>
       <div
+        ref={ref}
         className="dialog card"
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <h2>{title}</h2>
