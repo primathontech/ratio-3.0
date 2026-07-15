@@ -616,11 +616,14 @@ h2 {
 }
 .dialog {
   width: 100%;
-  max-width: min(92vw, 900px);
+  max-width: min(92vw, 560px);
   padding: 22px;
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
   animation: pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+.dialog--wide {
+  max-width: min(92vw, 900px);
 }
 .dialog h2 {
   margin-bottom: 4px;
