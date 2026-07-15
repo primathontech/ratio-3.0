@@ -1098,7 +1098,7 @@ function DomainRecordsDialog({
       .catch((e: Error) => setErr(e.message));
   }, [api, store.id, host]);
   return (
-    <Dialog title={`DNS records — ${host}`} onClose={onClose}>
+    <Dialog title={`DNS records — ${host}`} onClose={onClose} size="wide">
       <div className="body">
         {err && <div className="note note-error" role="alert">{err}</div>}
         {!result && !err && <div className="center-pad"><Spinner /></div>}
