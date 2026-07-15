@@ -616,7 +616,7 @@ h2 {
 }
 .dialog {
   width: 100%;
-  max-width: min(92vw, 640px);
+  max-width: min(92vw, 900px);
   padding: 22px;
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
