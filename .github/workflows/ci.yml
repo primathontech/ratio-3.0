@@ -101,7 +101,23 @@ jobs:
       # image (:sha, not :latest — ECS won't reliably re-pull a moving tag) and move the
       # service to it. Dormant until repo var ECS_DEPLOY=true + the IAM user has
       # ecs:Describe*/List*/RegisterTaskDefinition/UpdateService and iam:PassRole.
-      - name: Roll ECS to the new image
+      # ECS EXPRESS MODE deploy. These services are managed by the Express gateway (managed
+      # ALB, listener rules, target groups, canary deploys). The classic
+      # `update-service --force-new-deployment` FIGHTS the Express canary controller and
+      # leaves a stuck two-target-group listener rule ("productionListenerRule should have
+      # exactly one target group serving traffic but found 2"), accumulating failed
+      # "Rollback failed" deployments. The Express-native update verb is
+      # `update-express-gateway-service`. We register a new task-def revision with this
+      # commit's image (the documented custom-task-definition path) and point the service at
+      # it; Express then runs its canary (5% -> ~3min alarm-watch -> 3min bake -> 100%).
+      #
+      # STILL GATED OFF (ECS_DEPLOY=false) until validated end-to-end. Before re-enabling,
+      # confirm: (1) `aws ecs update-express-gateway-service` exists in the runner's CLI;
+      # (2) the canary's default rollback alarm ((4xx+5xx)/total > 1% for 2 datapoints /
+      # 3min) won't FALSE-TRIP — origin returns 403 (private gate) / 404 (unknown tenant)
+      # and admin-api returns 401 (unauthed) as NORMAL responses, which can trip it. Until
+      # then deploy by recreating the service pinned to the new image digest (see OFCE-428).
+      - name: Roll ECS Express services to the new image
         if: vars.ECS_DEPLOY == 'true'
         run: |
           set -euo pipefail
@@ -109,8 +125,7 @@ jobs:
           REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           NEW_IMAGE="$REGISTRY/ratio-3-0-origin:${{ github.sha }}"
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
-          # Roll EVERY service in the cluster (origin + admin-api both run this image with
-          # their own command/env). Each keeps its own task-def; we only swap the image tag.
+          # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
             CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
               --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
@@ -123,16 +138,14 @@ jobs:
                       .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
             NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
               --query 'taskDefinition.taskDefinitionArn' --output text)
-            aws ecs update-service --cluster "$CLUSTER" --service "$SVC" \
-              --task-definition "$NEW_TD" --force-new-deployment >/dev/null
+            aws ecs update-express-gateway-service \
+              --service-arn "$SVC" --task-definition-arn "$NEW_TD" >/dev/null
           done
-          # Wait on the deployment's rolloutState, not `wait services-stable`. The latter's
-          # fixed ~10-min cap waits for the OLD tasks to fully drain (one-deployment steady),
-          # which our multi-service rolling drain routinely exceeds — reddening successful
-          # deploys. rolloutState=COMPLETED fires when the NEW tasks are healthy (the real
-          # "done" signal), and FAILED (deployment circuit breaker) lets us fail fast.
-          echo "waiting for rollouts to complete…"
-          deadline=$(( $(date +%s) + 900 ))   # 15 min ceiling
+          # Poll the PRIMARY deployment's rolloutState. Express canary is slower than a
+          # rolling update (~6+ min/service: 5% + alarm-watch + bake), so use a wide ceiling.
+          # COMPLETED = new tasks healthy and 100% shifted; FAILED = canary alarm rollback.
+          echo "waiting for Express canary rollouts to complete…"
+          deadline=$(( $(date +%s) + 1500 ))   # 25 min ceiling
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
             name=${SVC##*/}
             while :; do
@@ -140,15 +153,15 @@ jobs:
                 --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' --output text)
               case "$ROLL" in
                 COMPLETED) echo "$name: rollout complete"; break ;;
-                FAILED)    echo "::error::$name: deployment rollout FAILED"; exit 1 ;;
+                FAILED)    echo "::error::$name: deployment rollout FAILED (canary alarm rollback?)"; exit 1 ;;
               esac
               if [ "$(date +%s)" -ge "$deadline" ]; then
-                echo "::error::$name: rollout not complete within 15m (state=$ROLL)"; exit 1
+                echo "::error::$name: rollout not complete within 25m (state=$ROLL)"; exit 1
               fi
-              sleep 15
+              sleep 20
             done
           done
-          echo "ECS rolled to new task-def; all rollouts COMPLETED"
+          echo "ECS Express rolled to $NEW_IMAGE; all rollouts COMPLETED"
 
   # Purge the Cloudflare edge cache after a deploy so cached pages pick up new
   # content. Dormant until repo var PURGE_CACHE=true + token has Zone:CachePurge:Edit.
