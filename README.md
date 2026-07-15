@@ -9,10 +9,10 @@ TypeScript. Full architecture, infra, and env/secrets: **[INFRASTRUCTURE.md](./I
 
 ## Live
 
-| URL                                                            |                                              |
-| -------------------------------------------------------------- | -------------------------------------------- |
-| `https://acme.ratiodev.in` · `https://beta.ratiodev.in`        | real host→tenant on platform subdomains      |
-| `http://acme.localhost:8787/?store=t_acme`                     | the `?store=` tenant override is dev-only (localhost); it is refused on public hosts |
+| URL                                                     |                                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `https://acme.ratiodev.in` · `https://beta.ratiodev.in` | real host→tenant on platform subdomains                                              |
+| `http://acme.localhost:8787/?store=t_acme`              | the `?store=` tenant override is dev-only (localhost); it is refused on public hosts |
 
 ---
 
