@@ -21,6 +21,9 @@ import {
   deleteCustomHostname,
   purgeUrls,
   storeCacheUrls,
+  kvConfig,
+  publishTenantMapping,
+  unpublishTenantMapping,
 } from './domains';
 import {
   authMiddleware,
@@ -311,14 +314,19 @@ export function createApp(
   app.delete('/stores/:id', requireRole('owner'), async (c) => {
     const id = c.req.param('id');
     const cfg = cfConfig();
-    // Gather cache targets BEFORE the rows are purged.
+    const kv = kvConfig();
+    // Gather hosts (for cache + edge-KV cleanup) BEFORE the rows are purged.
+    const hosts = cfg || kv ? await listDomains(id) : [];
     const urls = cfg
       ? storeCacheUrls(
-          await listDomains(id),
+          hosts,
           (await forTenant(id).listRoutes()).map((r) => r.path)
         )
       : [];
     const proof = await deleteStore(id);
+    // Drop the deleted store's edge-KV mappings (S2 Decision #7). The origin also rejects a
+    // missing tenant, so this is fast-path cleanup — best-effort.
+    if (kv) for (const h of hosts) void unpublishTenantMapping(kv, h.toLowerCase()).catch(() => {});
     // Purge the edge cache so a hard-deleted store stops serving cached content immediately
     // (M-1) — completes the "provably complete" delete. Awaited so it's reportable.
     const cachePurged =
@@ -488,7 +496,13 @@ export function createApp(
         const s = await customHostnameStatus(cfg, host).catch(() => null);
         // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
         // claim to verified. Skip the write if it's already verified (L-2). (H1)
-        if (s?.status === 'active' && !verified.has(host)) await markDomainVerified(id, host);
+        if (s?.status === 'active' && !verified.has(host)) {
+          await markDomainVerified(id, host);
+          // Write-through the now-verified mapping to the edge KV (S2 Decision #7). Best-effort:
+          // the edge still populates on miss, so a failed push self-heals within the TTL.
+          const kv = kvConfig();
+          if (kv) void publishTenantMapping(kv, host, id).catch(() => {});
+        }
         return {
           host,
           kind: 'custom',
@@ -557,6 +571,9 @@ export function createApp(
     if (!host) return c.json({ error: 'host is required' }, 400);
     const id = c.req.param('id');
     const removed = await removeDomain(id, host);
+    // Drop the edge-KV mapping so the host stops resolving at the edge (S2 Decision #7).
+    const kv = kvConfig();
+    if (removed && kv) void unpublishTenantMapping(kv, host.toLowerCase()).catch(() => {});
     // Purge the removed host's cached pages so it stops serving after unmapping (M-1).
     const cfg = cfConfig();
     if (removed && cfg && !host.toLowerCase().endsWith('.localhost')) {
