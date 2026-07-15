@@ -130,10 +130,12 @@ export function Dialog({
   title,
   onClose,
   children,
+  size = 'default',
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  size?: 'default' | 'wide';
 }) {
   const ref = useRef<HTMLDivElement>(null);
   // Keep the latest onClose in a ref so the focus-trap effect can run ONCE on open. Depending
@@ -177,7 +179,7 @@ export function Dialog({
     <div className="overlay" onMouseDown={onClose}>
       <div
         ref={ref}
-        className="dialog card"
+        className={size === 'wide' ? 'dialog card dialog--wide' : 'dialog card'}
         role="dialog"
         aria-modal="true"
         aria-label={title}
