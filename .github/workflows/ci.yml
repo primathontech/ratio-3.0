@@ -95,12 +95,6 @@ jobs:
           docker push "$IMG:${{ github.sha }}"
           docker push "$IMG:latest"
           echo "pushed $IMG:latest"
-      # Roll the running ECS service to the new image. The Express service's task-def
-      # pins the image by immutable DIGEST, so --force-new-deployment alone just re-runs
-      # the old code. We must register a NEW task-def revision that points at this commit's
-      # image (:sha, not :latest — ECS won't reliably re-pull a moving tag) and move the
-      # service to it. Dormant until repo var ECS_DEPLOY=true + the IAM user has
-      # ecs:Describe*/List*/RegisterTaskDefinition/UpdateService and iam:PassRole.
       # ECS EXPRESS MODE deploy. These services are managed by the Express gateway (managed
       # ALB, listener rules, target groups, canary deploys). The classic
       # `update-service --force-new-deployment` FIGHTS the Express canary controller and
@@ -121,6 +115,17 @@ jobs:
         if: vars.ECS_DEPLOY == 'true'
         run: |
           set -euo pipefail
+          # update-express-gateway-service is a new verb; the runner's bundled AWS CLI may
+          # predate it. Self-update to latest v2 if missing, then hard-fail if still absent.
+          if ! aws ecs update-express-gateway-service help >/dev/null 2>&1; then
+            echo "runner AWS CLI lacks update-express-gateway-service — updating to latest v2"
+            curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+            unzip -q /tmp/awscliv2.zip -d /tmp
+            sudo /tmp/aws/install --update
+            hash -r
+          fi
+          aws ecs update-express-gateway-service help >/dev/null 2>&1 \
+            || { echo "::error::update-express-gateway-service unavailable after CLI update"; exit 1; }
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           NEW_IMAGE="$REGISTRY/ratio-3-0-origin:${{ github.sha }}"
