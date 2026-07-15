@@ -41,11 +41,11 @@ Hono (framework) · TypeScript · `tsx` (run) · `node:test` (tests) · Docker.
 
 ## Live URLs
 
-| URL                                                            | What                                       |
-| -------------------------------------------------------------- | ------------------------------------------ |
-| `https://acme.ratiodev.in` / `https://beta.ratiodev.in`        | real host→tenant on platform subdomains    |
-| `http://acme.localhost:8787/?store=t_acme`                     | `?store=` tenant override — dev/localhost only (refused on public hosts) |
-| `https://<tenant>.ratiodev.in`                                 | any onboarded merchant subdomain           |
+| URL                                                     | What                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `https://acme.ratiodev.in` / `https://beta.ratiodev.in` | real host→tenant on platform subdomains                                  |
+| `http://acme.localhost:8787/?store=t_acme`              | `?store=` tenant override — dev/localhost only (refused on public hosts) |
+| `https://<tenant>.ratiodev.in`                          | any onboarded merchant subdomain                                         |
 
 ## Cloud accounts / identifiers (non-secret)
 
