@@ -15,6 +15,7 @@ interface Env {
   DATABASE_URL: string;
   ORIGIN_URL?: string;
   EDGE_SECRET?: string;
+  TENANTS?: TenantKV;
 }
 interface TenantRow {
   id: string;
@@ -96,6 +97,39 @@ function setStorefrontSecurity(c: { header: (k: string, v: string) => void }): v
   c.header('referrer-policy', 'strict-origin-when-cross-origin');
 }
 
+// S2/KV: host->tenant resolution reads Workers KV first (edge-local, sub-ms, and survives DB
+// death for already-cached routing) and hits Postgres only on a miss, then populates KV.
+// Postgres stays source of truth; the control plane write-throughs the key on domain
+// verify/reassign/suspend so the cache doesn't drift.
+export interface TenantKV {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+}
+// Positive entries carry a backstop TTL in case a control-plane write-through is ever missed;
+// negatives are short so a freshly-onboarded domain resolves quickly, while bogus/attack
+// hostnames can't fall through to the DB on every request (a load-amplification guard).
+const KV_TTL_HIT = 3600;
+const KV_TTL_MISS = 60;
+
+export async function lookupTenant(
+  host: string,
+  kv: TenantKV | undefined,
+  dbQuery: (host: string) => Promise<string | null>
+): Promise<string | null> {
+  const key = `host:${host}`;
+  if (kv) {
+    const cached = await kv.get(key);
+    if (cached !== null) return (JSON.parse(cached) as { t: string | null }).t;
+  }
+  const tenantId = await dbQuery(host);
+  if (kv) {
+    await kv.put(key, JSON.stringify({ t: tenantId }), {
+      expirationTtl: tenantId ? KV_TTL_HIT : KV_TTL_MISS,
+    });
+  }
+  return tenantId;
+}
+
 async function resolveTenant(c: {
   env: Env;
   req: { query: (k: string) => string | undefined; header: (k: string) => string | undefined };
@@ -106,10 +140,12 @@ async function resolveTenant(c: {
   const sql = neon(c.env.DATABASE_URL);
   // Only verified claims are authoritative for routing (H1): an unverified squat on someone
   // else's domain must not serve content, and stays reclaimable by the real owner.
-  const d = (await sql`SELECT tenant_id FROM domains WHERE host = ${host} AND verified = true`) as {
-    tenant_id: string;
-  }[];
-  return d[0]?.tenant_id ?? null;
+  return lookupTenant(host, c.env.TENANTS, async (h) => {
+    const d = (await sql`SELECT tenant_id FROM domains WHERE host = ${h} AND verified = true`) as {
+      tenant_id: string;
+    }[];
+    return d[0]?.tenant_id ?? null;
+  });
 }
 
 app.all('*', async (c) => {
