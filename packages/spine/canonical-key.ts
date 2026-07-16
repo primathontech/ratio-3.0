@@ -17,11 +17,13 @@ export interface KeyDims {
   currency: string; // 'default' today
 }
 
-// Normalize a path: decode, collapse double slashes, strip a single trailing slash (except root).
+// Normalize a path: uppercase percent-escapes (so %2f == %2F), NFC-normalize, decode, collapse
+// double slashes, strip a single trailing slash (except root). Percent-case + NFC first so
+// byte-equivalent URLs collapse to ONE key (prevents cache-split via encoding tricks).
 export function canonicalPath(rawPath: string): string {
-  let p = rawPath;
+  let p = rawPath.replace(/%[0-9a-fA-F]{2}/g, (m) => m.toUpperCase()).normalize('NFC');
   try {
-    p = decodeURI(p);
+    p = decodeURI(p); // NOTE: decodeURI (not decodeURIComponent) — keeps %2F encoded, no slash-traversal ambiguity
   } catch {
     /* leave as-is if malformed */
   }
@@ -30,13 +32,14 @@ export function canonicalPath(rawPath: string): string {
   return p || '/';
 }
 
-// Canonicalize the query: keep only output-affecting params, sort by key then value, re-encode.
+// Canonicalize the query: keep only output-affecting params, sort by key then value, and
+// RE-ENCODE key+value so a value containing '&' or '=' can never masquerade as a delimiter.
 export function canonicalQuery(search: string): string {
   const sp = new URLSearchParams(search);
   const kept: [string, string][] = [];
   for (const [k, v] of sp) if (OUTPUT_AFFECTING.has(k)) kept.push([k, v]);
   kept.sort((a, b) => (a[0] === b[0] ? a[1].localeCompare(b[1]) : a[0].localeCompare(b[0])));
-  return kept.map(([k, v]) => `${k}=${v}`).join('&');
+  return kept.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
 }
 
 export function keyDims(

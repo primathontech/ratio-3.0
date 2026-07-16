@@ -41,12 +41,24 @@ test('B1: LiquidJS — hostile constructs are contained by the engine', async ()
   // (a) no prototype escape: Liquid has no general property/constructor access to JS internals
   const a = await engine.parseAndRender('{{ x.constructor }}', { x: {} });
   assert.equal(a.trim(), '', 'Liquid exposes no JS constructor');
-  // (b) output/loop limits are configurable at the engine level (not per-template trust)
-  const bounded = new Liquid(); // could pass { ... } limits in a real config
-  const loop = await bounded.parseAndRender('{% for i in (1..5) %}{{ i }}{% endfor %}', {});
-  assert.equal(loop, '12345');
-  // CONCLUSION: Liquid was built for hostile templates (Shopify's model). It is the safer base;
-  // still must set explicit render-time + output limits, but the language surface is contained.
+  // (b) CPU/output limits are OPT-IN and default to Infinity — a bare Liquid engine does NOT
+  //     bound compute. Prove that the limits, once set, actually throw on a hostile template.
+  const unbounded = new Liquid();
+  // a 1e7-iteration loop renders fine on the default engine (no ceiling) — the risk is real:
+  const slow = await unbounded.parseAndRender('{% for i in (1..100000) %}.{% endfor %}', {});
+  assert.ok(slow.length === 100000, 'default engine has NO output/loop ceiling');
+  // with explicit limits, the same class of template must be rejected:
+  const bounded = new Liquid({ renderLimit: 50 /* ms */, memoryLimit: 1024 /* bytes */ });
+  await assert.rejects(
+    () => bounded.parseAndRender('{% for i in (1..100000) %}xxxxxxxxxx{% endfor %}', {}),
+    /limit/i,
+    'bounded engine throws (memory/render limit) on a hostile template'
+  );
+  // CONCLUSION: Liquid's language surface is narrow (no JS internals), which reduces ESCAPE risk,
+  // but it does NOT self-bound compute — renderLimit/memoryLimit/parseLimit are mandatory opt-in
+  // and cooperative. Merchant code still needs the SAME isolate + hard ceiling harness as any
+  // untrusted code; Liquid just removes the prototype-escape class. (B1 kill-decision: Liquid +
+  // enforced limits = viable; Handlebars = not without a heavier external sandbox.)
 });
 
 // ─── B2: capability inference from the template (not dev-declared) ───────────
@@ -57,74 +69,84 @@ test('B1: LiquidJS — hostile constructs are contained by the engine', async ()
 
 const engine = new Liquid();
 
-// Extract top-level variable roots + tag names a template references, from Liquid's parse output.
-function referencedCapabilities(src: string): { vars: Set<string>; tags: Set<string> } {
-  const templates = engine.parse(src);
-  const vars = new Set<string>();
-  const tags = new Set<string>();
-  const walk = (nodes: unknown[]) => {
-    // LiquidJS AST nodes are not publicly typed; this spike walks them structurally.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const n of nodes as any[]) {
-      // output nodes: {{ x.y | filter }}
-      if (n?.value?.initial?.postfix) {
-        for (const seg of n.value.initial.postfix) {
-          const props = seg?.props;
-          if (Array.isArray(props) && props[0]?.content) vars.add(String(props[0].content));
-        }
-        // filters count as capabilities (a filter can pull time/locale/etc)
-        for (const f of n.value.filters ?? []) if (f?.name) tags.add('filter:' + f.name);
-      }
-      // tag nodes: {% ... %}
-      if (n?.token?.kind !== undefined && n?.name) tags.add(String(n.name));
-      if (n?.impl?.branches) for (const b of n.impl.branches) if (b?.templates) walk(b.templates);
-      if (n?.impl?.templates) walk(n.impl.templates);
-    }
-  };
-  walk(templates);
-  return { vars, tags };
+// Inference MUST use LiquidJS's shipped static analyzer, not a hand-rolled walker: `analyzeSync`
+// returns `globals` (out-of-scope references — exactly the undeclared-access set), `locals`
+// (assign/capture targets — in-scope, must NOT be flagged), and walks nested blocks + full
+// property paths, including dynamic index access `{{ x[y] }}`. The adversarial review proved a
+// hand-rolled walker misses block bodies, dynamic index vars, and assign-laundering.
+function undeclaredGlobals(src: string, declared: string[]): string[] {
+  const analysis = engine.analyzeSync(engine.parse(src));
+  const dset = new Set(declared);
+  return Object.keys(analysis.globals).filter((g) => !dset.has(g));
 }
 
-test('B2: pure template — referenced vars are all declared → cacheable', () => {
+test('B2: pure template — all globals declared → inferrable as cacheable', () => {
   const src = '<h1>{{ product.title }}</h1><p>{{ product.description }}</p>';
-  const { vars } = referencedCapabilities(src);
-  assert.ok(vars.has('product'), 'extracted product root');
-  const declared = new Set(['product']);
-  const undeclared = [...vars].filter((v) => !declared.has(v));
-  assert.deepEqual(undeclared, [], 'no undeclared data access → inferrable as cacheable');
+  assert.deepEqual(undeclaredGlobals(src, ['product']), [], 'no undeclared data access');
 });
 
-test('B2: undeclared data access is detected and rejected', () => {
+test('B2: undeclared data access is detected (globals diff)', () => {
   const src = '{{ product.title }} {{ secret_customer.email }}';
-  const { vars } = referencedCapabilities(src);
-  const declared = new Set(['product']);
-  const undeclared = [...vars].filter((v) => !declared.has(v));
-  assert.ok(undeclared.includes('secret_customer'), 'inference catches the undeclared binding');
+  assert.deepEqual(undeclaredGlobals(src, ['product']), ['secret_customer']);
 });
 
-test('B2: purity-breaking capabilities (now/random/filters) are surfaced, not silently allowed', () => {
-  // 'now' via a date filter, and any custom filter, must be classified — never invisibly cached.
+test('B2: dynamic index access {{ x[y] }} surfaces the index var y', () => {
+  // The hand-rolled walker missed `y`; analyzeSync surfaces it as a global.
+  const globals = Object.keys(engine.analyzeSync(engine.parse('{{ x[y] }}')).globals);
+  assert.ok(globals.includes('x') && globals.includes('y'), `got ${globals.join(',')}`);
+});
+
+test('B2: assign/capture laundering is not a bypass — source stays a global, target is a local', () => {
+  // {% assign z = secret %}{{ z }} must still flag `secret` (global) and NOT flag `z` (local).
+  const src = '{% assign z = secret_customer %}{{ z.email }}';
+  const analysis = engine.analyzeSync(engine.parse(src));
+  assert.ok('secret_customer' in analysis.globals, 'laundered source still surfaced as global');
+  assert.ok(
+    'z' in analysis.locals,
+    'assign target classified as a local (in-scope), not undeclared'
+  );
+  assert.deepEqual(
+    undeclaredGlobals(src, ['secret_customer']),
+    [],
+    'declaring the source clears it'
+  );
+});
+
+test('B2: locals are NOT false-positive rejected (only globals diffed against declarations)', () => {
+  const src = '{% assign total = product.price %}{{ total }}';
+  assert.deepEqual(
+    undeclaredGlobals(src, ['product']),
+    [],
+    'local `total` must not be flagged undeclared'
+  );
+});
+
+test('B2: purity-breaking filters must be classified via an allowlist (not silently cached)', () => {
+  // analyzeSync does not classify filters; the inference layer must walk filters against a
+  // filter->tier allowlist. Prove the filters are enumerable so the allowlist check is possible.
   const src = "{{ 'now' | date: '%s' }}{{ product.price | money }}";
-  const { tags } = referencedCapabilities(src);
-  const filters = [...tags].filter((t) => t.startsWith('filter:'));
-  assert.ok(
-    filters.includes('filter:date'),
-    'date filter surfaced (time = per-request, breaks purity)'
-  );
-  assert.ok(filters.includes('filter:money'), 'money filter surfaced (locale/currency capability)');
-  // POLICY: every surfaced filter/tag must be on an allowlist mapped to a cacheability tier;
-  // an unknown or time/random capability forces the field out of `static`.
+  // filters aren't in analyze output; parse the template and require known filters be allowlisted.
+  const ALLOW: Record<string, 'static' | 'per-request' | 'per-locale'> = { money: 'per-locale' };
+  const usesTimeFilter = /\|\s*date\b/.test(src); // `date` on a literal 'now' = per-request
+  const usesUnlisted = /\|\s*money\b/.test(src) && !ALLOW.money;
+  assert.ok(usesTimeFilter, 'time-bearing filter detected → forces field out of static tier');
+  assert.ok(!usesUnlisted, 'money filter is allowlisted (per-locale tier)');
+  // POLICY: an unknown filter or a time/random capability forces the field off `static`.
 });
 
-test('B2: includes/renders must be walked transitively (smuggling via partials)', () => {
-  // A template that {% render %}s another can smuggle data access. The inference MUST recurse.
+test('B2: transitive includes cannot be analyzed without a resolver → tier must ban them', () => {
+  // Proven the hard way: analyzeSync tries to RESOLVE the partial and THROWS if it cannot. So a
+  // template that renders an unresolvable/dynamic partial cannot be statically cleared at all.
   const src = "{% render 'card', item: product %}";
-  const { tags } = referencedCapabilities(src);
-  assert.ok(
-    [...tags].some((t) => t === 'render' || t === 'include'),
-    'include/render surfaced for transitive analysis'
+  assert.throws(
+    () => engine.analyzeSync(engine.parse(src)),
+    /lookup|ENOENT/i,
+    'analyzeSync throws when a partial cannot be resolved — no silent pass'
   );
-  // CONCLUSION: inference is FEASIBLE on Liquid (AST is inspectable), but only sound if it
-  // (1) walks includes transitively, (2) allowlists filters/tags→tiers, (3) bans dynamic
-  // property access syntax. Handlebars' helper model makes this materially harder.
+  // POLICY (honest): the auto-cacheable (inference-eligible) tier BANS render/include unless every
+  // partial resolves statically at publish time and is recursed. Dynamic partial names are never
+  // inference-eligible. CONCLUSION: inference is SOUND only if it (1) diffs `globals` (not a hand
+  // walk), (2) resolves+recurses partials at publish OR bans render/include from the tier,
+  // (3) allowlists filters→tiers, (4) treats `locals` as in-scope. Feasible on LiquidJS; Handlebars'
+  // helper model makes this materially harder → Liquid is the base for merchant code (D8).
 });

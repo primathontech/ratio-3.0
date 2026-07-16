@@ -9,6 +9,11 @@ interface Rel {
   tenantId: string;
   status: string;
   manifest: Manifest;
+  indexChecksum?: string;
+}
+
+function canon(path: string): string {
+  return new URL('https://x' + path).pathname.replace(/\/$/, '') || '/';
 }
 
 export class FakeReleaseDB implements ReleaseDB {
@@ -20,20 +25,43 @@ export class FakeReleaseDB implements ReleaseDB {
 
   async commit(tenantId: string, routes: RouteInput[], themeVersion: string): Promise<number> {
     this.queries++;
+    const paths = routes.map((r) => canon(r.path));
+    // (H-5) reject duplicate canonical paths in the same commit — a dupe would make the verify
+    // count check unsatisfiable (index dedupes by key, manifest.routes would not).
+    const dupes = paths.filter((p, i) => paths.indexOf(p) !== i);
+    if (dupes.length)
+      throw new Error('duplicate canonical path in release: ' + [...new Set(dupes)].join(', '));
+
     const releaseId = ++this.seq; // global monotonic
-    const manifest: Manifest = {
-      releaseId,
-      tenantId,
-      routes: routes.map((r) => new URL('https://x' + r.path).pathname.replace(/\/$/, '') || '/'),
-      themeVersion,
-    };
+    // (B-3) deletedPaths = paths in the tenant's latest prior release that are absent now.
+    const priorRoutes = this.latestRoutes(tenantId);
+    const nowSet = new Set(paths);
+    const deletedPaths = priorRoutes.filter((p) => !nowSet.has(p));
+
+    const manifest: Manifest = { releaseId, tenantId, routes: paths, deletedPaths, themeVersion };
     // atomic: release row + outbox row together
     this.rels.set(releaseId, { releaseId, tenantId, status: 'building', manifest });
     this.outbox.push({ releaseId, tenantId, state: 'pending' });
     return releaseId;
   }
+  private latestRoutes(tenantId: string): string[] {
+    let latest: Rel | null = null;
+    for (const [, r] of this.rels)
+      if (r.tenantId === tenantId && (!latest || r.releaseId > latest.releaseId)) latest = r;
+    return latest ? latest.manifest.routes : [];
+  }
   async getManifest(releaseId: number) {
     return this.rels.get(releaseId)?.manifest ?? null;
+  }
+  async getStatus(releaseId: number) {
+    return this.rels.get(releaseId)?.status ?? null;
+  }
+  async setIndexChecksum(releaseId: number, hex: string) {
+    const r = this.rels.get(releaseId);
+    if (r) r.indexChecksum = hex;
+  }
+  async getIndexChecksum(releaseId: number) {
+    return this.rels.get(releaseId)?.indexChecksum ?? null;
   }
   async setStatus(releaseId: number, status: string) {
     const r = this.rels.get(releaseId);
