@@ -6,12 +6,12 @@ workers_dev = true
 
 # DATABASE_URL is a secret, set via `wrangler secret put DATABASE_URL` (done in CI).
 
-# S2/KV host->tenant routing. Create the namespace, then uncomment with its id (leaving this
-# commented means the Worker has no TENANTS binding and falls back to DB — current behavior):
-#   wrangler kv namespace create TENANTS
-# [[kv_namespaces]]
-# binding = "TENANTS"
-# id = "<namespace-id>"
+# S2/KV host->tenant routing (namespace created 2026-07-15). The edge reads host:{host} from
+# KV, DB on miss, then populates (see lookupTenant); the control plane write-throughs on domain
+# verify/remove. Binding is native — no token needed at the edge for reads.
+[[kv_namespaces]]
+binding = "TENANTS"
+id = "02d5c63b1a3c42608e0d7b707837b41a"
 
 [observability]
 enabled = true
