@@ -25,6 +25,62 @@ export function cfConfig(): CfConfig | null {
   };
 }
 
+// S2/KV edge-map write-through (Decision #7). The control plane pushes the verified
+// host->tenant mapping into Workers KV so the edge resolves without a per-request DB hit.
+export interface KvConfig {
+  token: string;
+  accountId: string;
+  namespaceId: string;
+}
+// Null unless fully configured — the write-through then no-ops (the edge still populates KV
+// on miss with a TTL backstop, and Postgres stays source of truth), so nothing breaks until
+// the KV namespace is wired.
+export function kvConfig(): KvConfig | null {
+  const token = process.env.CLOUDFLARE_API_TOKEN;
+  const accountId = process.env.CF_ACCOUNT_ID;
+  const namespaceId = process.env.CF_KV_NAMESPACE_ID;
+  if (!token || !accountId || !namespaceId) return null;
+  return { token, accountId, namespaceId };
+}
+
+const kvValuePath = (cfg: KvConfig, host: string) =>
+  `/accounts/${cfg.accountId}/storage/kv/namespaces/${cfg.namespaceId}/values/` +
+  encodeURIComponent(`host:${host.toLowerCase()}`);
+
+// Write-through TTL backstop (S2 Decision #3: "push-on-change + TTL fallback"). Matches the
+// edge's own positive-populate TTL so a stale key — e.g. a control-plane unpublish that failed
+// silently — self-heals within an hour: the key expires, the edge misses, and re-reads the
+// authoritative verified=true row from Postgres.
+const KV_WRITETHROUGH_TTL = 3600;
+
+// Publish a VERIFIED mapping (H1 — callers must confirm the DB actually verified first). Value
+// shape matches the edge reader (lookupTenant): {"t": tenantId}.
+export async function publishTenantMapping(
+  cfg: KvConfig,
+  host: string,
+  tenantId: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  await fetchImpl(CF_API + kvValuePath(cfg, host) + `?expiration_ttl=${KV_WRITETHROUGH_TTL}`, {
+    method: 'PUT',
+    headers: { authorization: `Bearer ${cfg.token}` },
+    body: JSON.stringify({ t: tenantId }),
+  });
+}
+
+// Drop a mapping (host removed, reclaimed by another tenant, or store deleted). Suspension is
+// still enforced authoritatively at the origin (status check) — this is fast-path only.
+export async function unpublishTenantMapping(
+  cfg: KvConfig,
+  host: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<void> {
+  await fetchImpl(CF_API + kvValuePath(cfg, host), {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${cfg.token}` },
+  });
+}
+
 export interface DnsRecord {
   type: string; // CNAME | ALIAS | TXT — accurate for apex vs subdomain
   name: string; // full record name (FQDN)
