@@ -220,11 +220,15 @@ export async function markDomainConnected(tenantId: string, host: string): Promi
 // (DV succeeded). Bound to the connector (R10-H1): a tenant that merely reclaimed the row —
 // without running its own connect — is NOT its connector, so it can't inherit the prior
 // holder's DV. Idempotent; only ever flips false → true.
-export async function markDomainVerified(tenantId: string, host: string): Promise<void> {
-  await pool.query(
+// Returns whether it actually flipped a row — the caller (edge-KV write-through, H1) must
+// publish ONLY on a true here, never merely because Cloudflare reported the hostname active:
+// a tenant that reclaimed the row but is not its connector no-ops and must not be published.
+export async function markDomainVerified(tenantId: string, host: string): Promise<boolean> {
+  const { rowCount } = await pool.query(
     'UPDATE domains SET verified = true WHERE tenant_id = $1 AND host = $2 AND connected_by = $1',
     [tenantId, host]
   );
+  return (rowCount ?? 0) > 0;
 }
 
 export async function removeDomain(tenantId: string, host: string): Promise<boolean> {

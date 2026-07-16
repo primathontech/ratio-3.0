@@ -34,7 +34,7 @@ test('publishTenantMapping PUTs {"t":tenantId} to the url-encoded host key', asy
   assert.strictEqual(calls.length, 1);
   assert.match(
     calls[0].url,
-    /\/accounts\/acct1\/storage\/kv\/namespaces\/ns1\/values\/host%3Aacme\.ratiodev\.in$/
+    /\/accounts\/acct1\/storage\/kv\/namespaces\/ns1\/values\/host%3Aacme\.ratiodev\.in\?expiration_ttl=3600$/
   );
   assert.strictEqual(calls[0].method, 'PUT');
   assert.strictEqual(calls[0].body, JSON.stringify({ t: 't_acme' }));

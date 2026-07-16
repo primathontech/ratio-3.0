@@ -497,11 +497,14 @@ export function createApp(
         // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
         // claim to verified. Skip the write if it's already verified (L-2). (H1)
         if (s?.status === 'active' && !verified.has(host)) {
-          await markDomainVerified(id, host);
-          // Write-through the now-verified mapping to the edge KV (S2 Decision #7). Best-effort:
-          // the edge still populates on miss, so a failed push self-heals within the TTL.
+          // Publish to the edge KV ONLY when the DB actually flipped verified for THIS tenant
+          // (H1). markDomainVerified no-ops for a tenant that reclaimed the row but isn't its
+          // connector; publishing on the CF status alone would route the host to a tenant
+          // Postgres never verified — a cross-tenant hijack. Best-effort; the edge repopulates
+          // on miss, so a failed push self-heals within the TTL.
+          const nowVerified = await markDomainVerified(id, host);
           const kv = kvConfig();
-          if (kv) void publishTenantMapping(kv, host, id).catch(() => {});
+          if (nowVerified && kv) void publishTenantMapping(kv, host, id).catch(() => {});
         }
         return {
           host,

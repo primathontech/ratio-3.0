@@ -47,16 +47,21 @@ const kvValuePath = (cfg: KvConfig, host: string) =>
   `/accounts/${cfg.accountId}/storage/kv/namespaces/${cfg.namespaceId}/values/` +
   encodeURIComponent(`host:${host.toLowerCase()}`);
 
-// Publish a VERIFIED mapping. Persistent (no TTL): the control plane owns the key lifecycle;
-// the edge's on-miss populate is what carries the ~1h backstop TTL. Value shape matches the
-// edge reader (lookupTenant): {"t": tenantId}.
+// Write-through TTL backstop (S2 Decision #3: "push-on-change + TTL fallback"). Matches the
+// edge's own positive-populate TTL so a stale key — e.g. a control-plane unpublish that failed
+// silently — self-heals within an hour: the key expires, the edge misses, and re-reads the
+// authoritative verified=true row from Postgres.
+const KV_WRITETHROUGH_TTL = 3600;
+
+// Publish a VERIFIED mapping (H1 — callers must confirm the DB actually verified first). Value
+// shape matches the edge reader (lookupTenant): {"t": tenantId}.
 export async function publishTenantMapping(
   cfg: KvConfig,
   host: string,
   tenantId: string,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  await fetchImpl(CF_API + kvValuePath(cfg, host), {
+  await fetchImpl(CF_API + kvValuePath(cfg, host) + `?expiration_ttl=${KV_WRITETHROUGH_TTL}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify({ t: tenantId }),
