@@ -13,5 +13,11 @@ workers_dev = true
 binding = "TENANTS"
 id = "02d5c63b1a3c42608e0d7b707837b41a"
 
+# S4 D-R8: durable per-tenant metrics sink (cache/stale/error/latency), queryable via the AE SQL
+# API. Bounded cardinality — the data point is indexed by tenant (see buildMetricPoint). The code
+# is optional (no-op if unbound), so this can be removed if AE isn't enabled on the account.
+[[analytics_engine_datasets]]
+binding = "METRICS"
+
 [observability]
 enabled = true

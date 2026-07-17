@@ -16,6 +16,7 @@ interface Env {
   ORIGIN_URL?: string;
   EDGE_SECRET?: string;
   TENANTS?: TenantKV;
+  METRICS?: AnalyticsEngineDataset;
 }
 interface TenantRow {
   id: string;
@@ -176,16 +177,16 @@ app.onError(() => storeUnavailable());
 app.use('*', async (c, next) => {
   const start = Date.now();
   await next();
-  logAccess(
-    buildAccessLog({
-      tenantId: c.get('tenantId') ?? null,
-      method: c.req.method,
-      url: c.req.url,
-      status: c.res.status,
-      stale: c.res.headers.get('x-ratio-stale') === '1',
-      ms: Date.now() - start,
-    })
-  );
+  const common = {
+    tenantId: c.get('tenantId') ?? null,
+    status: c.res.status,
+    stale: c.res.headers.get('x-ratio-stale') === '1',
+    ms: Date.now() - start,
+  };
+  const path = new URL(c.req.url).pathname;
+  logAccess(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
+  // Durable, queryable per-tenant metrics — no-op if the dataset isn't bound (local / unprovisioned).
+  c.env.METRICS?.writeDataPoint(buildMetricPoint({ ...common, path }));
 });
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -279,6 +280,29 @@ export function buildAccessLog(input: {
 function logAccess(record: AccessLog): void {
   // Structured JSON to the Workers log sink — this is the logger, not stray debug output.
   console.log(JSON.stringify(record));
+}
+
+// CF-native durable metrics sink (Workers Analytics Engine): queryable outside the isolate, the
+// complement to the in-memory createMetrics seam. Minimal local interface (matches the TenantKV /
+// EdgeCache style) so we don't depend on the full workers-types.
+export interface AnalyticsEngineDataset {
+  writeDataPoint(point: { blobs?: string[]; doubles?: number[]; indexes?: string[] }): void;
+}
+export function buildMetricPoint(input: {
+  tenantId: string | null;
+  path: string;
+  status: number;
+  stale: boolean;
+  ms: number;
+}): { blobs: string[]; doubles: number[]; indexes: string[] } {
+  const tenant = input.tenantId ?? '_none';
+  return {
+    // Exactly one index = the sampling key. Tenant-bounded so per-tenant cardinality can't explode;
+    // AE samples the long tail on its own (ADR-008 D-R8 "top-N + aggregate the long tail").
+    indexes: [tenant],
+    blobs: [tenant, input.path, input.stale ? 'stale' : 'fresh'],
+    doubles: [input.status, Math.round(input.ms), input.stale ? 1 : 0],
+  };
 }
 
 // S2/KV: host->tenant resolution reads Workers KV first (edge-local, sub-ms, and survives DB
