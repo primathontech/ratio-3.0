@@ -765,6 +765,66 @@ h2 {
 .dns-purpose {
   font-size: 11px;
 }
+/* DNS records modal — merchant-followable layout */
+.dns-intro {
+  font-size: 13px;
+  margin: 4px 0 14px;
+}
+.dns-status {
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+.dns-apex {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.dns-apex > strong {
+  font-size: 13.5px;
+}
+.dns-step-row td.dns-step {
+  padding: 14px 11px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.dns-step-row:first-child td.dns-step {
+  border-top: none;
+  padding-top: 4px;
+}
+.dns-data-row td {
+  vertical-align: middle;
+}
+.dns-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dns-cell-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.copy-btn {
+  flex: none;
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy-btn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
 
 /* Section builder --------------------------------------------------------- */
 .btn-sm {
