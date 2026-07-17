@@ -1016,6 +1016,27 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
 }
 
 // Reused by the connect dialog and the "view records" dialog.
+// Copy-to-clipboard button — DNS values (esp. long TXT tokens) are error-prone to hand-type.
+function CopyBtn({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="copy-btn"
+      aria-label={`Copy ${label}`}
+      title="Copy"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        });
+      }}
+    >
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 function DnsRecordsView({ result }: { result: DomainConnection }) {
   if (!result.records || result.records.length === 0) {
     return <div className="note">{result.note || result.error || 'Domain mapped.'}</div>;
@@ -1024,24 +1045,34 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
   return (
     <>
       {isApex && (
-        <div className="note note-warn" style={{ marginBottom: 10 }}>
-          <strong>{result.host}</strong> is a root domain — most registrars (including GoDaddy)
-          can't put a routing record at the root. The standard fix: <strong>forward the root to
-          https://www.{result.host}</strong> and connect the <span className="mono">www</span>{' '}
-          version instead. (Only providers with ALIAS/ANAME or CNAME-flattening — e.g. Cloudflare
-          — can use the routing record below at the root.) The <span className="mono">TXT</span>{' '}
-          records still apply as-is.
+        <div className="note note-warn dns-apex">
+          <strong>Heads-up: {result.host} is a root (naked) domain.</strong>
+          <span>
+            Most domain providers (GoDaddy, Namecheap, …) can&apos;t point a root domain straight at
+            us.
+          </span>
+          <span>
+            <strong>Recommended:</strong> connect <span className="mono">www.{result.host}</span>{' '}
+            instead, then set your root <span className="mono">{result.host}</span> to{' '}
+            <em>forward / redirect</em> to <span className="mono">https://www.{result.host}</span>.
+          </span>
+          <span className="muted">
+            Advanced: if your provider supports ALIAS/ANAME or CNAME-flattening (e.g. Cloudflare),
+            you can use the routing record below at the root instead. Either way, the{' '}
+            <span className="mono">TXT</span> records below still apply.
+          </span>
         </div>
       )}
-      <p style={{ fontSize: 13 }}>
-        Add these records at your DNS provider for <span className="mono">{result.host}</span>. Most
-        UIs ask for <em>Host/Name</em> (the part before your domain) — that's the middle column.
+      <p className="dns-intro">
+        Add these records at your domain provider for <span className="mono">{result.host}</span>.{' '}
+        <em>Host/Name</em> is the part before your domain (the middle column) — use <strong>Copy</strong>{' '}
+        so values paste in exactly.
       </p>
       <table className="dns-table">
         <colgroup>
           <col style={{ width: '62px' }} />
           <col />
-          <col style={{ width: '40%' }} />
+          <col style={{ width: '42%' }} />
           <col style={{ width: '52px' }} />
         </colgroup>
         <thead>
@@ -1055,21 +1086,31 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
         <tbody>
           {result.records.map((r, i) => (
             <Fragment key={i}>
-              <tr className="dns-data-row">
-                <td>
-                  <span className="badge">{r.type}</span>
-                </td>
-                <td className="mono dns-host">{r.host}</td>
-                <td className="mono dns-val">{r.value}</td>
-                <td className="muted">{r.ttl}</td>
-              </tr>
               {r.purpose && (
-                <tr className="dns-purpose-row">
-                  <td className="dns-purpose muted" colSpan={4}>
+                <tr className="dns-step-row">
+                  <td className="dns-step" colSpan={4}>
                     {r.purpose}
                   </td>
                 </tr>
               )}
+              <tr className="dns-data-row">
+                <td>
+                  <span className="badge">{r.type}</span>
+                </td>
+                <td className="mono dns-host">
+                  <span className="dns-cell">
+                    <span className="dns-cell-text">{r.host}</span>
+                    <CopyBtn text={r.host} label="host" />
+                  </span>
+                </td>
+                <td className="mono dns-val">
+                  <span className="dns-cell">
+                    <span className="dns-cell-text">{r.value}</span>
+                    <CopyBtn text={r.value} label="value" />
+                  </span>
+                </td>
+                <td className="muted">{r.ttl}</td>
+              </tr>
             </Fragment>
           ))}
         </tbody>
@@ -1105,10 +1146,11 @@ function DomainRecordsDialog({
         {result && (
           <>
             {result.status && (
-              <p className="muted" style={{ fontSize: 12.5 }}>
-                Status: <strong>{result.status}</strong>
-                {result.sslStatus ? ` · SSL: ${result.sslStatus}` : ''}
-              </p>
+              <div className={result.status === 'active' ? 'note note-ok dns-status' : 'note dns-status'}>
+                {result.status === 'active'
+                  ? '✓ Live — your domain is connected and serving.'
+                  : 'Waiting on your DNS. Add the records below; once they propagate we verify ownership and issue the SSL certificate automatically — usually 5–30 minutes, occasionally a few hours.'}
+              </div>
             )}
             <DnsRecordsView result={result} />
           </>
