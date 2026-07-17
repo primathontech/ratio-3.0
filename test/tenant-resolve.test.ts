@@ -73,6 +73,17 @@ test('S4 Tier-2: warm KV entry resolves even when Postgres is down (routing surv
   assert.strictEqual(await lookupTenant('acme.ratiodev.in', kv, dbDown), 't_acme');
 });
 
+test(
+  'S4 D-R3: a hung DB query times out and does NOT populate KV (transient, not a cached 404)',
+  { timeout: 1000 },
+  async () => {
+    const { kv, puts } = fakeKV();
+    const hangs = () => new Promise<string | null>(() => {}); // never resolves
+    await assert.rejects(lookupTenant('acme.ratiodev.in', kv, hangs, 10));
+    assert.strictEqual(puts.length, 0, 'must not cache a negative on a DB timeout');
+  }
+);
+
 test('second lookup after populate is served from KV (DB queried once)', async () => {
   const { kv } = fakeKV();
   const db = spyDb('t_acme');
