@@ -76,6 +76,38 @@ function markStale(res: Response): Response {
   h.set('x-ratio-stale', '1');
   return new Response(res.body, { status: res.status, headers: h });
 }
+// Per-dependency circuit breaker (ADR-008 D-R3). After `threshold` consecutive failures it opens;
+// while open, callers skip the dead dependency entirely (no timeout wait) for `cooldownMs`, then
+// half-open for one trial (success closes, failure re-opens). State is module-scoped → per-isolate:
+// each Cloudflare isolate learns on its own, which is enough (no global consensus needed). `now`
+// is injected for deterministic tests and defaults to the wall clock in the Worker.
+export interface CircuitBreaker {
+  canAttempt(): boolean;
+  onSuccess(): void;
+  onFailure(): void;
+}
+export function createCircuitBreaker(
+  threshold: number,
+  cooldownMs: number,
+  now: () => number = () => Date.now()
+): CircuitBreaker {
+  let failures = 0;
+  let openedAt: number | null = null;
+  return {
+    canAttempt() {
+      if (openedAt === null) return true;
+      return now() - openedAt >= cooldownMs;
+    },
+    onSuccess() {
+      failures = 0;
+      openedAt = null;
+    },
+    onFailure() {
+      failures += 1;
+      if (failures >= threshold) openedAt = now();
+    },
+  };
+}
 // Origin call budget (ADR-008 D-R3). A hung origin (slow, not dead) is the common failure —
 // without a deadline the edge request hangs with it. Aborting on timeout turns "hung" into a
 // rejection, which the stale-if-error catch below already handles → the cached page serves fast.
@@ -86,30 +118,47 @@ export async function fetchViaOrigin(
   init: RequestInit & { duplex?: 'half' },
   cache: EdgeCache | undefined,
   doFetch: typeof fetch = fetch,
-  timeoutMs: number = ORIGIN_TIMEOUT_MS
+  timeoutMs: number = ORIGIN_TIMEOUT_MS,
+  breaker?: CircuitBreaker
 ): Promise<Response> {
   const canServeStale = (req.method === 'GET' || req.method === 'HEAD') && !!cache;
+  const serveStale = async (): Promise<Response | null> => {
+    if (!canServeStale) return null;
+    const stale = await cache!.match(req);
+    return stale ? markStale(stale) : null;
+  };
+
+  // Breaker open → don't even attempt the dead origin; serve stale now, skipping the timeout wait.
+  if (breaker && !breaker.canAttempt()) {
+    const stale = await serveStale();
+    if (stale) return stale;
+    throw new Error('origin circuit open');
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await doFetch(target, { ...init, signal: controller.signal });
-    if (res.status >= 500 && canServeStale) {
-      const stale = await cache!.match(req);
-      if (stale) return markStale(stale);
-    } else if (canServeStale && res.ok) {
-      // put rejects on no-store / Set-Cookie responses — those simply aren't stale-servable.
-      try {
-        await cache!.put(req, res.clone());
-      } catch {
-        /* uncacheable — skip */
+    if (res.status >= 500) {
+      breaker?.onFailure();
+      const stale = await serveStale();
+      if (stale) return stale;
+    } else {
+      breaker?.onSuccess();
+      if (canServeStale && res.ok) {
+        // put rejects on no-store / Set-Cookie responses — those simply aren't stale-servable.
+        try {
+          await cache!.put(req, res.clone());
+        } catch {
+          /* uncacheable — skip */
+        }
       }
     }
     return res;
   } catch (err) {
-    if (canServeStale) {
-      const stale = await cache!.match(req);
-      if (stale) return markStale(stale);
-    }
+    breaker?.onFailure();
+    const stale = await serveStale();
+    if (stale) return stale;
     throw err;
   } finally {
     clearTimeout(timer);
@@ -221,6 +270,10 @@ async function resolveTenant(c: {
   });
 }
 
+// Shared across requests in this isolate: 5 consecutive origin failures open it for 10s, so a
+// sustained origin outage costs one isolate ~5 timeouts, not one per request (ADR-008 D-R3/D-R4).
+const originBreaker = createCircuitBreaker(5, 10_000);
+
 app.all('*', async (c) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
@@ -240,7 +293,10 @@ app.all('*', async (c) => {
       c.req.raw,
       originTarget(c.env.ORIGIN_URL, path, url.search),
       proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? ''),
-      cache
+      cache,
+      undefined,
+      undefined,
+      originBreaker
     );
     return new Response(res.body, { status: res.status, headers: publicHeaders(res.headers) });
   }

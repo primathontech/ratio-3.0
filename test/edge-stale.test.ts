@@ -4,7 +4,7 @@
 // prove the control flow without Cloudflare. See apps/edge/worker.ts::fetchViaOrigin.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { fetchViaOrigin, type EdgeCache } from '../apps/edge/worker';
+import { fetchViaOrigin, createCircuitBreaker, type EdgeCache } from '../apps/edge/worker';
 
 function memCache(seed?: { req: Request; res: Response }): EdgeCache {
   const store = new Map<string, Response>();
@@ -118,6 +118,59 @@ test(
     );
   }
 );
+
+test('D-R3 breaker: once the origin trips the breaker, later requests serve stale WITHOUT calling it', async () => {
+  const req = new Request('https://shop.example/');
+  const cache = memCache({ req, res: new Response('cached', { status: 200 }) });
+  let calls = 0;
+  const failing = (async () => {
+    calls += 1;
+    throw new Error('origin down');
+  }) as unknown as typeof fetch;
+  let t = 0;
+  const breaker = createCircuitBreaker(1, 1000, () => t);
+
+  // 1st: origin is tried, fails, serves stale, trips the breaker.
+  const first = await fetchViaOrigin(
+    req,
+    'https://origin/',
+    { method: 'GET' },
+    cache,
+    failing,
+    50,
+    breaker
+  );
+  assert.strictEqual(calls, 1);
+  assert.strictEqual(first.headers.get('x-ratio-stale'), '1');
+
+  // 2nd (breaker open): origin is NOT called; stale served immediately.
+  const second = await fetchViaOrigin(
+    req,
+    'https://origin/',
+    { method: 'GET' },
+    cache,
+    failing,
+    50,
+    breaker
+  );
+  assert.strictEqual(calls, 1, 'origin must not be called while the breaker is open');
+  assert.strictEqual(second.headers.get('x-ratio-stale'), '1');
+
+  // After cooldown: half-open, origin retried; on success the breaker closes.
+  t = 1000;
+  const ok = (async () => new Response('fresh', { status: 200 })) as unknown as typeof fetch;
+  const third = await fetchViaOrigin(
+    req,
+    'https://origin/',
+    { method: 'GET' },
+    cache,
+    ok,
+    50,
+    breaker
+  );
+  assert.strictEqual(third.headers.get('x-ratio-stale'), null);
+  assert.strictEqual(await third.text(), 'fresh');
+});
 
 test('a successful GET is stored so it can be served stale later', async () => {
   const req = new Request('https://shop.example/');
