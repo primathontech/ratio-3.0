@@ -166,18 +166,35 @@ export interface TenantKV {
 // hostnames can't fall through to the DB on every request (a load-amplification guard).
 const KV_TTL_HIT = 3600;
 const KV_TTL_MISS = 60;
+// The routing DB lookup runs on every KV miss; without a deadline a hung Neon query hangs the
+// whole request (ADR-008 D-R3). On timeout we throw and DO NOT populate KV — caching a negative
+// on a transient blip would 404 a real store for KV_TTL_MISS seconds. The pending query can't be
+// cancelled (Neon over race), so it's left to GC; correctness is in not persisting its result.
+const DB_TIMEOUT_MS = 800;
+async function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 export async function lookupTenant(
   host: string,
   kv: TenantKV | undefined,
-  dbQuery: (host: string) => Promise<string | null>
+  dbQuery: (host: string) => Promise<string | null>,
+  dbTimeoutMs: number = DB_TIMEOUT_MS
 ): Promise<string | null> {
   const key = `host:${host}`;
   if (kv) {
     const cached = await kv.get(key);
     if (cached !== null) return (JSON.parse(cached) as { t: string | null }).t;
   }
-  const tenantId = await dbQuery(host);
+  const tenantId = await withTimeout(dbQuery(host), dbTimeoutMs, 'tenant db lookup');
   if (kv) {
     await kv.put(key, JSON.stringify({ t: tenantId }), {
       expirationTtl: tenantId ? KV_TTL_HIT : KV_TTL_MISS,
