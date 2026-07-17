@@ -165,11 +165,28 @@ export async function fetchViaOrigin(
   }
 }
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new Hono<{ Bindings: Env; Variables: { tenantId?: string } }>();
 
 // D-R6: any unhandled error while serving (uncached origin failure, routing/DB failure, or an
 // unexpected throw) becomes the branded 503 — never a raw 500 or leaked internal detail.
 app.onError(() => storeUnavailable());
+
+// D-R8: emit one structured access record per request (after the response is known). Runs for
+// every route incl. errors (onError produces a response, then this logs it).
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  await next();
+  logAccess(
+    buildAccessLog({
+      tenantId: c.get('tenantId') ?? null,
+      method: c.req.method,
+      url: c.req.url,
+      status: c.res.status,
+      stale: c.res.headers.get('x-ratio-stale') === '1',
+      ms: Date.now() - start,
+    })
+  );
+});
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
@@ -224,6 +241,44 @@ export function storeUnavailable(): Response {
       'referrer-policy': 'strict-origin-when-cross-origin',
     },
   });
+}
+
+// S4 D-R8 (observability down payment): one structured, tenant-scoped access record per request,
+// emitted to the Workers log sink (wrangler [observability] enabled). The record is a FIXED field
+// allowlist — header values, cookies, secrets, and the query string (which can carry tokens/PII)
+// can never enter it by construction. This alone yields per-tenant error rate, stale-serve rate
+// (a cache-health proxy), and edge latency without any new infra. Metrics backend, traces, and
+// alerting (the rest of D-R8) remain owed.
+export interface AccessLog {
+  t: 'access';
+  tenant: string | null;
+  method: string;
+  path: string;
+  status: number;
+  stale: boolean;
+  ms: number;
+}
+export function buildAccessLog(input: {
+  tenantId: string | null;
+  method: string;
+  url: string;
+  status: number;
+  stale: boolean;
+  ms: number;
+}): AccessLog {
+  return {
+    t: 'access',
+    tenant: input.tenantId,
+    method: input.method,
+    path: new URL(input.url).pathname, // pathname only — never the query string
+    status: input.status,
+    stale: input.stale,
+    ms: Math.round(input.ms),
+  };
+}
+function logAccess(record: AccessLog): void {
+  // Structured JSON to the Workers log sink — this is the logger, not stray debug output.
+  console.log(JSON.stringify(record));
 }
 
 // S2/KV: host->tenant resolution reads Workers KV first (edge-local, sub-ms, and survives DB
@@ -306,6 +361,7 @@ app.all('*', async (c) => {
   if (path.startsWith('/__')) return c.text('not found', 404);
   const tenantId = await resolveTenant(c);
   if (!tenantId) return c.html('<h1>Store not found</h1><p>No store for this domain.</p>', 404);
+  c.set('tenantId', tenantId); // for the D-R8 access log
 
   // path B: inject the trusted header + proxy to the private container origin. EDGE_SECRET
   // has no default — if unset the origin refuses (fail closed) rather than accept a secret
