@@ -24,6 +24,15 @@ const throws = (async () => {
   throw new Error('origin unreachable');
 }) as unknown as typeof fetch;
 
+// Never resolves on its own — the only way out is the caller aborting via init.signal.
+// Lets us prove the timeout deterministically (outcome depends on abort, not on wall-clock).
+const hangsUntilAborted = ((_url: string, init?: RequestInit) =>
+  new Promise((_resolve, reject) => {
+    init?.signal?.addEventListener('abort', () =>
+      reject(new DOMException('The operation was aborted', 'AbortError'))
+    );
+  })) as unknown as typeof fetch;
+
 test('Tier-1: serves stale from cache when the origin throws', async () => {
   const req = new Request('https://shop.example/');
   const good = new Response('<h1>last good</h1>', {
@@ -61,6 +70,54 @@ test('writes (POST /cart) never serve stale — origin failure propagates', asyn
     fetchViaOrigin(req, 'https://origin/cart', { method: 'POST' }, cache, throws)
   );
 });
+
+test(
+  'D-R3: a hung origin aborts on timeout and serves stale (fast, no hang)',
+  { timeout: 1000 },
+  async () => {
+    const req = new Request('https://shop.example/');
+    const cache = memCache({ req, res: new Response('cached', { status: 200 }) });
+    const res = await fetchViaOrigin(
+      req,
+      'https://origin/',
+      { method: 'GET' },
+      cache,
+      hangsUntilAborted,
+      10
+    );
+    assert.strictEqual(res.headers.get('x-ratio-stale'), '1');
+    assert.strictEqual(await res.text(), 'cached');
+  }
+);
+
+test(
+  'D-R3: a fast origin under budget is not aborted and serves fresh',
+  { timeout: 1000 },
+  async () => {
+    const req = new Request('https://shop.example/');
+    const cache = memCache();
+    const ok = (async () =>
+      new Response('fresh', {
+        status: 200,
+        headers: { 'cache-control': 'public, s-maxage=300' },
+      })) as unknown as typeof fetch;
+    const res = await fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, ok, 1000);
+    assert.strictEqual(res.headers.get('x-ratio-stale'), null);
+    assert.strictEqual(await res.text(), 'fresh');
+  }
+);
+
+test(
+  'D-R3: a hung origin with no cached copy fails fast rather than hanging',
+  { timeout: 1000 },
+  async () => {
+    const req = new Request('https://shop.example/');
+    const cache = memCache();
+    await assert.rejects(
+      fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, hangsUntilAborted, 10)
+    );
+  }
+);
 
 test('a successful GET is stored so it can be served stale later', async () => {
   const req = new Request('https://shop.example/');
