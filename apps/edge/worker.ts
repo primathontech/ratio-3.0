@@ -60,6 +60,53 @@ export function proxyInit(
   return init;
 }
 
+// S4 Tier-1 (read survival): the edge keeps a last-good copy of cacheable GETs. If the origin
+// is unreachable or 5xxs, we serve that copy (marked x-ratio-stale) rather than failing the
+// whole request. Writes are never served stale — a durable mutation can't be faked from cache,
+// so a failed write propagates honestly (Tier-2). cache is caches.default in the Worker;
+// injectable here so the behaviour is provable in-process. On the wire the stored copy is kept
+// past its edge-TTL for this fallback; freshness on the happy path stays governed by the
+// origin's Cache-Control.
+export interface EdgeCache {
+  match(req: Request): Promise<Response | undefined>;
+  put(req: Request, res: Response): Promise<void>;
+}
+function markStale(res: Response): Response {
+  const h = new Headers(res.headers);
+  h.set('x-ratio-stale', '1');
+  return new Response(res.body, { status: res.status, headers: h });
+}
+export async function fetchViaOrigin(
+  req: Request,
+  target: string,
+  init: RequestInit & { duplex?: 'half' },
+  cache: EdgeCache | undefined,
+  doFetch: typeof fetch = fetch
+): Promise<Response> {
+  const canServeStale = (req.method === 'GET' || req.method === 'HEAD') && !!cache;
+  try {
+    const res = await doFetch(target, init);
+    if (res.status >= 500 && canServeStale) {
+      const stale = await cache!.match(req);
+      if (stale) return markStale(stale);
+    } else if (canServeStale && res.ok) {
+      // put rejects on no-store / Set-Cookie responses — those simply aren't stale-servable.
+      try {
+        await cache!.put(req, res.clone());
+      } catch {
+        /* uncacheable — skip */
+      }
+    }
+    return res;
+  } catch (err) {
+    if (canServeStale) {
+      const stale = await cache!.match(req);
+      if (stale) return markStale(stale);
+    }
+    throw err;
+  }
+}
+
 const app = new Hono<{ Bindings: Env }>();
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
@@ -162,9 +209,12 @@ app.all('*', async (c) => {
   // that lives in the source tree. Body + safe headers are forwarded (OFCE-413). Internal
   // x-* headers from the origin are stripped before returning to the public (M-5).
   if (c.env.ORIGIN_URL) {
-    const res = await fetch(
+    const cache = (globalThis as { caches?: { default?: EdgeCache } }).caches?.default;
+    const res = await fetchViaOrigin(
+      c.req.raw,
       originTarget(c.env.ORIGIN_URL, path, url.search),
-      proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? '')
+      proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? ''),
+      cache
     );
     return new Response(res.body, { status: res.status, headers: publicHeaders(res.headers) });
   }

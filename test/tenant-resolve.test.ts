@@ -65,6 +65,14 @@ test('no KV binding → falls back to DB, no throw', async () => {
   assert.strictEqual(db.calls(), 1);
 });
 
+test('S4 Tier-2: warm KV entry resolves even when Postgres is down (routing survives DB death)', async () => {
+  const { kv } = fakeKV({ 'host:acme.ratiodev.in': JSON.stringify({ t: 't_acme' }) });
+  const dbDown = async () => {
+    throw new Error('ECONNREFUSED: postgres unreachable');
+  };
+  assert.strictEqual(await lookupTenant('acme.ratiodev.in', kv, dbDown), 't_acme');
+});
+
 test('second lookup after populate is served from KV (DB queried once)', async () => {
   const { kv } = fakeKV();
   const db = spyDb('t_acme');
