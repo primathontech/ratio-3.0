@@ -76,16 +76,23 @@ function markStale(res: Response): Response {
   h.set('x-ratio-stale', '1');
   return new Response(res.body, { status: res.status, headers: h });
 }
+// Origin call budget (ADR-008 D-R3). A hung origin (slow, not dead) is the common failure —
+// without a deadline the edge request hangs with it. Aborting on timeout turns "hung" into a
+// rejection, which the stale-if-error catch below already handles → the cached page serves fast.
+const ORIGIN_TIMEOUT_MS = 1500;
 export async function fetchViaOrigin(
   req: Request,
   target: string,
   init: RequestInit & { duplex?: 'half' },
   cache: EdgeCache | undefined,
-  doFetch: typeof fetch = fetch
+  doFetch: typeof fetch = fetch,
+  timeoutMs: number = ORIGIN_TIMEOUT_MS
 ): Promise<Response> {
   const canServeStale = (req.method === 'GET' || req.method === 'HEAD') && !!cache;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await doFetch(target, init);
+    const res = await doFetch(target, { ...init, signal: controller.signal });
     if (res.status >= 500 && canServeStale) {
       const stale = await cache!.match(req);
       if (stale) return markStale(stale);
@@ -104,6 +111,8 @@ export async function fetchViaOrigin(
       if (stale) return markStale(stale);
     }
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
