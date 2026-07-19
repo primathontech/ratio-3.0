@@ -27,15 +27,23 @@ export interface Manifest {
 }
 // The DB seam. Real impl = Postgres; tests pass an in-memory fake to drive crash points.
 export interface ReleaseDB {
-  commit(tenantId: string, routes: RouteInput[], themeVersion: string): Promise<number>; // returns releaseId, writes outbox
+  // commit PINS the rendered inputs durably (H-4): the release owns its RouteInput set so a
+  // resume/retry re-materializes from the DB, never from a caller re-supplying (possibly drifted)
+  // routes. Returns releaseId, writes the release row + outbox row in one transaction.
+  commit(tenantId: string, routes: RouteInput[], themeVersion: string): Promise<number>;
   getManifest(releaseId: number): Promise<Manifest | null>;
+  getRoutes(releaseId: number): Promise<RouteInput[] | null>; // durable content pin (H-4)
   setStatus(releaseId: number, status: string): Promise<void>;
   getStatus(releaseId: number): Promise<string | null>;
   setIndexChecksum(releaseId: number, hex: string): Promise<void>; // trusted index digest (#6)
   getIndexChecksum(releaseId: number): Promise<string | null>;
-  drainOutbox(tenantId: string): Promise<number[]>; // pending release ids, in order
+  drainOutbox(tenantId: string): Promise<number[]>; // pending release ids, ascending
   markOutboxDone(releaseId: number): Promise<void>;
   currentActive(tenantId: string): Promise<number | null>;
+  // per-tenant serialized section (H-1): real impl = SELECT ... FOR UPDATE on the tenant row /
+  // pg advisory lock. The Publisher acquires it so serialization is enforced by the state machine,
+  // not by a test/caller convention.
+  withTenantLock<T>(tenantId: string, fn: () => Promise<T>): Promise<T>;
 }
 
 const ROUTE_INDEX = (tenantId: string, releaseId: number) => `idx/${tenantId}/${releaseId}`;
@@ -57,9 +65,13 @@ export class Publisher {
   }
 
   // Phases 2+3 — materialize every response into R2, write route index, verify, mark materialized.
-  async materialize(releaseId: number, routes: RouteInput[]): Promise<void> {
+  // Routes come from the DURABLE PIN (H-4), not a caller argument, so a resume re-renders exactly
+  // what was committed. Idempotent: re-running overwrites the same keyed objects + index.
+  async materialize(releaseId: number): Promise<void> {
     const manifest = await this.db.getManifest(releaseId);
     if (!manifest) throw new Error('no manifest for release ' + releaseId);
+    const routes = await this.db.getRoutes(releaseId);
+    if (!routes) throw new Error('no pinned content for release ' + releaseId);
 
     const index: Record<string, { key: string; checksum: string; status: number }> = {};
     let i = 0;
@@ -139,14 +151,18 @@ export class Publisher {
     if (!manifest) throw new Error('no manifest');
     const status = await this.db.getStatus(releaseId);
     if (status === 'active') return; // (#3) idempotent no-op — re-activating must not corrupt `previous`
-    if (status !== 'materialized')
-      throw new Error(
-        `activation barrier: release ${releaseId} is '${status}', not 'materialized'`
-      );
+    // barrier (H-2): only a verification-complete release may activate. 'activating' = a resumed
+    // half-done flip (crash after intent, before 'active') — allowed to finish; anything else refused.
+    if (status !== 'materialized' && status !== 'activating')
+      throw new Error(`activation barrier: release ${releaseId} is '${status}', not materialized`);
     const previous = await this.db.currentActive(manifest.tenantId);
     // pointer never regresses (P1): refuse to activate an older release over a newer active one
     if (previous !== null && releaseId < previous)
       throw new Error(`pointer regression: ${releaseId} < active ${previous}`);
+    // (#7) record intent BEFORE the KV flip: a mid-hostkeys crash then leaves a durable
+    // 'activating' marker, so GC/retention pin this release (and its `previous`) and a resume
+    // knows to finish the flip rather than treating the release as merely 'materialized'.
+    await this.db.setStatus(releaseId, 'activating');
     const rec = JSON.stringify({
       status: 'active',
       tenantId: manifest.tenantId,
@@ -163,13 +179,40 @@ export class Publisher {
     await this.db.markOutboxDone(releaseId);
   }
 
-  // Full publish, resumable. A serialized per-tenant caller drives this; on crash, re-invoke:
-  // each phase no-ops if already done, so retries are idempotent and converge (P1/P2).
+  // Full publish — the Publisher OWNS the per-tenant lock (H-1), so serialization is enforced here,
+  // not by the caller. commit pins content durably; materialize + activate read from the pin, so a
+  // crash + re-invoke converges (P1/P2). The lock is held across all phases of one publish.
   async publish(tenantId: string, routes: RouteInput[], themeVersion: string, hosts: string[]) {
-    const releaseId = await this.commit(tenantId, routes, themeVersion);
-    await this.materialize(releaseId, routes);
-    await this.activate(releaseId, hosts);
-    return releaseId;
+    return this.db.withTenantLock(tenantId, async () => {
+      const releaseId = await this.commit(tenantId, routes, themeVersion);
+      await this.materialize(releaseId);
+      await this.activate(releaseId, hosts);
+      return releaseId;
+    });
+  }
+
+  // H-3 — the serialized per-tenant outbox drainer. Resumes every pending release from wherever it
+  // stalled: 'building' → materialize + activate; 'materialized' → activate; 'activating' → finish
+  // the flip (idempotent activate); 'active' → just mark done. Runs under the tenant lock so two
+  // drainers can't race. This is what makes crash-recovery a property of the system, not a manual step.
+  async drainPending(tenantId: string, hosts: string[]): Promise<number[]> {
+    return this.db.withTenantLock(tenantId, async () => {
+      const pending = await this.db.drainOutbox(tenantId); // ascending release order
+      const drained: number[] = [];
+      for (const releaseId of pending) {
+        const status = await this.db.getStatus(releaseId);
+        if (status === 'building') {
+          await this.materialize(releaseId);
+          await this.activate(releaseId, hosts);
+        } else if (status === 'materialized' || status === 'activating') {
+          await this.activate(releaseId, hosts); // idempotent; finishes a half-done flip
+        } else if (status === 'active') {
+          await this.db.markOutboxDone(releaseId);
+        }
+        drained.push(releaseId);
+      }
+      return drained;
+    });
   }
 }
 

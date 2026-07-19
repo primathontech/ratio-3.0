@@ -65,7 +65,7 @@ async function d28() {
       const counted = routes.map((r) => ({ path: r.path, render: () => (renders++, r.render()) }));
       const pub = new Publisher(db, kv, r2);
       const rid = await pub.commit('t', counted, 'v');
-      await pub.materialize(rid, counted);
+      await pub.materialize(rid);
       line(
         `${String(n).padEnd(8)} ${'theme-wide (full)'.padEnd(18)} ${String(renders).padEnd(8)} ${String(r2.fault.writes).padEnd(8)} every route re-rendered`
       );

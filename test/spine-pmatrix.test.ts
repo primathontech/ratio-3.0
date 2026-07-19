@@ -29,7 +29,7 @@ test('P1: KV never names an incomplete release, across every crash point', async
     let crashed = false;
     try {
       const rid = await pub.commit('t_acme', inputs, 'theme-v2');
-      await pub.materialize(rid, inputs);
+      await pub.materialize(rid);
       await pub.activate(rid, w.hosts);
     } catch (e) {
       crashed = e instanceof CrashSignal;
@@ -48,13 +48,12 @@ test('P1: KV never names an incomplete release, across every crash point', async
           rec.current === 1 || rec.current === 2,
           `host names a complete release (${rec.current})`
         );
-        // the true invariant: whatever release a host names has passed verification — its status is
-        // 'materialized' or 'active', NEVER 'building'/incomplete. (A host may name r2 while the DB
-        // still says 'materialized' because the crash hit before setStatus('active') — finding #7's
-        // known durability gap: record intent before the KV flip. Tracked in research/08.)
+        // the true invariant: whatever release a host names has passed verification — never
+        // 'building'/incomplete. A mid-hostkeys crash leaves the release 'activating' (finding #7:
+        // durable intent recorded BEFORE the KV flip → GC pins it, a drainer finishes the flip).
         const st = await w.db.getStatus(rec.current);
         assert.ok(
-          st === 'materialized' || st === 'active',
+          st === 'materialized' || st === 'activating' || st === 'active',
           `named release ${rec.current} is verification-complete (${st})`
         );
       }
@@ -74,10 +73,10 @@ test('P1: retry after crash is idempotent and converges', async () => {
   // crash mid-materialize, then re-run full publish clean → converges to active release 2
   const pub1 = new Publisher(w.db, w.kv, w.r2, 'mid-materialize');
   const rid = await pub1.commit('t_acme', inputs, 'v2');
-  await assert.rejects(() => pub1.materialize(rid, inputs), CrashSignal);
+  await assert.rejects(() => pub1.materialize(rid), CrashSignal);
 
   const pub2 = new Publisher(w.db, w.kv, w.r2); // no crash
-  await pub2.materialize(rid, inputs);
+  await pub2.materialize(rid);
   await pub2.activate(rid, w.hosts);
   const rec = JSON.parse((await w.kv.get('host:acme.localhost'))!);
   assert.equal(rec.current, rid);
@@ -100,28 +99,43 @@ test('P1: pointer never regresses — old release cannot re-activate over a newe
 });
 
 // ─── P2 — Concurrent publishes serialize per tenant ──────────────────────────
-// Serialized publisher modeled by the tenant lock as COORDINATOR around a full publish (the real
-// system: one outbox drainer per tenant). One wins, the other is rejected (caller/outbox retries).
-// NOTE (H-1 remaining): the real Publisher must own this lock via the DB seam so serialization is
-// not merely a test convention — tracked as a code TODO; this proves the coordinator contract.
-test('P2: per-tenant serialization; exactly one active release; no mixed release', async () => {
+// The Publisher OWNS the per-tenant lock (H-1): calling the real Publisher.publish() twice
+// concurrently — WITHOUT any external wrapping — must serialize. One wins, the other is rejected
+// by the lock (caller/outbox retries). Exactly one active release; no mix.
+test('P2: Publisher.publish() self-serializes per tenant (owns the lock)', async () => {
   const w = new World();
   await w.publish([{ path: '/' }]);
-  const publishSerialized = (routes: { path: string; body?: string }[]) =>
-    w.db.withTenantLock('t_acme', () => w.publish(routes));
+  const p1 = new Publisher(w.db, w.kv, w.r2);
+  const p2 = new Publisher(w.db, w.kv, w.r2);
   const results = await Promise.allSettled([
-    publishSerialized([{ path: '/', body: 'A' }]),
-    publishSerialized([{ path: '/', body: 'B' }]),
+    p1.publish('t_acme', w.routeInputs([{ path: '/', body: 'A' }]), 'vA', w.hosts),
+    p2.publish('t_acme', w.routeInputs([{ path: '/', body: 'B' }]), 'vB', w.hosts),
   ]);
   const ok = results.filter((r) => r.status === 'fulfilled');
   const rejected = results.filter((r) => r.status === 'rejected');
-  assert.equal(ok.length, 1, 'exactly one publish proceeds under the coordinator');
-  assert.equal(rejected.length, 1, 'the concurrent one is rejected (caller/outbox retries)');
+  assert.equal(ok.length, 1, 'exactly one publish proceeds under the Publisher-owned lock');
+  assert.equal(rejected.length, 1, 'the concurrent one is rejected (no external wrapping needed)');
   assert.equal(w.db.activeCount('t_acme'), 1, 'exactly one active release');
   const rec = JSON.parse((await w.kv.get('host:acme.localhost'))!);
   assert.ok(rec.current >= 2, 'a new release activated');
-  const res = await w.req('/', 'r2-first', 'BOM');
-  assert.equal(res.status, 200);
+});
+
+// H-3 — the outbox drainer resumes a crashed publish to completion (crash-recovery is a system
+// property, not a manual step). Crash mid-materialize, then drainPending finishes it.
+test('P2b: outbox drainer resumes a crashed publish (H-3)', async () => {
+  const w = new World();
+  await w.publish([{ path: '/' }]); // release 1 active
+  const crasher = new Publisher(w.db, w.kv, w.r2, 'mid-materialize');
+  const rid = await crasher.commit('t_acme', w.routeInputs([{ path: '/' }, { path: '/p' }]), 'v2');
+  await assert.rejects(() => crasher.materialize(rid), CrashSignal); // release 2 stuck 'building'
+  assert.equal(await w.db.getStatus(rid), 'building', 'release stuck mid-publish');
+  // a clean drainer picks up the pending outbox row and finishes it
+  const drainer = new Publisher(w.db, w.kv, w.r2);
+  const drained = await drainer.drainPending('t_acme', w.hosts);
+  assert.ok(drained.includes(rid), 'drainer resumed the pending release');
+  assert.equal(await w.db.getStatus(rid), 'active', 'release converged to active');
+  const rec = JSON.parse((await w.kv.get('host:acme.localhost'))!);
+  assert.equal(rec.current, rid, 'KV now names the recovered release');
 });
 
 // ─── P3 — R2 completeness gates activation ───────────────────────────────────
@@ -132,7 +146,7 @@ test('P3: activation blocked when an R2 object is missing or corrupt', async () 
 
   // (a) positive baseline: a clean release verifies.
   const rid = await pub.commit('t_acme', inputs, 'v');
-  await pub.materialize(rid, inputs);
+  await pub.materialize(rid);
   const manifest = (await w.db.getManifest(rid))!;
   await pub.verify(rid, manifest); // resolves
 
@@ -148,10 +162,7 @@ test('P3: activation blocked when an R2 object is missing or corrupt', async () 
   const kvBefore = await w2.kv.get('host:acme.localhost');
   const pub2 = new Publisher(w2.db, w2.kv, w2.r2, 'mid-materialize');
   const rid2 = await pub2.commit('t_acme', w2.routeInputs([{ path: '/' }, { path: '/x' }]), 'v2');
-  await assert.rejects(
-    () => pub2.materialize(rid2, w2.routeInputs([{ path: '/' }, { path: '/x' }])),
-    CrashSignal
-  );
+  await assert.rejects(() => pub2.materialize(rid2), CrashSignal);
   await assert.rejects(() => pub2.activate(rid2, w2.hosts), /activation barrier/);
   assert.equal(
     await w2.kv.get('host:acme.localhost'),

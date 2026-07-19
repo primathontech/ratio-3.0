@@ -102,7 +102,7 @@ export class World {
         cacheable: routes[i].cacheable ?? true,
       });
     }
-    await pub.materialize(releaseId, inputs);
+    await pub.materialize(releaseId);
     await pub.activate(releaseId, this.hosts);
     return releaseId;
   }

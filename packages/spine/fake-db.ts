@@ -9,6 +9,7 @@ interface Rel {
   tenantId: string;
   status: string;
   manifest: Manifest;
+  routes: RouteInput[]; // durable content pin (H-4)
   indexChecksum?: string;
 }
 
@@ -39,10 +40,13 @@ export class FakeReleaseDB implements ReleaseDB {
     const deletedPaths = priorRoutes.filter((p) => !nowSet.has(p));
 
     const manifest: Manifest = { releaseId, tenantId, routes: paths, deletedPaths, themeVersion };
-    // atomic: release row + outbox row together
-    this.rels.set(releaseId, { releaseId, tenantId, status: 'building', manifest });
+    // atomic: release row (with the pinned content) + outbox row together
+    this.rels.set(releaseId, { releaseId, tenantId, status: 'building', manifest, routes });
     this.outbox.push({ releaseId, tenantId, state: 'pending' });
     return releaseId;
+  }
+  async getRoutes(releaseId: number) {
+    return this.rels.get(releaseId)?.routes ?? null;
   }
   private latestRoutes(tenantId: string): string[] {
     let latest: Rel | null = null;
