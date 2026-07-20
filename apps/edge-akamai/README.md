@@ -48,7 +48,26 @@ export function responseProvider(request) {
 }
 ```
 
-## Build / activate (once implemented)
+## Local dev (sandbox — no Akamai account needed)
 
-Akamai CLI: `akamai edgeworkers` to bundle + upload + activate on **staging**, then **production**.
-Note: activation is on the Akamai network (minutes), unlike `wrangler deploy`.
+The PoC (OFCE-476) starts here, offline. Proves the shell bundles + runs; does **not** prove real
+EdgeKV / Property Manager serve-stale / CPS (those need the account).
+
+```bash
+npm i -D esbuild                      # one-time (dev-only; not added to package.json/lock yet)
+node apps/edge-akamai/build.mjs       # bundles main.js + edge-core → dist/main.js
+tar czf edgeworker.tgz -C apps/edge-akamai/dist main.js -C .. bundle.json
+akamai install edgeworkers sandbox    # one-time CLI setup
+akamai sandbox create                 # local sandbox
+# run requests against the sandbox; iterate on main.js
+```
+
+Files: `main.js` (EdgeWorkers entry, reuses `packages/edge-core`), `build.mjs` (esbuild bundler),
+`bundle.json` (manifest), `edgekv/` + `property/` (setup notes).
+
+## Build / activate (once the account is set up)
+
+Akamai CLI: `akamai edgeworkers create-version <ewid> edgeworker.tgz` → `activate <ewid> STAGING`
+→ poll until active → validate → `activate <ewid> PRODUCTION`. Property Manager rules activate
+alongside (config-as-code, `property/`). Activation is on the Akamai network (minutes), unlike
+`wrangler deploy`. Rollback = activate the previous version.
