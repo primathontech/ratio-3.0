@@ -5,7 +5,7 @@
 // state machine is proven deterministically. See apps/edge/worker.ts::createCircuitBreaker.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createCircuitBreaker } from '../apps/edge/worker';
+import { createCircuitBreaker } from '../packages/edge-core/index';
 
 test('closed → open only after threshold CONSECUTIVE failures', () => {
   const t = 0;

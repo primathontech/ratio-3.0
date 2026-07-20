@@ -4,7 +4,8 @@
 // See apps/edge/worker.ts::buildAccessLog + the logging middleware.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import app, { buildAccessLog } from '../apps/edge/worker';
+import app from '../apps/edge-cloudflare/worker';
+import { buildAccessLog } from '../packages/edge-core/index';
 
 test('buildAccessLog keeps only the pathname — never the query string (tokens/PII)', () => {
   const rec = buildAccessLog({

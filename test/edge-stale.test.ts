@@ -4,7 +4,7 @@
 // prove the control flow without Cloudflare. See apps/edge/worker.ts::fetchViaOrigin.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { fetchViaOrigin, createCircuitBreaker, type EdgeCache } from '../apps/edge/worker';
+import { fetchViaOrigin, createCircuitBreaker, type EdgeCache } from '../packages/edge-core/index';
 
 function memCache(seed?: { req: Request; res: Response }): EdgeCache {
   const store = new Map<string, Response>();

@@ -5,7 +5,7 @@
 // short TTL so bogus hosts can't hammer the DB), and a missing binding degrades to DB.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { lookupTenant } from '../apps/edge/worker';
+import { lookupTenant } from '../packages/edge-core/index';
 
 function fakeKV(seed: Record<string, string> = {}) {
   const store = new Map<string, string>(Object.entries(seed));

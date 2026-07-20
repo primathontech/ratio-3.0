@@ -1,7 +1,7 @@
 // The edge->origin URL join must not double-slash when ORIGIN_URL has a trailing "/".
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { originTarget, proxyInit, publicHeaders } from '../apps/edge/worker';
+import { originTarget, proxyInit, publicHeaders } from '../packages/edge-core/index';
 
 test('joins base + path without a double slash (trailing slash on base)', () => {
   assert.strictEqual(
