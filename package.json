@@ -43,7 +43,7 @@
     "@clerk/backend": "^3.11.4",
     "@hono/node-server": "^2.0.10",
     "@neondatabase/serverless": "^1.1.0",
-    "hono": "^4.12.28",
+    "hono": "^4.12.31",
     "pg": "^8.13.1",
     "tldts": "^7.4.8"
   },
