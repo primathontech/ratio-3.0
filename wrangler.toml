@@ -1,5 +1,5 @@
 name = "ratio-3-0"
-main = "apps/edge/worker.ts"
+main = "apps/edge-cloudflare/worker.ts"
 compatibility_date = "2025-06-01"
 account_id = "7f06c71e716a0e4a5d38073c16758c60"
 workers_dev = true

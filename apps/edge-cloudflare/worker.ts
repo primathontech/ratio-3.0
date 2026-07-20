@@ -20,12 +20,9 @@ import {
   type AnalyticsEngineDataset,
 } from '../../packages/edge-core/index';
 
-// The portable edge logic now lives in packages/edge-core (shared by every edge adapter). This file
-// is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core, and holds
-// the Hono app. An Akamai EdgeWorkers adapter (apps/edge-akamai) will reuse the same edge-core.
-// Re-exported so existing importers (tests) keep resolving through this entrypoint during the
-// transition; when the Cloudflare POC is retired they import from edge-core directly.
-export * from '../../packages/edge-core/index';
+// The portable edge logic lives in packages/edge-core (shared by every edge adapter, tested there).
+// This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core
+// and holds the Hono app. The Akamai adapter (apps/edge-akamai) reuses the same edge-core.
 
 // Cloudflare Worker = the EDGE. It resolves host->tenant and:
 //  - path B (ORIGIN_URL set): injects the trusted header + proxies to the private container origin.

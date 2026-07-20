@@ -5,7 +5,8 @@
 // outcome only, never the query string. See buildMetricPoint + the metrics middleware in worker.ts.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import app, { buildMetricPoint, type AnalyticsEngineDataset } from '../apps/edge/worker';
+import app from '../apps/edge-cloudflare/worker';
+import { buildMetricPoint, type AnalyticsEngineDataset } from '../packages/edge-core/index';
 
 test('buildMetricPoint indexes by tenant and records status/ms as doubles', () => {
   const p = buildMetricPoint({

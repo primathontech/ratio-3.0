@@ -1,0 +1,4 @@
+{
+  "edgeworker-version": "0.1.0-scaffold",
+  "description": "Ratio 3.0 edge — Akamai EdgeWorkers adapter (scaffold). Reuses packages/edge-core; real build in OFCE-476."
+}
