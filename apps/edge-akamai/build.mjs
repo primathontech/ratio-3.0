@@ -33,4 +33,6 @@ await build({
 
 console.log('✓ bundled → apps/edge-akamai/dist/main.js');
 console.log('  next: tar czf edgeworker.tgz -C apps/edge-akamai/dist main.js -C .. bundle.json');
-console.log('  then: akamai sandbox (local) or akamai edgeworkers create-version <ewid> edgeworker.tgz');
+console.log(
+  '  then: akamai sandbox (local) or akamai edgeworkers create-version <ewid> edgeworker.tgz'
+);

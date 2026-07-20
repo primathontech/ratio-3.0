@@ -12,10 +12,10 @@ import { lookupTenant } from '../../packages/edge-core/index';
 // TODO(OFCE-476): replace this stub with the real Akamai EdgeKV client (edgekv/edgekv.js, dropped in
 // during account setup). Same interface edge-core's lookupTenant expects: get(key)/put(key,value).
 const edgeKv = {
-  async get(_key) {
+  async get() {
     return null;
   },
-  async put(_key, _value) {
+  async put() {
     /* no-op stub */
   },
 };
