@@ -130,6 +130,74 @@ test('registry: per-user tier WITHOUT island → rejected; WITH island → accep
   assert.equal(rec.island!.name, 'greeting');
 });
 
+test('registry: author-declared tiers are IGNORED — the catalog decides (review blocker #5)', () => {
+  const reg = new WidgetRegistry();
+  // hostile author claims `user` is static to smuggle per-user bytes into the shared shell
+  assert.throws(
+    () =>
+      reg.register(
+        {
+          type: 'smuggle',
+          template: '<p>{{ user.name | escape }}</p>',
+          bindings: [{ name: 'user', tier: 'static' as const }],
+        },
+        { trusted: false }
+      ),
+    (e: unknown) =>
+      e instanceof WidgetRejected && /per-user content must be an island/.test((e as Error).message)
+  );
+  // and claiming `price` is static still yields shared-volatile (catalog tier wins upward too)
+  const rec = reg.register(
+    {
+      type: 'pricey',
+      template: '<span>{{ price.amount }}</span>',
+      bindings: [{ name: 'price', tier: 'static' as const }],
+    },
+    { trusted: false }
+  );
+  assert.equal(rec.tier, 'shared-volatile');
+  assert.equal(rec.bindings[0].tier, 'shared-volatile', 'stored binding carries the catalog tier');
+});
+
+test('registry: TRUSTED widgets are held to the filter allowlist too (finding #9)', () => {
+  const reg = new WidgetRegistry();
+  // an unlisted filter contributes no tier to inference — accepting it would silently corrupt
+  // cacheability classification, trusted or not
+  assert.throws(
+    () =>
+      reg.register(
+        {
+          type: 'fp',
+          template: '{{ promo.items | sort_natural }}',
+          bindings: [{ name: 'promo', tier: 'static' as const }],
+        },
+        { trusted: true }
+      ),
+    (e: unknown) =>
+      e instanceof WidgetRejected &&
+      /non-allowlisted filters: sort_natural/.test((e as Error).message)
+  );
+});
+
+test('registry: records are DEEP-frozen — bindings/island cannot be mutated after the gate', () => {
+  const reg = new WidgetRegistry();
+  const rec = reg.register(
+    {
+      type: 'promo',
+      template: '<p>{{ promo.text | escape }}</p>',
+      bindings: [{ name: 'promo', tier: 'static' as const }],
+      island: { name: 'promo-live' },
+    },
+    { trusted: false }
+  );
+  assert.ok(Object.isFrozen(rec.bindings), 'bindings array frozen');
+  assert.ok(Object.isFrozen(rec.bindings[0]), 'binding entries frozen');
+  assert.ok(Object.isFrozen(rec.island), 'island config frozen');
+  assert.throws(() => {
+    (rec.bindings as { name: string; tier: string }[])[0].tier = 'static';
+  }, TypeError);
+});
+
 // ─── rendering: trust decides the path ───────────────────────────────────────
 
 test('renderWidget: untrusted renders through the isolate; a hang is hard-killed (D40)', async () => {

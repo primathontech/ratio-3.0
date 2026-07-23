@@ -5,7 +5,9 @@
 // a template, so inference done at registration stays true at render.
 
 import type { WidgetRegistry } from '../widget-registry/registry';
+import { BINDING_CATALOG } from '../widget-registry/registry';
 import { canonicalPath } from '../spine/canonical-key';
+import { safeRichText } from '../theme/index';
 
 export interface WidgetInstance {
   id: string; // unique within the page — stable identity for the editor + island params
@@ -27,6 +29,19 @@ export class InvalidPageDoc extends Error {
   constructor(public problems: string[]) {
     super(`invalid page doc: ${problems.join('; ')}`);
   }
+}
+
+// Every string inside an html-flagged binding value goes through the theme's escape-then-restore
+// sanitizer (allowlisted formatting tags only; attributes can never survive).
+function sanitizeHtmlDeep(v: unknown): unknown {
+  if (typeof v === 'string') return safeRichText(v);
+  if (Array.isArray(v)) return v.map(sanitizeHtmlDeep);
+  if (v && typeof v === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, val] of Object.entries(v)) out[k] = sanitizeHtmlDeep(val);
+    return out;
+  }
+  return v;
 }
 
 // Validate + normalize: returns the doc with canonicalized path and every widget version PINNED
@@ -59,7 +74,15 @@ export function validatePageDoc(doc: PageDoc, registry: WidgetRegistry): PageDoc
     if (extra.length)
       problems.push(`widget '${w.id}' (${w.type}) supplies undeclared data: ${extra.join(', ')}`);
 
-    widgets.push({ ...w, version: rec.version, data: w.data ?? {} });
+    // html-flagged bindings (catalog) carry authored rich HTML — sanitize AT SAVE, so the raw
+    // markup never reaches storage or a template. The template's {{ rich.html }} stays raw-output
+    // by design; safety lives in the data, enforced here (review finding #8).
+    const data: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(w.data ?? {})) {
+      data[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
+    }
+
+    widgets.push({ ...w, version: rec.version, data });
   }
 
   if (problems.length) throw new InvalidPageDoc(problems);

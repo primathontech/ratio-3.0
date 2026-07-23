@@ -17,6 +17,13 @@ export interface S3Location {
   endpoint?: string; // override for testing / non-AWS S3-compatibles
 }
 
+// RFC 3986 unreserved-only encoding (SigV4 contract). encodeURIComponent alone mishandles !'()*.
+const rfc3986 = (s: string) =>
+  encodeURIComponent(s).replace(
+    /[!'()*]/g,
+    (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase()
+  );
+
 export class S3Driver implements R2Like {
   private host: string;
   private creds: AwsCredentials;
@@ -31,8 +38,10 @@ export class S3Driver implements R2Like {
   }
 
   // object keys can contain '|' etc. from cacheKey — encode each path segment for the URI.
+  // SigV4 requires strict RFC 3986 encoding: encodeURIComponent leaves !'()* raw, and AWS
+  // explicitly warns standard URI encoders break signatures on those characters.
   private objectPath(key: string): string {
-    return '/' + key.split('/').map(encodeURIComponent).join('/');
+    return '/' + key.split('/').map(rfc3986).join('/');
   }
 
   private async call(
@@ -79,16 +88,27 @@ export class S3Driver implements R2Like {
       throw new Error(`s3 delete failed: HTTP ${res.status}`);
   }
 
-  // ListObjectsV2, first page only (callers paginate if ever needed — GC is the only list user).
+  // ListObjectsV2 with continuation — a truncated listing silently missing objects would make a
+  // GC pass delete-safe checks against an incomplete world. Query params stay ALPHABETICALLY
+  // sorted (continuation-token < list-type < prefix) — SigV4 canonicalizes by sorted query.
   async list(prefix: string): Promise<string[]> {
-    const query = `list-type=2&prefix=${encodeURIComponent(prefix)}`;
-    const res = await this.call('GET', '/', query);
-    if (res.status !== 200) throw new Error(`s3 list failed: HTTP ${res.status}`);
-    const xml = await res.text();
     const keys: string[] = [];
-    const re = /<Key>([^<]+)<\/Key>/g;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(xml)) !== null) keys.push(m[1]);
+    let token: string | null = null;
+    do {
+      const query =
+        (token ? `continuation-token=${rfc3986(token)}&` : '') +
+        `list-type=2&prefix=${rfc3986(prefix)}`;
+      const res = await this.call('GET', '/', query);
+      if (res.status !== 200) throw new Error(`s3 list failed: HTTP ${res.status}`);
+      const xml = await res.text();
+      const re = /<Key>([^<]+)<\/Key>/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(xml)) !== null) keys.push(m[1]);
+      const truncated = /<IsTruncated>true<\/IsTruncated>/.test(xml);
+      token = truncated
+        ? (/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null)
+        : null;
+    } while (token);
     return keys;
   }
 }

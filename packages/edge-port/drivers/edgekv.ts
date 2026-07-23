@@ -9,6 +9,7 @@
 import type { KVLike } from '../../spine/stores';
 import { signEdgeGrid, type EdgeGridCredentials } from './edgegrid';
 import type { FetchLike } from './fastpurge';
+import { edgeKvItemKey } from '../edgekv-key';
 
 export interface EdgeKVLocation {
   network: 'staging' | 'production';
@@ -25,8 +26,9 @@ export class EdgeKVDriver implements KVLike {
 
   private itemPath(key: string): string {
     const { network, namespace, group } = this.loc;
-    // EdgeKV item names are restricted (no ':' etc.) — encode our logical keys.
-    return `/edgekv/v1/networks/${network}/namespaces/${namespace}/groups/${group}/items/${encodeURIComponent(key)}`;
+    // EdgeKV item IDs permit only [0-9a-zA-Z_-] — URL-encoding does NOT help (% is disallowed).
+    // edgeKvItemKey is the shared base64url encoding the EdgeWorker uses for its reads too.
+    return `/edgekv/v1/networks/${network}/namespaces/${namespace}/groups/${group}/items/${edgeKvItemKey(key)}`;
   }
 
   private async call(

@@ -1,16 +1,21 @@
 // The D38 edge algorithm: lazy render-on-first-visit + purge-on-change. Supersedes the D28
 // pre-materialize path for the common case (spine/edge.ts stays as the historical POC-1 artifact).
 //
-//   first visit  → origin renders → cache at edge (tagged) + async last-good write to S3
+//   first visit  → origin renders → cache at edge (tagged); ORIGIN writes S3 last-good (D44)
 //   repeat visit → edge HIT, zero origin work
 //   edit         → save DB → Fast Purge invalidate by tag (stale, NOT delete) → next visit revalidates
 //   origin error → serve the stale copy (Akamai serve-stale-on-error) or the S3 last-good
 //   never-visited page + total outage → 503 — the D39-accepted tradeoff, by design
 //
+// D44 (review blocker #3/#4): the edge only READS last-good. Akamai EdgeWorkers has no waitUntil,
+// so the write-behind belongs to the origin (PageOrigin + LastGoodStore, generation-ordered) —
+// the same is true here so the local model and the deploy target share one contract.
+//
 // What survives from POC-1 unchanged: canonical key (P9), fail-closed KV host resolution (D29),
 // the GET/HEAD + reserved-path gate (P8), cache-only-when-origin-opts-in (B-2), per-user content
 // never in the shell. What's gone: release pointer in the key (purge-by-tag replaces it), route
-// index + tombstone materialization (origin's own 404 is rendered, cached, and purged like a page).
+// index + tombstone materialization (origin's own 404 is rendered, cached, and purged like a page;
+// origin tombstones last-good itself).
 
 import type { KVLike, R2Like, StoredResponse } from '../spine/stores';
 import type { OriginLike } from '../spine/edge';
@@ -26,13 +31,9 @@ export const LIVE = 'live';
 export interface LazyEdgeDeps {
   kv: KVLike; // host → tenant resolution (fail-closed, D29)
   cache: EdgeCacheLike; // Akamai edge cache (tag-aware, stale-capable)
-  lastGood: R2Like; // S3 — durable last-good copy, the cold-PoP/outage backstop (D35)
+  lastGood: Pick<R2Like, 'get'>; // S3 — READ-ONLY here (D44: the origin owns writes)
   origin: OriginLike;
   colo: string;
-  // async work that must not block or fail the response (the last-good write). EdgeWorkers has no
-  // waitUntil — the real port does this via a sub-request it doesn't await; tests inject a
-  // collector so they can await completion deterministically.
-  waitUntil?: (p: Promise<unknown>) => void;
 }
 
 export interface LazyEdgeResult {
@@ -69,17 +70,6 @@ function present(
     if (!k.toLowerCase().startsWith('x-')) headers[k] = v;
   headers['cache-control'] = 'public, max-age=0, must-revalidate';
   return { status: r.status, headers, body: r.body, served, colo };
-}
-
-function schedule(d: LazyEdgeDeps, p: Promise<unknown>): void {
-  if (d.waitUntil) d.waitUntil(p.catch(() => {}));
-  else void p.catch(() => {}); // never let the backstop write fail the response
-}
-
-// Write-behind to S3: last-good for servable pages; a REAL 404 overwrites as a tombstone so a
-// deleted page can never resurrect from S3 during an outage (the D28 tombstone lesson, lazy form).
-function writeLastGood(d: LazyEdgeDeps, dims: KeyDims, stored: StoredResponse): void {
-  schedule(d, d.lastGood.put(r2Key(dims), stored));
 }
 
 export async function handleLazy(
@@ -144,14 +134,11 @@ export async function handleLazy(
   if (fromOrigin) {
     // real answer from origin — re-cache if it opts in (B-2), else drop any stale copy so a page
     // that became non-cacheable can't keep serving from the stale window on future errors.
+    // (The origin has already queued its own last-good write / 404 tombstone — D44/D41.)
     if (fromOrigin.cacheable) {
       await d.cache.put(ck, fromOrigin.stored, tags, SHELL_TTL);
-      writeLastGood(d, dims, fromOrigin.stored);
-    } else {
-      if (hit) await d.cache.delete(ck);
-      // a REAL 404 tombstones last-good even when non-cacheable — a deleted page must not
-      // resurrect from S3 during a later outage just because origin didn't opt the 404 in.
-      if (fromOrigin.stored.status === 404) writeLastGood(d, dims, fromOrigin.stored);
+    } else if (hit) {
+      await d.cache.delete(ck);
     }
     return present(fromOrigin.stored, hit ? 'REVALIDATED' : 'MISS', d.colo);
   }
@@ -182,7 +169,7 @@ async function tryOrigin(
   return { stored: toStored(res), cacheable: res.cacheable };
 }
 
-async function safeGet(store: R2Like, key: string): Promise<StoredResponse | null> {
+async function safeGet(store: Pick<R2Like, 'get'>, key: string): Promise<StoredResponse | null> {
   try {
     return await store.get(key);
   } catch {

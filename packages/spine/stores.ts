@@ -21,6 +21,10 @@ export interface StoredResponse {
   headers: Record<string, string>;
   body: string;
   checksum: string; // sha256 of status+headers+body — used by P3 completeness verification
+  // monotonic write generation (last-good store only, Track 3): lets a delayed older write be
+  // detected and dropped instead of overwriting newer content. Absent on release-keyed objects —
+  // those are immutable per key, so ordering can't arise.
+  generation?: number;
 }
 
 // A fault the tests toggle. `down` = every op throws (models an outage); `slowMs` models latency.
