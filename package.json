@@ -39,7 +39,7 @@
     ]
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.111.0",
+    "@anthropic-ai/sdk": "^0.114.0",
     "@clerk/backend": "^3.11.4",
     "@hono/node-server": "^2.0.10",
     "@neondatabase/serverless": "^1.1.0",
