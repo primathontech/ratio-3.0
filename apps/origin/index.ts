@@ -4,6 +4,11 @@ import { forTenant } from '../../packages/repo/index';
 import { pool } from '../../packages/shared/db';
 import { normalizePage } from '../../packages/content-model/index';
 import { renderPage, esc } from '../../packages/theme/index';
+import { PgPageStore } from '../../packages/page-builder/store-pg';
+import { composePage } from '../../packages/page-builder/compose';
+import { defaultRegistry } from '../../packages/widget-registry/registry';
+import { canonicalPath } from '../../packages/page-builder/path';
+import { pageTag, tenantTag } from '../../packages/page-builder/tags';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -30,6 +35,14 @@ const RESERVED = ['/cart', '/checkout', '/account'];
 const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
+
+// Page builder (Slice 1, flag-gated). When PAGE_BUILDER_ENABLED is on, a published PageDoc for
+// this path wins over the legacy routes table; otherwise the origin is unchanged.
+const pageStore = new PgPageStore();
+const pbRegistry = defaultRegistry();
+function pageBuilderEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.PAGE_BUILDER_ENABLED === 'true';
+}
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;
@@ -89,6 +102,30 @@ app.all('*', async (c) => {
   if (tenant.status !== 'active') {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
+  }
+  // Page-builder render path (flag-gated). A published PageDoc wins over the legacy route.
+  if (pageBuilderEnabled()) {
+    const canon = canonicalPath(path);
+    const doc = await pageStore.getLive(tenantId as string, canon);
+    if (doc) {
+      renders++; // the expensive path — a cache HIT must not reach here
+      const composed = await composePage(doc, pbRegistry);
+      c.header('x-tenant', tenantId as string);
+      c.header('x-handler', 'page-builder');
+      c.header('x-page-tier', composed.tier);
+      c.header('x-render-count', String(renders));
+      // Tag with EXACTLY what publish() purges, so tag-purge (D2) invalidates this entry.
+      c.header(
+        'x-surrogate-keys',
+        `${pageTag(tenantId as string, canon)} ${tenantTag(tenantId as string)}`
+      );
+      c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
+      if (composed.cacheable)
+        c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
+      setStorefrontSecurity(c);
+      return c.html(composed.html);
+    }
+    // no live page-builder doc for this path → fall through to the legacy route table
   }
   const route = await repo.getRoute(path);
   if (!route) {
