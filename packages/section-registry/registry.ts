@@ -12,7 +12,7 @@
 import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '../liquid-render/engine';
 import { renderUntrusted } from '../liquid-render/isolate';
 import { inferTier, type Binding, type Tier } from '../liquid-render/infer';
-import { FIRST_PARTY_WIDGETS } from '../liquid-render/sections';
+import { FIRST_PARTY_SECTIONS } from '../liquid-render/sections';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────
 // Binding identity → tier (+ html flag for sanitize-at-save). This is THE source of tier truth:
@@ -56,6 +56,8 @@ export interface SectionInput {
   // an island section's TEMPLATE renders only at island-request time (per-user); the shell gets
   // an inert placeholder — per-user content NEVER enters the cached page
   island?: { name: string };
+  kind?: 'section' | 'block'; // default 'section'; a block is a child nested inside a section
+  blocks?: string[]; // for sections: the child block types this section accepts (Shopify-shaped)
 }
 
 export interface SectionRecord extends SectionInput {
@@ -90,9 +92,21 @@ export class SectionRegistry {
     // 0. tiers come from the CATALOG, not the author (blocker #5)
     const bindings = effectiveBindings(input.bindings);
 
+    // a block is a leaf: it cannot itself accept child blocks (one level of nesting), and a
+    // per-user child is not supported — per-user stays island-only at the section level.
+    if (input.kind === 'block' && input.blocks)
+      throw new SectionRejected(
+        ['a block cannot accept child blocks (one nesting level)'],
+        input.type
+      );
+    if (input.kind === 'block' && input.island)
+      throw new SectionRejected(['a block cannot be an island'], input.type);
+
     // 1. inference gate (REQ-3): undeclared reads / unresolved includes reject regardless of trust —
     //    first-party code obeys the same contract merchants do, that's what makes it forkable.
-    const inf = inferTier(input.template, bindings);
+    //    A section that accepts child blocks may read the reserved `blocks` global (compose injects
+    //    the already-composed child HTML there).
+    const inf = inferTier(input.template, bindings, input.blocks ? ['blocks'] : []);
     if (!inf.ok) throw new SectionRejected(inf.reasons, input.type);
 
     // 2. filter allowlist — enforced HERE for EVERY trust level, not left to render time.
@@ -159,8 +173,18 @@ export async function renderSection(
 // A registry preloaded with the first-party library (Track 2 sections), trusted, as version 1.
 export function defaultRegistry(): SectionRegistry {
   const reg = new SectionRegistry();
-  for (const w of Object.values(FIRST_PARTY_WIDGETS)) {
-    reg.register({ type: w.type, template: w.template, bindings: w.bindings }, { trusted: true });
+  for (const w of Object.values(FIRST_PARTY_SECTIONS)) {
+    reg.register(
+      {
+        type: w.type,
+        template: w.template,
+        bindings: w.bindings,
+        kind: w.kind,
+        blocks: w.blocks,
+        island: w.island,
+      },
+      { trusted: true }
+    );
   }
   return reg;
 }

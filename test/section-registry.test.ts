@@ -30,7 +30,10 @@ test('defaultRegistry: first-party sections load with INFERRED tiers (never decl
   // shared-volatile bindings — the inference catching what a hand-declared tier would miss
   assert.equal(reg.get('productGrid')!.tier, 'per-segment');
   assert.equal(reg.get('product')!.tier, 'per-segment');
-  assert.equal(reg.list().length, 4);
+  // nested: the slideshow section + its slide block both infer static
+  assert.equal(reg.get('slideshow')!.tier, 'static');
+  assert.equal(reg.get('slide')!.tier, 'static');
+  assert.equal(reg.list().length, 6);
   assert.ok(reg.list().every((w) => w.trusted));
 });
 

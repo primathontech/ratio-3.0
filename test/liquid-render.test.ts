@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { render, compile, UNTRUSTED_LIMITS } from '../packages/liquid-render/engine';
 import { renderUntrusted, RenderTimeout, RenderFailed } from '../packages/liquid-render/isolate';
 import { inferTier } from '../packages/liquid-render/infer';
-import { FIRST_PARTY_WIDGETS } from '../packages/liquid-render/sections';
+import { FIRST_PARTY_SECTIONS } from '../packages/liquid-render/sections';
 
 const trusted = { trusted: true };
 const untrusted = { trusted: false, limits: UNTRUSTED_LIMITS };
@@ -16,7 +16,7 @@ const untrusted = { trusted: false, limits: UNTRUSTED_LIMITS };
 // ─── Engine: first-party sections render ──────────────────────────────────────
 test('engine: hero section renders with escaping', async () => {
   const html = await render(
-    FIRST_PARTY_WIDGETS.hero.template,
+    FIRST_PARTY_SECTIONS.hero.template,
     { hero: { heading: 'Hi <b>' } },
     trusted
   );
@@ -25,7 +25,7 @@ test('engine: hero section renders with escaping', async () => {
 
 test('engine: productGrid renders prices via money filter', async () => {
   const html = await render(
-    FIRST_PARTY_WIDGETS.productGrid.template,
+    FIRST_PARTY_SECTIONS.productGrid.template,
     {
       grid: {
         heading: 'Shop',
@@ -128,8 +128,8 @@ test('infer: render/include is rejected from the auto-cacheable tier', () => {
 });
 
 test('infer: first-party sections all infer a valid tier', () => {
-  for (const w of Object.values(FIRST_PARTY_WIDGETS)) {
-    const r = inferTier(w.template, w.bindings);
+  for (const w of Object.values(FIRST_PARTY_SECTIONS)) {
+    const r = inferTier(w.template, w.bindings, w.blocks ? ['blocks'] : []);
     assert.ok(r.ok, `${w.type} should infer ok: ${r.reasons.join('; ')}`);
   }
 });

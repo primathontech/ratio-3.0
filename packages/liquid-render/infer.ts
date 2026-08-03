@@ -49,7 +49,13 @@ function extractFilters(source: string): string[] {
 
 // Infer a section's cacheability tier from its Liquid source + the bindings it's allowed to read.
 // Rejects (ok:false) if it reads anything undeclared, or uses an unresolved include/render.
-export function inferTier(source: string, bindings: Binding[]): InferenceResult {
+// `reserved` names (e.g. `blocks` for a section that accepts child blocks) are allowed reads that
+// carry no tier of their own — their dynamism comes from the child blocks, tallied in compose.
+export function inferTier(
+  source: string,
+  bindings: Binding[],
+  reserved: string[] = []
+): InferenceResult {
   const reasons: string[] = [];
   const declared = new Map(bindings.map((b) => [b.name, b.tier]));
 
@@ -65,7 +71,7 @@ export function inferTier(source: string, bindings: Binding[]): InferenceResult 
   // 2. globals = out-of-scope reads. Any global not in the declared binding set = undeclared access.
   const analysis = analyzer.analyzeSync(analyzer.parse(source));
   const globals = Object.keys(analysis.globals);
-  const undeclared = globals.filter((g) => !declared.has(g));
+  const undeclared = globals.filter((g) => !declared.has(g) && !reserved.includes(g));
 
   if (undeclared.length) {
     reasons.push(`undeclared data reads: ${undeclared.join(', ')}`);
@@ -75,7 +81,8 @@ export function inferTier(source: string, bindings: Binding[]): InferenceResult 
   // 3. start at static; raise by each read binding's tier and each filter's tier.
   let tier: Tier = 'static';
   for (const g of globals) {
-    const t = declared.get(g)!;
+    const t = declared.get(g);
+    if (!t) continue; // a reserved global (e.g. `blocks`) — carries no tier of its own
     tier = maxTier(tier, t);
     if (t !== 'static') reasons.push(`reads ${g} (${t})`);
   }

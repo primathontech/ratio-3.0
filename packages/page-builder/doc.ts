@@ -9,11 +9,19 @@ import { BINDING_CATALOG } from '../section-registry/registry';
 import { canonicalPath } from './path';
 import { safeRichText } from '../theme/index';
 
+export interface BlockInstance {
+  id: string; // unique within its section
+  type: string;
+  version?: number; // pinned at save
+  data: Record<string, unknown>; // keys MUST be ⊆ the block's declared bindings
+}
+
 export interface SectionInstance {
   id: string; // unique within the page — stable identity for the editor + island params
   type: string;
   version?: number; // pinned at save; absent in editor input = pin latest
   data: Record<string, unknown>; // keys MUST be ⊆ the section's declared bindings
+  blocks?: BlockInstance[]; // child blocks, only for sections that accept them (Shopify-shaped)
 }
 
 export interface PageDoc {
@@ -82,7 +90,44 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
       data[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
     }
 
-    sections.push({ ...w, version: rec.version, data });
+    // child blocks (nested section → block), if any
+    let blocks: BlockInstance[] | undefined;
+    if (w.blocks && w.blocks.length) {
+      if (!rec.blocks) {
+        problems.push(`section '${w.id}' (${w.type}) does not accept blocks`);
+      } else {
+        blocks = [];
+        const bseen = new Set<string>();
+        for (const b of w.blocks) {
+          if (!b.id || bseen.has(b.id)) {
+            problems.push(`block id '${b.id}' missing or duplicate in section '${w.id}'`);
+            continue;
+          }
+          bseen.add(b.id);
+          if (!rec.blocks.includes(b.type)) {
+            problems.push(`section '${w.type}' does not accept block '${b.type}'`);
+            continue;
+          }
+          const brec = registry.get(b.type, b.version);
+          if (!brec) {
+            problems.push(`unknown block '${b.type}'${b.version ? `@${b.version}` : ''}`);
+            continue;
+          }
+          const bdeclared = new Set(brec.bindings.map((x) => x.name));
+          const bextra = Object.keys(b.data ?? {}).filter((k) => !bdeclared.has(k));
+          if (bextra.length)
+            problems.push(
+              `block '${b.id}' (${b.type}) supplies undeclared data: ${bextra.join(', ')}`
+            );
+          const bdata: Record<string, unknown> = {};
+          for (const [k, v] of Object.entries(b.data ?? {}))
+            bdata[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
+          blocks.push({ ...b, version: brec.version, data: bdata });
+        }
+      }
+    }
+
+    sections.push({ ...w, version: rec.version, data, ...(blocks ? { blocks } : {}) });
   }
 
   if (problems.length) throw new InvalidPageDoc(problems);

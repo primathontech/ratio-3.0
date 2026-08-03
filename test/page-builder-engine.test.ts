@@ -156,3 +156,119 @@ test('compose: an island section contributes ONLY its placeholder — per-user t
   assert.ok(!page.html.includes('Hello'), 'island TEMPLATE did not render into the shell');
   assert.equal(page.tier, 'static', 'island does not raise the shell tier');
 });
+
+// ─── nested section → block ────────────────────────────────────────────────────
+
+test('compose: a section renders its child blocks in order, inside its wrapper', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    {
+      path: '/',
+      sections: [
+        {
+          id: 's1',
+          type: 'slideshow',
+          data: {},
+          blocks: [
+            { id: 'b1', type: 'slide', data: { slide: { heading: 'First' } } },
+            { id: 'b2', type: 'slide', data: { slide: { heading: 'Second' } } },
+          ],
+        },
+      ],
+    },
+    reg
+  );
+  const page = await composePage(doc, reg);
+  assert.match(
+    page.html,
+    /<section class="slideshow">.*First.*Second.*<\/section>/s,
+    'child blocks nested in document order inside the section wrapper'
+  );
+  assert.equal(page.tier, 'static');
+});
+
+test('validate: a section rejects a block type it does not accept', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [
+            {
+              id: 's1',
+              type: 'slideshow',
+              data: {},
+              blocks: [{ id: 'b1', type: 'hero', data: {} }],
+            },
+          ],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc && /does not accept block 'hero'/.test(e.problems.join(' '))
+  );
+});
+
+test('validate: blocks on a section that accepts none are rejected', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [
+            {
+              id: 's1',
+              type: 'hero',
+              data: { hero: { heading: 'x' } },
+              blocks: [{ id: 'b1', type: 'slide', data: { slide: {} } }],
+            },
+          ],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc && /does not accept blocks/.test(e.problems.join(' '))
+  );
+});
+
+test('validate: a block with undeclared data is rejected; a valid block pins its version', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [
+            {
+              id: 's1',
+              type: 'slideshow',
+              data: {},
+              blocks: [{ id: 'b1', type: 'slide', data: { slide: {}, bogus: 1 } }],
+            },
+          ],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /block 'b1' \(slide\) supplies undeclared data: bogus/.test(e.problems.join(' '))
+  );
+
+  const doc = validatePageDoc(
+    {
+      path: '/',
+      sections: [
+        {
+          id: 's1',
+          type: 'slideshow',
+          data: {},
+          blocks: [{ id: 'b1', type: 'slide', data: { slide: { heading: 'x' } } }],
+        },
+      ],
+    },
+    reg
+  );
+  assert.equal(doc.sections[0].blocks?.[0].version, 1, 'block version pinned at save');
+});

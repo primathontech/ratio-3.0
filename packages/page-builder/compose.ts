@@ -34,7 +34,20 @@ export async function composePage(doc: PageDoc, registry: SectionRegistry): Prom
       // THIS instance's config. Public bytes only — user identity never appears here.
       parts.push(islandPlaceholder(rec.island.name, { instance: w.id }));
     } else {
-      parts.push(await renderSection(rec, w.data));
+      let data = w.data;
+      // nested section → compose its child blocks first, inject them where `{{ blocks }}` sits.
+      // A block can't be per-user (registration forbids island blocks), so the shell stays safe.
+      if (rec.blocks && w.blocks && w.blocks.length) {
+        const blockParts: string[] = [];
+        for (const b of w.blocks) {
+          const brec = registry.get(b.type, b.version);
+          if (!brec) throw new Error(`block '${b.type}'@${b.version} vanished from registry`);
+          blockParts.push(await renderSection(brec, b.data));
+          tier = maxTier(tier, brec.tier);
+        }
+        data = { ...w.data, blocks: blockParts.join('\n') };
+      }
+      parts.push(await renderSection(rec, data));
       tier = maxTier(tier, rec.tier);
     }
   }
