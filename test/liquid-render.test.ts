@@ -1,5 +1,5 @@
 // Track 2 — sandboxed LiquidJS render + cacheability inference. Proves: engine renders first-party
-// widgets; sandbox contains hostile templates (no JS escape, filter allowlist, resource limits);
+// sections; sandbox contains hostile templates (no JS escape, filter allowlist, resource limits);
 // the worker isolate hard-kills a hang; inference computes tiers + rejects undeclared reads.
 // Run: node --import tsx --test test/liquid-render.test.ts
 
@@ -8,13 +8,13 @@ import assert from 'node:assert/strict';
 import { render, compile, UNTRUSTED_LIMITS } from '../packages/liquid-render/engine';
 import { renderUntrusted, RenderTimeout, RenderFailed } from '../packages/liquid-render/isolate';
 import { inferTier } from '../packages/liquid-render/infer';
-import { FIRST_PARTY_WIDGETS } from '../packages/liquid-render/widgets';
+import { FIRST_PARTY_WIDGETS } from '../packages/liquid-render/sections';
 
 const trusted = { trusted: true };
 const untrusted = { trusted: false, limits: UNTRUSTED_LIMITS };
 
-// ─── Engine: first-party widgets render ──────────────────────────────────────
-test('engine: hero widget renders with escaping', async () => {
+// ─── Engine: first-party sections render ──────────────────────────────────────
+test('engine: hero section renders with escaping', async () => {
   const html = await render(
     FIRST_PARTY_WIDGETS.hero.template,
     { hero: { heading: 'Hi <b>' } },
@@ -94,7 +94,7 @@ test('isolate: a hang is terminated by the wall-clock kill', async () => {
 });
 
 // ─── Inference: compute tier, reject undeclared ──────────────────────────────
-test('infer: pure static widget → static', () => {
+test('infer: pure static section → static', () => {
   const r = inferTier('{{ hero.heading | escape }}', [{ name: 'hero', tier: 'static' }]);
   assert.ok(r.ok);
   assert.equal(r.tier, 'static');
@@ -127,7 +127,7 @@ test('infer: render/include is rejected from the auto-cacheable tier', () => {
   assert.match(r.reasons.join(' '), /render\/include/);
 });
 
-test('infer: first-party widgets all infer a valid tier', () => {
+test('infer: first-party sections all infer a valid tier', () => {
   for (const w of Object.values(FIRST_PARTY_WIDGETS)) {
     const r = inferTier(w.template, w.bindings);
     assert.ok(r.ok, `${w.type} should infer ok: ${r.reasons.join('; ')}`);

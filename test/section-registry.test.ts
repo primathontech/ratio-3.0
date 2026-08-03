@@ -1,28 +1,28 @@
-// Track 5 — widget registry + islands. Proves: registration is the mechanical enforcement point
+// Track 5 — section registry + islands. Proves: registration is the mechanical enforcement point
 // (inference gate, filter allowlist, per-user-needs-island — REQ-1/REQ-3); versions are immutable;
-// untrusted widgets render only through the isolate; islands are the only per-user path and the
+// untrusted sections render only through the isolate; islands are the only per-user path and the
 // shell stays byte-identical across users (C2).
-// Run: node --import tsx --test test/widget-registry.test.ts
+// Run: node --import tsx --test test/section-registry.test.ts
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  WidgetRegistry,
-  WidgetRejected,
+  SectionRegistry,
+  SectionRejected,
   defaultRegistry,
-  renderWidget,
-} from '../packages/widget-registry/registry';
+  renderSection,
+} from '../packages/section-registry/registry';
 import {
   islandPlaceholder,
   islandsRuntimeScript,
   IslandRegistry,
   assertIslandName,
-} from '../packages/widget-registry/islands';
+} from '../packages/section-registry/islands';
 import { RenderTimeout } from '../packages/liquid-render/isolate';
 
 // ─── registry: first-party preload + inferred tiers ──────────────────────────
 
-test('defaultRegistry: first-party widgets load with INFERRED tiers (never declared)', () => {
+test('defaultRegistry: first-party sections load with INFERRED tiers (never declared)', () => {
   const reg = defaultRegistry();
   assert.equal(reg.get('hero')!.tier, 'static');
   assert.equal(reg.get('richText')!.tier, 'static');
@@ -37,7 +37,7 @@ test('defaultRegistry: first-party widgets load with INFERRED tiers (never decla
 // ─── registry: versioning ────────────────────────────────────────────────────
 
 test('registry: re-registering a type appends an immutable new version', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   const v1 = reg.register(
     {
       type: 'promo',
@@ -68,7 +68,7 @@ test('registry: re-registering a type appends an immutable new version', () => {
 // ─── registry: the rejection gates (REQ-1/REQ-3) ─────────────────────────────
 
 test('registry: undeclared data read → rejected at registration', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   assert.throws(
     () =>
       reg.register(
@@ -80,13 +80,13 @@ test('registry: undeclared data read → rejected at registration', () => {
         { trusted: false }
       ),
     (e: unknown) =>
-      e instanceof WidgetRejected &&
-      /undeclared data reads: settings/.test(String((e as WidgetRejected).reasons))
+      e instanceof SectionRejected &&
+      /undeclared data reads: settings/.test(String((e as SectionRejected).reasons))
   );
 });
 
-test('registry: non-allowlisted filter in untrusted widget → compile rejects', () => {
-  const reg = new WidgetRegistry();
+test('registry: non-allowlisted filter in untrusted section → compile rejects', () => {
+  const reg = new SectionRegistry();
   assert.throws(
     () =>
       reg.register(
@@ -97,24 +97,24 @@ test('registry: non-allowlisted filter in untrusted widget → compile rejects',
         },
         { trusted: false }
       ),
-    WidgetRejected
+    SectionRejected
   );
 });
 
 test('registry: render/include → rejected (unresolvable = un-analyzable)', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   assert.throws(
     () =>
       reg.register(
         { type: 'inc', template: '{% render "footer" %}', bindings: [] },
         { trusted: false }
       ),
-    WidgetRejected
+    SectionRejected
   );
 });
 
 test('registry: per-user tier WITHOUT island → rejected; WITH island → accepted', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   const input = {
     type: 'greeting',
     template: '<p>{{ user.name | escape }}</p>',
@@ -123,7 +123,8 @@ test('registry: per-user tier WITHOUT island → rejected; WITH island → accep
   assert.throws(
     () => reg.register(input, { trusted: false }),
     (e: unknown) =>
-      e instanceof WidgetRejected && /per-user content must be an island/.test((e as Error).message)
+      e instanceof SectionRejected &&
+      /per-user content must be an island/.test((e as Error).message)
   );
   const rec = reg.register({ ...input, island: { name: 'greeting' } }, { trusted: false });
   assert.equal(rec.tier, 'per-user');
@@ -131,7 +132,7 @@ test('registry: per-user tier WITHOUT island → rejected; WITH island → accep
 });
 
 test('registry: author-declared tiers are IGNORED — the catalog decides (review blocker #5)', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   // hostile author claims `user` is static to smuggle per-user bytes into the shared shell
   assert.throws(
     () =>
@@ -144,7 +145,8 @@ test('registry: author-declared tiers are IGNORED — the catalog decides (revie
         { trusted: false }
       ),
     (e: unknown) =>
-      e instanceof WidgetRejected && /per-user content must be an island/.test((e as Error).message)
+      e instanceof SectionRejected &&
+      /per-user content must be an island/.test((e as Error).message)
   );
   // and claiming `price` is static still yields shared-volatile (catalog tier wins upward too)
   const rec = reg.register(
@@ -159,8 +161,8 @@ test('registry: author-declared tiers are IGNORED — the catalog decides (revie
   assert.equal(rec.bindings[0].tier, 'shared-volatile', 'stored binding carries the catalog tier');
 });
 
-test('registry: TRUSTED widgets are held to the filter allowlist too (finding #9)', () => {
-  const reg = new WidgetRegistry();
+test('registry: TRUSTED sections are held to the filter allowlist too (finding #9)', () => {
+  const reg = new SectionRegistry();
   // an unlisted filter contributes no tier to inference — accepting it would silently corrupt
   // cacheability classification, trusted or not
   assert.throws(
@@ -174,13 +176,13 @@ test('registry: TRUSTED widgets are held to the filter allowlist too (finding #9
         { trusted: true }
       ),
     (e: unknown) =>
-      e instanceof WidgetRejected &&
+      e instanceof SectionRejected &&
       /non-allowlisted filters: sort_natural/.test((e as Error).message)
   );
 });
 
 test('registry: records are DEEP-frozen — bindings/island cannot be mutated after the gate', () => {
-  const reg = new WidgetRegistry();
+  const reg = new SectionRegistry();
   const rec = reg.register(
     {
       type: 'promo',
@@ -200,8 +202,8 @@ test('registry: records are DEEP-frozen — bindings/island cannot be mutated af
 
 // ─── rendering: trust decides the path ───────────────────────────────────────
 
-test('renderWidget: untrusted renders through the isolate; a hang is hard-killed (D40)', async () => {
-  const reg = new WidgetRegistry();
+test('renderSection: untrusted renders through the isolate; a hang is hard-killed (D40)', async () => {
+  const reg = new SectionRegistry();
   const ok = reg.register(
     {
       type: 'p',
@@ -210,7 +212,7 @@ test('renderWidget: untrusted renders through the isolate; a hang is hard-killed
     },
     { trusted: false }
   );
-  assert.equal(await renderWidget(ok, { promo: { text: 'hi <b>' } }), '<p>hi &lt;b&gt;</p>');
+  assert.equal(await renderSection(ok, { promo: { text: 'hi <b>' } }), '<p>hi &lt;b&gt;</p>');
 
   // a template that passes registration (declared reads, allowed filters) but hangs at render
   // time on pathological data — the isolate, not the engine, is what contains it
@@ -225,7 +227,7 @@ test('renderWidget: untrusted renders through the isolate; a hang is hard-killed
   );
   const big = Array.from({ length: 300 }, (_, i) => i);
   await assert.rejects(
-    () => renderWidget(spin, { promo: { items: big } }),
+    () => renderSection(spin, { promo: { items: big } }),
     (e: unknown) => e instanceof RenderTimeout || e instanceof Error
   );
 });
@@ -279,8 +281,8 @@ test('C2: shell bytes identical for two users; island responses differ', async (
   const data = { product: { title: 'Shoe', sku: 'A1' }, price: { amount: 999 } };
 
   // "two users" render the same shell — user identity is not even an input to the shell render
-  const shellA = await renderWidget(product, data);
-  const shellB = await renderWidget(product, data);
+  const shellA = await renderSection(product, data);
+  const shellB = await renderSection(product, data);
   assert.equal(shellA, shellB, 'shared shell carries zero per-user bytes');
   assert.match(shellA, /data-island="add-to-cart"/, 'per-user part is a placeholder');
 

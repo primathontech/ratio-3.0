@@ -1,6 +1,6 @@
 // Cacheability inference (B2, REQ-3). Devs declare NOTHING about cache tier — we COMPUTE it from
-// the template. A widget's effective tier is the max (most-dynamic) of:
-//   1. undeclared data reads      → reject outright (a widget may only read its declared bindings)
+// the template. A section's effective tier is the max (most-dynamic) of:
+//   1. undeclared data reads      → reject outright (a section may only read its declared bindings)
 //   2. the data bindings it reads  → each binding carries a tier (static | shared-volatile | per-user | per-segment)
 //   3. the filters it uses         → a time/locale filter forces the field off `static` (FILTER_ALLOWLIST)
 //   4. unresolved includes         → reject from the auto-cacheable tier (can't be analyzed)
@@ -47,7 +47,7 @@ function extractFilters(source: string): string[] {
   return [...found];
 }
 
-// Infer a widget's cacheability tier from its Liquid source + the bindings it's allowed to read.
+// Infer a section's cacheability tier from its Liquid source + the bindings it's allowed to read.
 // Rejects (ok:false) if it reads anything undeclared, or uses an unresolved include/render.
 export function inferTier(source: string, bindings: Binding[]): InferenceResult {
   const reasons: string[] = [];

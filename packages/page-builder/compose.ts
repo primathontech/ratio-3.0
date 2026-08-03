@@ -1,13 +1,13 @@
-// Compose a PageDoc into the cached HTML shell. Widgets render in document order; island widgets
+// Compose a PageDoc into the cached HTML shell. Sections render in document order; island sections
 // contribute ONLY their inert placeholder (their template renders later, per-user, behind the
-// /api/island endpoint) — so the shell's effective tier is the max over NON-island widgets, and
+// /api/island endpoint) — so the shell's effective tier is the max over NON-island sections, and
 // by the registration gate that max can never be per-user. The shell is safe shared bytes by
 // construction, not by review (C2).
 
 import type { PageDoc } from './doc';
-import type { WidgetRegistry } from '../widget-registry/registry';
-import { renderWidget } from '../widget-registry/registry';
-import { islandPlaceholder } from '../widget-registry/islands';
+import type { SectionRegistry } from '../section-registry/registry';
+import { renderSection } from '../section-registry/registry';
+import { islandPlaceholder } from '../section-registry/islands';
 import type { Tier } from '../liquid-render/infer';
 
 const ORDER: Tier[] = ['static', 'shared-volatile', 'per-segment', 'per-user'];
@@ -22,24 +22,24 @@ export interface ComposedPage {
   cacheable: boolean;
 }
 
-export async function composePage(doc: PageDoc, registry: WidgetRegistry): Promise<ComposedPage> {
+export async function composePage(doc: PageDoc, registry: SectionRegistry): Promise<ComposedPage> {
   let tier: Tier = 'static';
   const parts: string[] = [];
 
-  for (const w of doc.widgets) {
+  for (const w of doc.sections) {
     const rec = registry.get(w.type, w.version);
-    if (!rec) throw new Error(`widget '${w.type}'@${w.version} vanished from registry`); // save pinned it — can't happen without a registry wipe
+    if (!rec) throw new Error(`section '${w.type}'@${w.version} vanished from registry`); // save pinned it — can't happen without a registry wipe
     if (rec.island) {
       // island: placeholder only. The instance id rides along so the island endpoint can load
       // THIS instance's config. Public bytes only — user identity never appears here.
       parts.push(islandPlaceholder(rec.island.name, { instance: w.id }));
     } else {
-      parts.push(await renderWidget(rec, w.data));
+      parts.push(await renderSection(rec, w.data));
       tier = maxTier(tier, rec.tier);
     }
   }
 
-  // tier is provably below per-user here (registration rejects per-user shell widgets), so the
+  // tier is provably below per-user here (registration rejects per-user shell sections), so the
   // shell is always cacheable; the tier still matters upstream (shared-volatile → purge on price
   // change; per-segment → segment key dimension when personalization lands, REQ-2).
   const html =

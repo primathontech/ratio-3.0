@@ -1,24 +1,24 @@
-// Widget registry (Track 5) — the platform's single catalogue of renderable widgets: first-party
+// Section registry (Track 5) — the platform's single catalogue of renderable sections: first-party
 // (trusted) and merchant/app custom (untrusted, REQ-1). Registration is the ENFORCEMENT POINT for
 // the platform's hard gate: no request-time arbitrary code in the render path, per-user content =
-// islands only. A widget that fails inference, uses a non-allowlisted filter, or lands on the
+// islands only. A section that fails inference, uses a non-allowlisted filter, or lands on the
 // per-user tier without being an island is rejected AT REGISTRATION — mechanically, not by
 // review (REQ-3).
 //
 // Versions are immutable (deep-frozen): re-registering a type appends a new version, it never
-// mutates the old one. Pages pin the version they were built with, so a widget update can't
+// mutates the old one. Pages pin the version they were built with, so a section update can't
 // silently change already-published pages (they re-render on their own edit→purge cycle).
 
 import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '../liquid-render/engine';
 import { renderUntrusted } from '../liquid-render/isolate';
 import { inferTier, type Binding, type Tier } from '../liquid-render/infer';
-import { FIRST_PARTY_WIDGETS } from '../liquid-render/widgets';
+import { FIRST_PARTY_WIDGETS } from '../liquid-render/sections';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────
 // Binding identity → tier (+ html flag for sanitize-at-save). This is THE source of tier truth:
 // author-supplied tiers are IGNORED (review blocker #5 — an untrusted author could otherwise
 // declare `user` as 'static' and bake per-user bytes into the shared shell). Names NOT in the
-// catalog are widget CONFIG: their data arrives exclusively from the saved PageDoc (static by
+// catalog are section CONFIG: their data arrives exclusively from the saved PageDoc (static by
 // construction — validated at save, never from request context), so they are forced 'static'.
 export interface CatalogEntry {
   tier: Tier;
@@ -49,27 +49,27 @@ export function effectiveBindings(declared: Binding[]): Binding[] {
   return declared.map((b) => ({ name: b.name, tier: BINDING_CATALOG[b.name]?.tier ?? 'static' }));
 }
 
-export interface WidgetInput {
+export interface SectionInput {
   type: string;
   template: string; // Liquid source
   bindings: Binding[]; // names matter; tiers are overridden by the catalog
-  // an island widget's TEMPLATE renders only at island-request time (per-user); the shell gets
+  // an island section's TEMPLATE renders only at island-request time (per-user); the shell gets
   // an inert placeholder — per-user content NEVER enters the cached page
   island?: { name: string };
 }
 
-export interface WidgetRecord extends WidgetInput {
+export interface SectionRecord extends SectionInput {
   version: number;
   trusted: boolean;
   tier: Tier; // INFERRED from template + catalog, never author-declared (REQ-3)
 }
 
-export class WidgetRejected extends Error {
+export class SectionRejected extends Error {
   constructor(
     public reasons: string[],
     type: string
   ) {
-    super(`widget '${type}' rejected: ${reasons.join('; ')}`);
+    super(`section '${type}' rejected: ${reasons.join('; ')}`);
   }
 }
 
@@ -80,34 +80,34 @@ function deepFreeze<T>(o: T): T {
   return o;
 }
 
-export class WidgetRegistry {
+export class SectionRegistry {
   // type → versions (index i = version i+1); records are deep-frozen on insert
-  private byType = new Map<string, WidgetRecord[]>();
+  private byType = new Map<string, SectionRecord[]>();
 
-  // Register a widget. `trusted:false` = merchant/app code (REQ-1): compiled under the sandboxed
+  // Register a section. `trusted:false` = merchant/app code (REQ-1): compiled under the sandboxed
   // engine and rendered only via the worker isolate (D40).
-  register(input: WidgetInput, opts: { trusted: boolean }): WidgetRecord {
+  register(input: SectionInput, opts: { trusted: boolean }): SectionRecord {
     // 0. tiers come from the CATALOG, not the author (blocker #5)
     const bindings = effectiveBindings(input.bindings);
 
     // 1. inference gate (REQ-3): undeclared reads / unresolved includes reject regardless of trust —
     //    first-party code obeys the same contract merchants do, that's what makes it forkable.
     const inf = inferTier(input.template, bindings);
-    if (!inf.ok) throw new WidgetRejected(inf.reasons, input.type);
+    if (!inf.ok) throw new SectionRejected(inf.reasons, input.type);
 
     // 2. filter allowlist — enforced HERE for EVERY trust level, not left to render time.
     //    LiquidJS strictFilters only errors when the filter EVALUATES, so a banned filter behind
-    //    an {% if %} could pass a smoke render and detonate in production. And a trusted widget
+    //    an {% if %} could pass a smoke render and detonate in production. And a trusted section
     //    using an unlisted filter would silently classify as static (the filter contributes no
     //    tier), corrupting inference — so first-party is held to the same allowlist.
     const banned = inf.usedFilters.filter((f) => !(f in FILTER_ALLOWLIST));
     if (banned.length)
-      throw new WidgetRejected([`non-allowlisted filters: ${banned.join(', ')}`], input.type);
+      throw new SectionRejected([`non-allowlisted filters: ${banned.join(', ')}`], input.type);
 
-    // 3. the hard gate: per-user tier may ONLY exist behind an island. A shell widget whose
+    // 3. the hard gate: per-user tier may ONLY exist behind an island. A shell section whose
     //    template lands on per-user would bake user A's bytes into the shared cache (C2).
     if (inf.tier === 'per-user' && !input.island) {
-      throw new WidgetRejected(
+      throw new SectionRejected(
         [`effective tier is per-user — per-user content must be an island, not shell markup`],
         input.type
       );
@@ -117,11 +117,11 @@ export class WidgetRegistry {
     try {
       compile(input.template, { trusted: opts.trusted, limits: UNTRUSTED_LIMITS });
     } catch (e) {
-      throw new WidgetRejected([`compile failed: ${(e as Error).message}`], input.type);
+      throw new SectionRejected([`compile failed: ${(e as Error).message}`], input.type);
     }
 
     const versions = this.byType.get(input.type) ?? [];
-    const rec: WidgetRecord = deepFreeze({
+    const rec: SectionRecord = deepFreeze({
       ...input,
       bindings,
       version: versions.length + 1,
@@ -134,31 +134,31 @@ export class WidgetRegistry {
   }
 
   // latest version, or a pinned one. Absent → undefined (callers decide reject vs fallback).
-  get(type: string, version?: number): WidgetRecord | undefined {
+  get(type: string, version?: number): SectionRecord | undefined {
     const versions = this.byType.get(type);
     if (!versions) return undefined;
     return version == null ? versions[versions.length - 1] : versions[version - 1];
   }
 
-  list(): WidgetRecord[] {
+  list(): SectionRecord[] {
     return [...this.byType.values()].map((v) => v[v.length - 1]);
   }
 }
 
-// Render one widget instance. Trust decides the path: first-party renders in-process (cooperative
+// Render one section instance. Trust decides the path: first-party renders in-process (cooperative
 // limits suffice for our own code); untrusted goes through the worker isolate with the hard
 // wall-clock kill (D40) — one hostile template must never starve reserved-path serving.
-export async function renderWidget(
-  rec: WidgetRecord,
+export async function renderSection(
+  rec: SectionRecord,
   data: Record<string, unknown>
 ): Promise<string> {
   if (rec.trusted) return render(rec.template, data, { trusted: true });
   return renderUntrusted(rec.template, data);
 }
 
-// A registry preloaded with the first-party library (Track 2 widgets), trusted, as version 1.
-export function defaultRegistry(): WidgetRegistry {
-  const reg = new WidgetRegistry();
+// A registry preloaded with the first-party library (Track 2 sections), trusted, as version 1.
+export function defaultRegistry(): SectionRegistry {
+  const reg = new SectionRegistry();
   for (const w of Object.values(FIRST_PARTY_WIDGETS)) {
     reg.register({ type: w.type, template: w.template, bindings: w.bindings }, { trusted: true });
   }

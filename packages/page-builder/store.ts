@@ -10,7 +10,7 @@
 import type { PageDoc } from './doc';
 import { validatePageDoc } from './doc';
 import { canonicalPath } from './path';
-import type { WidgetRegistry } from '../widget-registry/registry';
+import type { SectionRegistry } from '../section-registry/registry';
 import { pageTag, tenantTag } from './tags';
 
 // The edge purge seam (D2): CF tag-purge now, Akamai Fast Purge later — same interface.
@@ -50,7 +50,7 @@ export class PurgeFailed extends Error {
 export class PageBuilder {
   constructor(
     private store: PageStore,
-    private registry: WidgetRegistry,
+    private registry: SectionRegistry,
     private purge: PurgeLike
   ) {}
 

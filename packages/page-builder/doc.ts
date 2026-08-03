@@ -1,25 +1,25 @@
 // Page document (Track 4) — what the editor edits and the origin renders. A page is an ordered
-// list of widget INSTANCES: a pinned widget (type@version) plus the data it binds. Validation at
+// list of section INSTANCES: a pinned section (type@version) plus the data it binds. Validation at
 // save time is the second enforcement point after registration (REQ-3): an instance may only
-// supply data for its widget's DECLARED bindings — there is no side door for extra data to reach
+// supply data for its section's DECLARED bindings — there is no side door for extra data to reach
 // a template, so inference done at registration stays true at render.
 
-import type { WidgetRegistry } from '../widget-registry/registry';
-import { BINDING_CATALOG } from '../widget-registry/registry';
+import type { SectionRegistry } from '../section-registry/registry';
+import { BINDING_CATALOG } from '../section-registry/registry';
 import { canonicalPath } from './path';
 import { safeRichText } from '../theme/index';
 
-export interface WidgetInstance {
+export interface SectionInstance {
   id: string; // unique within the page — stable identity for the editor + island params
   type: string;
   version?: number; // pinned at save; absent in editor input = pin latest
-  data: Record<string, unknown>; // keys MUST be ⊆ the widget's declared bindings
+  data: Record<string, unknown>; // keys MUST be ⊆ the section's declared bindings
 }
 
 export interface PageDoc {
   path: string; // canonical path (validated below)
   title?: string;
-  widgets: WidgetInstance[];
+  sections: SectionInstance[];
 }
 
 // Reserved paths can never host built pages — they are the no-store lane (P8).
@@ -44,10 +44,10 @@ function sanitizeHtmlDeep(v: unknown): unknown {
   return v;
 }
 
-// Validate + normalize: returns the doc with canonicalized path and every widget version PINNED
-// (so a later widget update can't silently change this page — it re-renders only on its own
+// Validate + normalize: returns the doc with canonicalized path and every section version PINNED
+// (so a later section update can't silently change this page — it re-renders only on its own
 // edit→purge cycle). Throws InvalidPageDoc listing every problem at once (editor UX).
-export function validatePageDoc(doc: PageDoc, registry: WidgetRegistry): PageDoc {
+export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDoc {
   const problems: string[] = [];
 
   const path = canonicalPath(doc.path ?? '');
@@ -56,23 +56,23 @@ export function validatePageDoc(doc: PageDoc, registry: WidgetRegistry): PageDoc
     problems.push(`path '${path}' is reserved`);
 
   const seen = new Set<string>();
-  const widgets: WidgetInstance[] = [];
-  for (const w of doc.widgets ?? []) {
+  const sections: SectionInstance[] = [];
+  for (const w of doc.sections ?? []) {
     if (!w.id || seen.has(w.id)) {
-      problems.push(`widget id '${w.id}' missing or duplicate`);
+      problems.push(`section id '${w.id}' missing or duplicate`);
       continue;
     }
     seen.add(w.id);
 
     const rec = registry.get(w.type, w.version);
     if (!rec) {
-      problems.push(`unknown widget '${w.type}'${w.version ? `@${w.version}` : ''}`);
+      problems.push(`unknown section '${w.type}'${w.version ? `@${w.version}` : ''}`);
       continue;
     }
     const declared = new Set(rec.bindings.map((b) => b.name));
     const extra = Object.keys(w.data ?? {}).filter((k) => !declared.has(k));
     if (extra.length)
-      problems.push(`widget '${w.id}' (${w.type}) supplies undeclared data: ${extra.join(', ')}`);
+      problems.push(`section '${w.id}' (${w.type}) supplies undeclared data: ${extra.join(', ')}`);
 
     // html-flagged bindings (catalog) carry authored rich HTML — sanitize AT SAVE, so the raw
     // markup never reaches storage or a template. The template's {{ rich.html }} stays raw-output
@@ -82,9 +82,9 @@ export function validatePageDoc(doc: PageDoc, registry: WidgetRegistry): PageDoc
       data[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
     }
 
-    widgets.push({ ...w, version: rec.version, data });
+    sections.push({ ...w, version: rec.version, data });
   }
 
   if (problems.length) throw new InvalidPageDoc(problems);
-  return { path, title: doc.title, widgets };
+  return { path, title: doc.title, sections };
 }

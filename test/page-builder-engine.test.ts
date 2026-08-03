@@ -1,6 +1,6 @@
 // Page-builder engine (spine-free): save-time validation (second enforcement point after
 // registration, incl. rich-HTML sanitization), version pinning, and shell composition
-// (islands stay placeholders, tier = max over shell widgets). Persistence, purge, and the
+// (islands stay placeholders, tier = max over shell sections). Persistence, purge, and the
 // full edge lifecycle live in later slices; this covers doc + compose only.
 // Run: node --import tsx --test test/page-builder-engine.test.ts
 
@@ -8,21 +8,21 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validatePageDoc, InvalidPageDoc, type PageDoc } from '../packages/page-builder/doc';
 import { composePage } from '../packages/page-builder/compose';
-import { WidgetRegistry, defaultRegistry } from '../packages/widget-registry/registry';
+import { SectionRegistry, defaultRegistry } from '../packages/section-registry/registry';
 
 const heroPage = (path: string, heading: string): PageDoc => ({
   path,
   title: 'Home',
-  widgets: [{ id: 'w1', type: 'hero', data: { hero: { heading } } }],
+  sections: [{ id: 'w1', type: 'hero', data: { hero: { heading } } }],
 });
 
 // ─── validation ──────────────────────────────────────────────────────────────
 
-test('validate: unknown widget, undeclared data, reserved path, dup ids — all reported at once', () => {
+test('validate: unknown section, undeclared data, reserved path, dup ids — all reported at once', () => {
   const reg = defaultRegistry();
   const bad: PageDoc = {
     path: '/cart/extras',
-    widgets: [
+    sections: [
       { id: 'a', type: 'ghost', data: {} },
       { id: 'b', type: 'hero', data: { hero: {}, settings: { theme: 'x' } } },
       { id: 'b', type: 'hero', data: { hero: {} } },
@@ -35,21 +35,21 @@ test('validate: unknown widget, undeclared data, reserved path, dup ids — all 
     assert.ok(e instanceof InvalidPageDoc);
     const all = e.problems.join(' | ');
     assert.match(all, /reserved/);
-    assert.match(all, /unknown widget 'ghost'/);
+    assert.match(all, /unknown section 'ghost'/);
     assert.match(all, /undeclared data: settings/);
     assert.match(all, /duplicate/);
   }
 });
 
-test('validate: canonicalizes the path and pins widget versions', () => {
+test('validate: canonicalizes the path and pins section versions', () => {
   const reg = defaultRegistry();
   const doc = validatePageDoc(heroPage('/About//', 'hi'), reg);
   assert.equal(doc.path, '/About', 'path canonicalized like the edge key (P9 — same fn)');
-  assert.equal(doc.widgets[0].version, 1, 'version pinned at save');
+  assert.equal(doc.sections[0].version, 1, 'version pinned at save');
 });
 
-test('validate: a later widget version cannot silently change a saved page', async () => {
-  const reg = new WidgetRegistry();
+test('validate: a later section version cannot silently change a saved page', async () => {
+  const reg = new SectionRegistry();
   reg.register(
     {
       type: 'promo',
@@ -59,7 +59,7 @@ test('validate: a later widget version cannot silently change a saved page', asy
     { trusted: true }
   );
   const pinned = validatePageDoc(
-    { path: '/p', widgets: [{ id: 'a', type: 'promo', data: { promo: { text: 'x' } } }] },
+    { path: '/p', sections: [{ id: 'a', type: 'promo', data: { promo: { text: 'x' } } }] },
     reg
   );
   reg.register(
@@ -74,7 +74,7 @@ test('validate: a later widget version cannot silently change a saved page', asy
   assert.match(html, /v1:x/, 'pinned page still renders the version it was saved with');
 
   const repinned = validatePageDoc(pinned, reg);
-  assert.equal(repinned.widgets[0].version, 1, 'explicit pins survive re-validation');
+  assert.equal(repinned.sections[0].version, 1, 'explicit pins survive re-validation');
 });
 
 test('validate: rich HTML is sanitized AT SAVE — script/attribute vectors never reach storage (finding #8)', () => {
@@ -82,7 +82,7 @@ test('validate: rich HTML is sanitized AT SAVE — script/attribute vectors neve
   const doc = validatePageDoc(
     {
       path: '/rich',
-      widgets: [
+      sections: [
         {
           id: 'r1',
           type: 'richText',
@@ -96,7 +96,7 @@ test('validate: rich HTML is sanitized AT SAVE — script/attribute vectors neve
     },
     reg
   );
-  const html = (doc.widgets[0].data.rich as { html: string }).html;
+  const html = (doc.sections[0].data.rich as { html: string }).html;
   assert.match(html, /<p>fine<\/p>/, 'allowlisted formatting survives');
   assert.match(html, /<b>bold<\/b>/, 'allowlisted formatting survives');
   assert.ok(!html.includes('<script>'), 'script tag neutralized');
@@ -106,13 +106,13 @@ test('validate: rich HTML is sanitized AT SAVE — script/attribute vectors neve
 
 // ─── compose ─────────────────────────────────────────────────────────────────
 
-test('compose: widgets render in order; title escapes; islands runtime ships; tier = shell max', async () => {
+test('compose: sections render in order; title escapes; islands runtime ships; tier = shell max', async () => {
   const reg = defaultRegistry();
   const doc = validatePageDoc(
     {
       path: '/',
       title: 'A<b>&"shop"',
-      widgets: [
+      sections: [
         { id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } },
         { id: 'g', type: 'productGrid', data: { grid: { products: [] } } },
       ],
@@ -130,7 +130,7 @@ test('compose: widgets render in order; title escapes; islands runtime ships; ti
   assert.equal(page.cacheable, true);
 });
 
-test('compose: an island widget contributes ONLY its placeholder — per-user template never touches the shell', async () => {
+test('compose: an island section contributes ONLY its placeholder — per-user template never touches the shell', async () => {
   const reg = defaultRegistry();
   reg.register(
     {
@@ -144,7 +144,7 @@ test('compose: an island widget contributes ONLY its placeholder — per-user te
   const doc = validatePageDoc(
     {
       path: '/',
-      widgets: [
+      sections: [
         { id: 'w1', type: 'hero', data: { hero: { heading: 'Hi' } } },
         { id: 'w2', type: 'greeting', data: {} },
       ],

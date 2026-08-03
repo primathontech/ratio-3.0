@@ -10,7 +10,7 @@ import { app } from '../apps/origin/index';
 import { pool } from '../packages/shared/db';
 import { PgPageStore } from '../packages/page-builder/store-pg';
 import { PageBuilder, type PurgeLike } from '../packages/page-builder/store';
-import { defaultRegistry } from '../packages/widget-registry/registry';
+import { defaultRegistry } from '../packages/section-registry/registry';
 import { pageTag } from '../packages/page-builder/tags';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
@@ -32,7 +32,7 @@ before(async () => {
   await b.saveDraft(T, {
     path: '/pb-home',
     title: 'PB Home',
-    widgets: [
+    sections: [
       {
         id: 'r1',
         type: 'richText',

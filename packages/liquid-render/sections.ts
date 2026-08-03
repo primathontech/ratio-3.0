@@ -1,19 +1,19 @@
-// First-party widget library, authored in Liquid (D33 — same engine as merchant code, so merchants
-// can read/fork these). Each widget declares the bindings it reads + their tiers; the effective
-// cacheability of a page is inferred from the widgets it uses (infer.ts), never hand-declared.
+// First-party section library, authored in Liquid (D33 — same engine as merchant code, so merchants
+// can read/fork these). Each section declares the bindings it reads + their tiers; the effective
+// cacheability of a page is inferred from the sections it uses (infer.ts), never hand-declared.
 //
 // The tiers encode the S1 contract: title/images = static; price/stock = shared-volatile (baked but
 // purged on change); cart/personalised = per-user (island, hydrated after the cached shell paints).
 
 import type { Binding } from './infer';
 
-export interface WidgetDef {
+export interface SectionDef {
   type: string;
   template: string; // Liquid source
   bindings: Binding[]; // what it may read + each binding's tier
 }
 
-export const FIRST_PARTY_WIDGETS: Record<string, WidgetDef> = {
+export const FIRST_PARTY_WIDGETS: Record<string, SectionDef> = {
   hero: {
     type: 'hero',
     bindings: [{ name: 'hero', tier: 'static' }],

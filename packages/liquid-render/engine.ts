@@ -1,6 +1,6 @@
-// Sandboxed LiquidJS engine for widget/page rendering (D33). Two trust tiers share this factory:
-//   - first-party widgets: trusted authors, may use registered partials + the full filter set
-//   - merchant/app custom widgets: untrusted — no filesystem, no dynamic includes, curated
+// Sandboxed LiquidJS engine for section/page rendering (D33). Two trust tiers share this factory:
+//   - first-party sections: trusted authors, may use registered partials + the full filter set
+//   - merchant/app custom sections: untrusted — no filesystem, no dynamic includes, curated
 //     filters only, hard resource limits, and (via isolate.ts) a worker-thread wall-clock kill.
 //
 // The engine ALONE does not make untrusted code safe on compute — no engine self-bounds CPU

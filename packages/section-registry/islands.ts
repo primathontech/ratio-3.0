@@ -17,7 +17,7 @@ export function assertIslandName(name: string): void {
   if (!NAME_RE.test(name)) throw new Error(`invalid island name '${name}'`);
 }
 
-// The inert placeholder a widget template (or compose step) emits into the shell. Params are
+// The inert placeholder a section template (or compose step) emits into the shell. Params are
 // PUBLIC bytes (sku, list id …) — never user data; they ride the shared cache with the page.
 export function islandPlaceholder(name: string, params: Record<string, string> = {}): string {
   assertIslandName(name);

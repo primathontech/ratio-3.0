@@ -6,7 +6,7 @@ import { normalizePage } from '../../packages/content-model/index';
 import { renderPage, esc } from '../../packages/theme/index';
 import { PgPageStore } from '../../packages/page-builder/store-pg';
 import { composePage } from '../../packages/page-builder/compose';
-import { defaultRegistry } from '../../packages/widget-registry/registry';
+import { defaultRegistry } from '../../packages/section-registry/registry';
 import { canonicalPath } from '../../packages/page-builder/path';
 import { pageTag, tenantTag } from '../../packages/page-builder/tags';
 

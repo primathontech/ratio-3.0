@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { pool } from '../packages/shared/db';
 import { PgPageStore } from '../packages/page-builder/store-pg';
 import { PageBuilder, PurgeFailed, type PurgeLike } from '../packages/page-builder/store';
-import { defaultRegistry } from '../packages/widget-registry/registry';
+import { defaultRegistry } from '../packages/section-registry/registry';
 import { pageTag } from '../packages/page-builder/tags';
 import type { PageDoc } from '../packages/page-builder/doc';
 
@@ -27,9 +27,10 @@ const tid = () => `pbtest_${Date.now().toString(36)}_${n++}`;
 const heroPage = (path: string, heading: string): PageDoc => ({
   path,
   title: 'Home',
-  widgets: [{ id: 'w1', type: 'hero', data: { hero: { heading } } }],
+  sections: [{ id: 'w1', type: 'hero', data: { hero: { heading } } }],
 });
-const heading = (doc: PageDoc): string => (doc.widgets[0].data.hero as { heading: string }).heading;
+const heading = (doc: PageDoc): string =>
+  (doc.sections[0].data.hero as { heading: string }).heading;
 
 const world = () => {
   const store = new PgPageStore();
@@ -49,7 +50,7 @@ test('saveDraft writes a draft and does NOT publish or purge', async () => {
   await b.saveDraft(t, heroPage('/p', 'draft one'));
   assert.equal(await store.getLive(t, '/p'), null, 'live is untouched by a save');
   const d = await store.getDraft(t, '/p');
-  assert.ok(d && d.widgets[0].type === 'hero', 'draft is stored');
+  assert.ok(d && d.sections[0].type === 'hero', 'draft is stored');
   assert.equal(purge.calls.length, 0, 'save never purges');
   assert.equal(await store.revision(t, '/p'), 0, 'unpublished page has revision 0');
 });
