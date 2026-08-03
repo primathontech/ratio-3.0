@@ -34,7 +34,7 @@ const RICH_TAGS = [
   'h3',
   'blockquote',
 ];
-function safeRichText(html: unknown): string {
+export function safeRichText(html: unknown): string {
   let out = esc(html);
   for (const t of RICH_TAGS) {
     out = out.split(`&lt;${t}&gt;`).join(`<${t}>`).split(`&lt;/${t}&gt;`).join(`</${t}>`);
