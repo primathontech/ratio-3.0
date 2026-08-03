@@ -6,6 +6,7 @@
 
 import type { SectionRegistry } from '../section-registry/registry';
 import { BINDING_CATALOG } from '../section-registry/registry';
+import { validateSettings } from '../section-registry/settings';
 import { canonicalPath } from './path';
 import { safeRichText } from '../theme/index';
 
@@ -89,6 +90,8 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
     for (const [k, v] of Object.entries(w.data ?? {})) {
       data[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
     }
+    for (const p of validateSettings(data, rec.settings ?? []))
+      problems.push(`section '${w.id}' (${w.type}) ${p}`);
 
     // child blocks (nested section → block), if any
     let blocks: BlockInstance[] | undefined;
@@ -122,6 +125,8 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
           const bdata: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(b.data ?? {}))
             bdata[k] = BINDING_CATALOG[k]?.html ? sanitizeHtmlDeep(v) : v;
+          for (const p of validateSettings(bdata, brec.settings ?? []))
+            problems.push(`block '${b.id}' (${b.type}) ${p}`);
           blocks.push({ ...b, version: brec.version, data: bdata });
         }
       }

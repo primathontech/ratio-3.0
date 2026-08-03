@@ -272,3 +272,84 @@ test('validate: a block with undeclared data is rejected; a valid block pins its
   );
   assert.equal(doc.sections[0].blocks?.[0].version, 1, 'block version pinned at save');
 });
+
+// ─── typed settings (Slice 2b) ──────────────────────────────────────────────────
+
+test('settings: valid typed values pass', () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    {
+      path: '/',
+      sections: [
+        {
+          id: 'h',
+          type: 'hero',
+          data: { hero: { heading: 'Hi', cta: { label: 'Shop', href: '/shop' } } },
+        },
+      ],
+    },
+    reg
+  );
+  assert.equal(doc.sections[0].type, 'hero');
+});
+
+test('settings: a wrong-typed value is rejected with the setting key', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        { path: '/', sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 42 } } }] },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /setting 'hero.heading' must be a string/.test(e.problems.join(' '))
+  );
+});
+
+test('settings: a non-URL (e.g. javascript:) link setting is rejected', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [
+            {
+              id: 'h',
+              type: 'hero',
+              data: { hero: { heading: 'Hi', cta: { href: 'javascript:alert(1)' } } },
+            },
+          ],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /setting 'hero.cta.href' must be an absolute URL/.test(e.problems.join(' '))
+  );
+});
+
+test('settings: block setting types are validated too', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [
+            {
+              id: 's1',
+              type: 'slideshow',
+              data: {},
+              blocks: [{ id: 'b1', type: 'slide', data: { slide: { image: 5 } } }],
+            },
+          ],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /setting 'slide.image' must be a string/.test(e.problems.join(' '))
+  );
+});

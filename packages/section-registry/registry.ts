@@ -13,6 +13,7 @@ import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '../liquid-r
 import { renderUntrusted } from '../liquid-render/isolate';
 import { inferTier, type Binding, type Tier } from '../liquid-render/infer';
 import { FIRST_PARTY_SECTIONS } from '../liquid-render/sections';
+import type { SettingDef } from './settings';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────
 // Binding identity → tier (+ html flag for sanitize-at-save). This is THE source of tier truth:
@@ -58,6 +59,7 @@ export interface SectionInput {
   island?: { name: string };
   kind?: 'section' | 'block'; // default 'section'; a block is a child nested inside a section
   blocks?: string[]; // for sections: the child block types this section accepts (Shopify-shaped)
+  settings?: SettingDef[]; // typed editor inputs, validated at save (Slice 2b)
 }
 
 export interface SectionRecord extends SectionInput {
@@ -182,6 +184,7 @@ export function defaultRegistry(): SectionRegistry {
         kind: w.kind,
         blocks: w.blocks,
         island: w.island,
+        settings: w.settings,
       },
       { trusted: true }
     );

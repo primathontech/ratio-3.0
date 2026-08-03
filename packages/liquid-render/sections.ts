@@ -6,6 +6,7 @@
 // purged on change); cart/personalised = per-user (island, hydrated after the cached shell paints).
 
 import type { Binding } from './infer';
+import type { SettingDef } from '../section-registry/settings';
 
 export interface SectionDef {
   type: string;
@@ -14,12 +15,19 @@ export interface SectionDef {
   kind?: 'section' | 'block'; // default 'section'; blocks are children nested inside a section
   blocks?: string[]; // for sections: the child block types this section accepts
   island?: { name: string };
+  settings?: SettingDef[]; // typed editor inputs (Slice 2b)
 }
 
 export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   hero: {
     type: 'hero',
     bindings: [{ name: 'hero', tier: 'static' }],
+    settings: [
+      { key: 'hero.heading', type: 'text', label: 'Heading' },
+      { key: 'hero.sub', type: 'text', label: 'Subheading' },
+      { key: 'hero.cta.label', type: 'text', label: 'Button label' },
+      { key: 'hero.cta.href', type: 'url', label: 'Button link' },
+    ],
     template: `<section class="hero">
   <h1>{{ hero.heading | escape }}</h1>
   {% if hero.sub %}<p>{{ hero.sub | escape }}</p>{% endif %}
@@ -30,6 +38,7 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   productGrid: {
     type: 'productGrid',
     bindings: [{ name: 'grid', tier: 'shared-volatile' }], // prices inside → shared-volatile
+    settings: [{ key: 'grid.heading', type: 'text', label: 'Section heading' }],
     template: `<section>
   {% if grid.heading %}<h2>{{ grid.heading | escape }}</h2>{% endif %}
   <div class="grid">
@@ -65,6 +74,7 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   richText: {
     type: 'richText',
     bindings: [{ name: 'rich', tier: 'static' }],
+    settings: [{ key: 'rich.html', type: 'richtext', label: 'Content' }],
     template: `<section class="rich">{{ rich.html }}</section>`,
   },
 
@@ -84,6 +94,10 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     type: 'slide',
     kind: 'block',
     bindings: [{ name: 'slide', tier: 'static' }],
+    settings: [
+      { key: 'slide.heading', type: 'text', label: 'Slide heading' },
+      { key: 'slide.image', type: 'image', label: 'Slide image' },
+    ],
     template: `<div class="slide"><h2>{{ slide.heading | escape }}</h2>{% if slide.image %}<img src="{{ slide.image | escape }}" alt="{{ slide.heading | escape }}">{% endif %}</div>`,
   },
 };
