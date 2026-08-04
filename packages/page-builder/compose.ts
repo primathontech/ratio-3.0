@@ -9,6 +9,7 @@ import type { SectionRegistry } from '../section-registry/registry';
 import { renderSection } from '../section-registry/registry';
 import { islandPlaceholder } from '../section-registry/islands';
 import type { Tier } from '../liquid-render/infer';
+import { storefrontHead, type ThemeTokens } from './storefront';
 
 const ORDER: Tier[] = ['static', 'shared-volatile', 'per-segment', 'per-user'];
 const maxTier = (a: Tier, b: Tier): Tier => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);
@@ -22,7 +23,11 @@ export interface ComposedPage {
   cacheable: boolean;
 }
 
-export async function composePage(doc: PageDoc, registry: SectionRegistry): Promise<ComposedPage> {
+export async function composePage(
+  doc: PageDoc,
+  registry: SectionRegistry,
+  theme: ThemeTokens = {}
+): Promise<ComposedPage> {
   let tier: Tier = 'static';
   const parts: string[] = [];
 
@@ -56,10 +61,13 @@ export async function composePage(doc: PageDoc, registry: SectionRegistry): Prom
   // shell is always cacheable; the tier still matters upstream (shared-volatile → purge on price
   // change; per-segment → segment key dimension when personalization lands, REQ-2).
   const html =
-    `<!doctype html><html><head><meta charset="utf-8">` +
-    `<title>${esc(doc.title ?? '')}</title></head><body>\n` +
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>${esc(doc.title ?? '')}</title>` +
+    storefrontHead(theme) +
+    `</head><body>\n<main class="rt">\n` +
     parts.join('\n') +
-    `\n<script src="/assets/islands.js" defer></script></body></html>`;
+    `\n</main>\n<script src="/assets/islands.js" defer></script></body></html>`;
 
   return { html, tier, cacheable: tier !== 'per-user' };
 }
