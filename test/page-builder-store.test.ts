@@ -23,7 +23,7 @@ class CountingPurge implements PurgeLike {
 }
 
 let n = 0;
-const tid = () => `pbtest_${Date.now().toString(36)}_${n++}`;
+const tid = () => `pbstore_${Date.now().toString(36)}_${n++}`;
 const heroPage = (path: string, heading: string): PageDoc => ({
   path,
   title: 'Home',
@@ -39,8 +39,8 @@ const world = () => {
 };
 
 after(async () => {
-  await pool.query("DELETE FROM page_purge_outbox WHERE tenant_id LIKE 'pbtest%'");
-  await pool.query("DELETE FROM pages WHERE tenant_id LIKE 'pbtest%'");
+  await pool.query("DELETE FROM page_purge_outbox WHERE tenant_id LIKE 'pbstore%'");
+  await pool.query("DELETE FROM pages WHERE tenant_id LIKE 'pbstore%'");
   await pool.end();
 });
 

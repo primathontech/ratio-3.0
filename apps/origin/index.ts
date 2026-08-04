@@ -109,7 +109,7 @@ app.all('*', async (c) => {
     const doc = await pageStore.getLive(tenantId as string, canon);
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
-      const composed = await composePage(doc, pbRegistry);
+      const composed = await composePage(doc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
       c.header('x-page-tier', composed.tier);

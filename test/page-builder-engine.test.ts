@@ -407,3 +407,41 @@ test('settings: library block validation — bad button URL and out-of-range spa
       /setting 'spacer.size' must be <= 200/.test(e.problems.join(' '))
   );
 });
+
+// ─── theme / CSS (Slice 3) ──────────────────────────────────────────────────────
+
+test('theme: composed page ships the storefront stylesheet + a content wrapper', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    {
+      path: '/',
+      title: 'T',
+      sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } }],
+    },
+    reg
+  );
+  const page = await composePage(doc, reg);
+  assert.match(
+    page.html,
+    /<style>[^]*\.hero\{[^]*<\/style>/,
+    'base storefront CSS injected into head'
+  );
+  assert.match(page.html, /<main class="rt">/, 'content wrapped for layout');
+  assert.match(page.html, /name="viewport"/, 'responsive viewport meta present');
+});
+
+test('theme: a valid hex accent is applied; anything else is dropped (no CSS injection)', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    { path: '/', sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } }] },
+    reg
+  );
+  const ok = await composePage(doc, reg, { accent: '#e11d48' });
+  assert.match(ok.html, /--accent:#e11d48/, 'hex accent overrides the token');
+  const bad = await composePage(doc, reg, { accent: 'red;}body{display:none' });
+  assert.ok(
+    !bad.html.includes('display:none'),
+    'a malicious accent value is dropped, never injected'
+  );
+  assert.ok(!/--accent:red/.test(bad.html), 'a non-hex accent is ignored');
+});
