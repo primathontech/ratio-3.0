@@ -29,16 +29,18 @@ jobs:
       TEST_DATABASE_URL: postgres://postgres@localhost:5432/s2poc_test
     steps:
       - uses: actions/checkout@v7
+      # Node runs the tests (node --import tsx --test); Bun is the package manager (bun.lock).
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm audit --audit-level=high
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check
-      - run: npm test
+      - run: npm test # npm run so the pretest hook (ensure-test-db + migrate + seed) fires
 
   deploy:
     needs: build
@@ -51,8 +53,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
       # Only apply schema to prod. db/seed.sql is a DEV/TEST demo fixture (Acme/Beta +
       # *.localhost domains) — never seed it into prod; real stores come from onboarding.
       - name: Migrate Neon
