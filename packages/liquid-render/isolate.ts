@@ -14,7 +14,12 @@ export class RenderFailed extends Error {}
 const WORKER = new URL('./worker.mjs', import.meta.url);
 
 export interface IsolateOptions {
-  timeoutMs?: number; // wall-clock kill (default 250ms — well above a legit render, well below a hang)
+  // Wall-clock kill. NB: the budget currently includes worker-thread cold-start (a fresh worker is
+  // spawned per render), which varies a lot on a cold/loaded runner — so the default is generous
+  // enough to cover spin-up + a legit render, yet far below a real hang. The engine's cooperative
+  // render/memory limits catch runaway templates well before this backstop fires.
+  // TODO: pool workers + start the timer on a ready-handshake to restore a tight render-only budget.
+  timeoutMs?: number;
 }
 
 // Render UNTRUSTED source in an isolated worker. Resolves to HTML, or throws RenderTimeout /
@@ -24,7 +29,7 @@ export function renderUntrusted(
   data: Record<string, unknown>,
   opts?: IsolateOptions
 ): Promise<string> {
-  const timeoutMs = opts?.timeoutMs ?? 250;
+  const timeoutMs = opts?.timeoutMs ?? 2000;
 
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(WORKER, {
