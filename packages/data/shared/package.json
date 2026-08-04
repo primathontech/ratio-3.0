@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/shared",
+  "version": "0.1.0",
+  "description": "db · metrics · ratelimit",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./*.ts"
+  },
+  "license": "UNLICENSED"
+}

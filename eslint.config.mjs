@@ -13,6 +13,20 @@ export default tseslint.config(
     },
     rules: {
       'no-empty': ['error', { allowEmptyCatch: true }],
+      // Package boundary: cross-package code goes through the @ratio/* name, never a
+      // relative path that reaches into packages/. Intra-package relative imports are fine.
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/packages/**'],
+              message:
+                'Import across packages via their @ratio/* workspace name, not a relative path into packages/.',
+            },
+          ],
+        },
+      ],
     },
   },
   prettier

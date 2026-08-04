@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import app from '../services/edge-cloudflare/worker';
-import { storeUnavailable } from '../packages/edge/core/index';
+import { storeUnavailable } from '@ratio/edge-core';
 
 test('storeUnavailable is a 503 with Retry-After, no-store, and storefront security headers', async () => {
   const res = storeUnavailable();

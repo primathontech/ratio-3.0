@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/edge-core",
+  "version": "0.1.0",
+  "description": "edge cache-spine seams",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

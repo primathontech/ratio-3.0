@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import app from '../services/edge-cloudflare/worker';
-import { buildMetricPoint, type AnalyticsEngineDataset } from '../packages/edge/core/index';
+import { buildMetricPoint, type AnalyticsEngineDataset } from '@ratio/edge-core';
 
 test('buildMetricPoint indexes by tenant and records status/ms as doubles', () => {
   const p = buildMetricPoint({

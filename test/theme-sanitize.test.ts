@@ -2,7 +2,7 @@
 // validated (no javascript:/data:). Pure renderer, deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { renderPage } from '../packages/theme/index';
+import { renderPage } from '@ratio/theme';
 
 const tenant = { name: 'Acme', theme: { color: '#c0392b' } };
 const render = (section: unknown) => renderPage({ sections: [section] } as never, { tenant });

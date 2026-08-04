@@ -5,7 +5,19 @@
 FROM oven/bun:1 AS deps
 WORKDIR /app
 COPY package.json bun.lock ./
+# Every workspace manifest must be present so `bun install` can create the @ratio/*
+# node_modules symlinks; the source they point to arrives via `COPY . .` in runtime.
 COPY packages/control-plane-client/package.json ./packages/control-plane-client/package.json
+COPY packages/theme/package.json ./packages/theme/package.json
+COPY packages/data/repo/package.json ./packages/data/repo/package.json
+COPY packages/data/shared/package.json ./packages/data/shared/package.json
+COPY packages/data/provisioning/package.json ./packages/data/provisioning/package.json
+COPY packages/data/content-model/package.json ./packages/data/content-model/package.json
+COPY packages/edge/core/package.json ./packages/edge/core/package.json
+COPY packages/edge/provider/package.json ./packages/edge/provider/package.json
+COPY packages/page-builder/core/package.json ./packages/page-builder/core/package.json
+COPY packages/page-builder/registry/package.json ./packages/page-builder/registry/package.json
+COPY packages/page-builder/render/package.json ./packages/page-builder/render/package.json
 RUN bun install --frozen-lockfile
 
 FROM node:22-slim AS runtime

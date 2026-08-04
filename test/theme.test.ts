@@ -1,8 +1,8 @@
 // Real theme renderer + content model (un-mock the theme). Pure, deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { renderPage } from '../packages/theme/index';
-import { normalizePage } from '../packages/data/content-model/index';
+import { renderPage } from '@ratio/theme';
+import { normalizePage } from '@ratio/content-model';
 
 const tenant = { name: 'Acme', theme: { color: '#c0392b' } };
 

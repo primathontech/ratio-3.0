@@ -132,11 +132,11 @@ _On Enterprise (proxied wildcard DNS), step 2 + the propagation wait disappear._
 
 ```
 cp .env.example .env          # point DATABASE_URL at local Postgres
-npm install
-npm run db:init               # migrate + seed
-npm start                     # edge :8080 + origin :9090 (two-server sim)
-npm test                      # node:test against s2poc_test
-npm run prove ; npm run prove:s1   # full-stack proofs
+bun install                   # Bun = package manager + script runner
+bun run db:init               # migrate + seed
+bun start                     # edge :8080 + origin :9090 (two-server sim)
+bun run test                  # node:test against s2poc_test
+bun run prove ; bun run prove:s1   # full-stack proofs
 ```
 
 ## Known gaps / on-hold

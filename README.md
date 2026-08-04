@@ -44,13 +44,13 @@ on hold (see Jira OFCE-359 / INFRASTRUCTURE.md).
 
 ```bash
 cp .env.example .env      # point DATABASE_URL at your local Postgres
-npm install
-npm run db:init           # run migrations + seed
-npm start                 # edge :8080 + origin :9090 (two-server local sim)
-npm test                  # node:test against the s2poc_test DB
-npm run typecheck && npm run lint
-npm run prove             # S2 full-stack proof — expect ALL GREEN
-npm run prove:s1          # S1 cacheability proof — expect ALL GREEN
+bun install               # Bun is the package manager AND the script runner
+bun run db:init           # run migrations + seed
+bun start                 # edge :8080 + origin :9090 (two-server local sim)
+bun run test              # test:setup (ensure-db + migrate + seed) then node:test
+bun run typecheck && bun run lint
+bun run prove             # S2 full-stack proof — expect ALL GREEN
+bun run prove:s1          # S1 cacheability proof — expect ALL GREEN
 ```
 
 Manual poke (local):

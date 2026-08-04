@@ -3,8 +3,8 @@
 // OPEN on a DB error so a limiter outage never takes down the API (ADR-008).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createPgRateLimiter } from '../packages/data/shared/ratelimit';
-import { pool } from '../packages/data/shared/db';
+import { createPgRateLimiter } from '@ratio/shared/ratelimit';
+import { pool } from '@ratio/shared/db';
 
 const KEY = 'test:pgrl:shared';
 before(() => pool.query('DELETE FROM rate_counters WHERE key = $1', [KEY]));

@@ -4,7 +4,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { app } from '../services/origin/index';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const call = (path: string) => app.fetch(new Request('http://origin' + path));
 

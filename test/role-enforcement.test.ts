@@ -14,7 +14,7 @@ import {
   mintAgentToken,
   type Verifier,
 } from '../services/admin-api/auth';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const OWNER = 'user_role_owner';
 const EDITOR = 'user_role_editor';

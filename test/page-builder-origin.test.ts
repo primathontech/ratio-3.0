@@ -7,11 +7,11 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 process.env.PAGE_BUILDER_ENABLED = 'true';
 import { app } from '../services/origin/index';
-import { pool } from '../packages/data/shared/db';
-import { PgPageStore } from '../packages/page-builder/core/store-pg';
-import { PageBuilder, type PurgeLike } from '../packages/page-builder/core/store';
-import { defaultRegistry } from '../packages/page-builder/registry/registry';
-import { pageTag } from '../packages/page-builder/core/tags';
+import { pool } from '@ratio/shared/db';
+import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
+import { defaultRegistry } from '@ratio/page-builder-registry/registry';
+import { pageTag } from '@ratio/page-builder-core/tags';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const T = 'pbtest_o1';

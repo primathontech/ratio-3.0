@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import app from '../services/edge-cloudflare/worker';
-import { buildAccessLog } from '../packages/edge/core/index';
+import { buildAccessLog } from '@ratio/edge-core';
 
 test('buildAccessLog keeps only the pathname — never the query string (tokens/PII)', () => {
   const rec = buildAccessLog({

@@ -11,14 +11,14 @@ import {
   SectionRejected,
   defaultRegistry,
   renderSection,
-} from '../packages/page-builder/registry/registry';
+} from '@ratio/page-builder-registry/registry';
 import {
   islandPlaceholder,
   islandsRuntimeScript,
   IslandRegistry,
   assertIslandName,
-} from '../packages/page-builder/registry/islands';
-import { RenderTimeout } from '../packages/page-builder/render/isolate';
+} from '@ratio/page-builder-registry/islands';
+import { RenderTimeout } from '@ratio/page-builder-render/isolate';
 
 // ─── registry: first-party preload + inferred tiers ──────────────────────────
 

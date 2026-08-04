@@ -1,4 +1,4 @@
-import { pool } from '../shared/db';
+import { pool } from '@ratio/shared/db';
 
 // Platform hosts are ours (wildcard DNS/TLS), so a claim on one is verified immediately.
 // Custom domains must prove ownership via Cloudflare DV before their claim is authoritative.
