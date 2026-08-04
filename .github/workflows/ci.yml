@@ -4,9 +4,11 @@ permissions:
   contents: read
 
 on:
+  # Runs ONLY on a merge/push to main + manual dispatch — PR runs are intentionally disabled to
+  # conserve the free GitHub Actions minutes (2000/mo). Validate PRs locally before merging:
+  # `npm run typecheck && npm run lint && npm run format:check && npm test`.
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 jobs:
