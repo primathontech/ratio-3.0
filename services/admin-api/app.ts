@@ -85,6 +85,7 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
 // Prod tag-purge (Cloudflare/Akamai) is a separate wiring; here it's local-only + the publish
 // transaction records a durable outbox intent regardless, so nothing is stranded.
 const pbStore = new PgPageStore();
+const pbRegistry = defaultRegistry();
 const pbPurge: PurgeLike = {
   async invalidateByTags(tags) {
     if (!isLocal) return;
@@ -97,7 +98,19 @@ const pbPurge: PurgeLike = {
     }
   },
 };
-const pageBuilder = new PageBuilder(pbStore, defaultRegistry(), pbPurge);
+const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
+
+// The section catalog the editor renders forms from. Serializable metadata only (type + kind +
+// typed settings + accepted child block types) — never the render templates.
+function sectionCatalog() {
+  return pbRegistry.list().map((r) => ({
+    type: r.type,
+    // a type is a top-level section unless it's explicitly a child block
+    kind: r.kind === 'block' ? 'block' : 'section',
+    settings: r.settings ?? [],
+    blocks: r.blocks ?? [],
+  }));
+}
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
 // platform's own domain (H-1 — subdomain squat: e.g. login.ratiodev.in served attacker
@@ -462,6 +475,9 @@ export function createApp(
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
   // (validated + version-pinned, live page untouched), then publish to promote draft->live and
   // purge. A published PageDoc wins over the legacy content-model route at the origin. ---
+
+  // Global section catalog (any authenticated user) — the editor renders inputs from it.
+  app.get('/page-builder/catalog', (c) => c.json({ sections: sectionCatalog() }));
 
   app.get('/stores/:id/page-builder', requireMembership, async (c) => {
     const id = c.req.param('id');

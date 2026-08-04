@@ -24,6 +24,7 @@ import {
   useToast,
 } from './ui';
 import { SectionEditor, toEditable, type Section } from './sections';
+import { PageBuilderPanel } from './pagebuilder';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -623,6 +624,8 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           )}
         </div>
       </div>
+
+      <PageBuilderPanel api={api} store={store} />
 
       <DomainsPanel api={api} store={store} />
 
