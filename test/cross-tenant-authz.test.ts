@@ -16,7 +16,7 @@ import {
   mintAgentToken,
   type Verifier,
 } from '../services/admin-api/auth';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const VICTIM = 'user_victim_authz';
 const ATTACKER = 'user_attacker_authz';

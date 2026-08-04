@@ -10,10 +10,10 @@ process.env.PLATFORM_ADMIN_IDS = '';
 process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
 import { renderPage } from '../packages/theme/index';
-import { app as origin } from '../apps/origin/index';
+import { app as origin } from '../services/origin/index';
 import { createApp } from '../services/admin-api/app';
 import { composeVerifiers, agentVerifier, type Verifier } from '../services/admin-api/auth';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const OWNER = 'user_r5_owner';
 const ATTACKER = 'user_r5_attacker';

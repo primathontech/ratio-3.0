@@ -66,7 +66,9 @@ describe('admin api client', () => {
   });
 
   test('listAudit unwraps the entries array', async () => {
-    const entries = [{ at: 't', actor: 'u', actorKind: 'user', action: 'pages:write', method: 'PUT', status: 200 }];
+    const entries = [
+      { at: 't', actor: 'u', actorKind: 'user', action: 'pages:write', method: 'PUT', status: 200 },
+    ];
     const api = createApi('http://api', async () => 't', fakeFetch(200, { entries }));
     expect(await api.listAudit('t_x')).toEqual(entries);
   });

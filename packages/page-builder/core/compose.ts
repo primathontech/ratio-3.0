@@ -5,10 +5,10 @@
 // construction, not by review (C2).
 
 import type { PageDoc } from './doc';
-import type { SectionRegistry } from '../section-registry/registry';
-import { renderSection } from '../section-registry/registry';
-import { islandPlaceholder } from '../section-registry/islands';
-import type { Tier } from '../liquid-render/infer';
+import type { SectionRegistry } from '../registry/registry';
+import { renderSection } from '../registry/registry';
+import { islandPlaceholder } from '../registry/islands';
+import type { Tier } from '../render/infer';
 import { storefrontHead, type ThemeTokens } from './storefront';
 
 const ORDER: Tier[] = ['static', 'shared-volatile', 'per-segment', 'per-user'];

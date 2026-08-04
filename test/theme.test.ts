@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { renderPage } from '../packages/theme/index';
-import { normalizePage } from '../packages/content-model/index';
+import { normalizePage } from '../packages/data/content-model/index';
 
 const tenant = { name: 'Acme', theme: { color: '#c0392b' } };
 

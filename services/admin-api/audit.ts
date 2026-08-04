@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { pool } from '../../packages/shared/db';
+import { pool } from '../../packages/data/shared/db';
 import { scopeFor } from './scopes';
 
 // ADR-016 Phase 1 (OFCE-401): write one audit row per authenticated control-plane

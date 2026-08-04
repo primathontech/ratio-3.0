@@ -11,5 +11,5 @@
     "types": ["node"]
   },
   "include": ["apps", "packages", "services", "dev", "scripts", "test"],
-  "exclude": ["apps/admin"]
+  "exclude": ["apps/admin-web"]
 }

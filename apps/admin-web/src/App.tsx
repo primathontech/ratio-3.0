@@ -152,8 +152,8 @@ function AssistantPanel({
         <h2>AI assistant</h2>
       </div>
       <p className="muted" style={{ fontSize: 12.5 }}>
-        Ask in plain English — “Create a store called Acme at acme.ratiodev.in” or “Add an
-        About page”. Changes go live immediately and appear in Recent changes.
+        Ask in plain English — “Create a store called Acme at acme.ratiodev.in” or “Add an About
+        page”. Changes go live immediately and appear in Recent changes.
       </p>
 
       {/* Always mounted (M6): a live region must exist before its content changes, or the
@@ -168,22 +168,26 @@ function AssistantPanel({
         }}
       >
         {turns.map((t, i) => (
-            <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
-              <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
-              {t.actions && t.actions.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                  {t.actions.map((a, j) => (
-                    <span key={j} className={a.ok ? 'badge dot-ok' : 'badge dot-warn'}>
-                      {a.tool} {a.ok ? 'done' : 'failed'}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+          <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
+            <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
+            {t.actions && t.actions.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                {t.actions.map((a, j) => (
+                  <span key={j} className={a.ok ? 'badge dot-ok' : 'badge dot-warn'}>
+                    {a.tool} {a.ok ? 'done' : 'failed'}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
-      {err && <div className="note note-error" role="alert">{err}</div>}
+      {err && (
+        <div className="note note-error" role="alert">
+          {err}
+        </div>
+      )}
 
       <form onSubmit={send} className="row" style={{ alignItems: 'flex-end', marginTop: 8 }}>
         <Field label={storeId ? `Message (editing ${storeId})` : 'Message'}>
@@ -266,7 +270,11 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
         </button>
       </div>
 
-      {error && <div className="note note-error" role="alert">{error}</div>}
+      {error && (
+        <div className="note note-error" role="alert">
+          {error}
+        </div>
+      )}
 
       {!stores && !error && (
         <div className="grid" role="status" aria-busy="true">
@@ -396,10 +404,22 @@ function CreateStoreDialog({
         <div className="body">
           <div className="row">
             <Field label="Store ID">
-              <input className="input mono" placeholder="t_acme" value={f.id} onChange={set('id')} required />
+              <input
+                className="input mono"
+                placeholder="t_acme"
+                value={f.id}
+                onChange={set('id')}
+                required
+              />
             </Field>
             <Field label="Name">
-              <input className="input" placeholder="Acme" value={f.name} onChange={set('name')} required />
+              <input
+                className="input"
+                placeholder="Acme"
+                value={f.name}
+                onChange={set('name')}
+                required
+              />
             </Field>
           </div>
           <Field label="Domain">
@@ -420,7 +440,11 @@ function CreateStoreDialog({
               style={{ height: 42, padding: 4 }}
             />
           </Field>
-          {err && <div className="note note-error" role="alert">{err}</div>}
+          {err && (
+            <div className="note note-error" role="alert">
+              {err}
+            </div>
+          )}
         </div>
         <div className="actions">
           <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>
@@ -462,7 +486,10 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   useEffect(() => headingRef.current?.focus(), []);
 
   const loadPages = useCallback(() => {
-    api.listPages(store.id).then(setPages).catch((e: Error) => setErr(e.message));
+    api
+      .listPages(store.id)
+      .then(setPages)
+      .catch((e: Error) => setErr(e.message));
   }, [api, store.id]);
   useEffect(loadPages, [loadPages]);
 
@@ -518,7 +545,11 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
   async function createPage(newPath: string, newType: string) {
     setCreating(false);
     try {
-      await api.savePage(store.id, { path: newPath, pageType: newType, pageConfig: { sections: [] } });
+      await api.savePage(store.id, {
+        path: newPath,
+        pageType: newType,
+        pageConfig: { sections: [] },
+      });
       toast('Page created');
       loadPages();
       openPage(newPath);
@@ -550,7 +581,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
       loadPages();
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setErr('This page changed since you opened it (another tab or the AI assistant saved). Reopen it to get the latest, then re-apply your changes.');
+        setErr(
+          'This page changed since you opened it (another tab or the AI assistant saved). Reopen it to get the latest, then re-apply your changes.'
+        );
         toast('Save conflict — reload the page', 'error');
       } else {
         setErr((e as Error).message);
@@ -605,7 +638,11 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
               <Icon.plus size={14} /> New page
             </button>
           </div>
-          {!pages && <div className="center-pad"><Spinner /></div>}
+          {!pages && (
+            <div className="center-pad">
+              <Spinner />
+            </div>
+          )}
           {pages && pages.length === 0 && (
             <p className="muted" style={{ padding: '6px 2px' }}>
               No pages yet — create one to get started.
@@ -637,7 +674,9 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                   onChange={(e) => setPath(e.target.value)}
                   readOnly={version !== undefined}
                   aria-describedby={version !== undefined ? 'path-readonly-hint' : undefined}
-                  title={version !== undefined ? 'The path is fixed once a page is loaded' : undefined}
+                  title={
+                    version !== undefined ? 'The path is fixed once a page is loaded' : undefined
+                  }
                 />
                 {version !== undefined && (
                   <span id="path-readonly-hint" className="muted" style={{ fontSize: 11.5 }}>
@@ -646,11 +685,20 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
                 )}
               </Field>
               <Field label="Type">
-                <input className="input" value={pageType} onChange={(e) => setPageType(e.target.value)} />
+                <input
+                  className="input"
+                  value={pageType}
+                  onChange={(e) => setPageType(e.target.value)}
+                />
               </Field>
             </div>
             <Field label="Page title">
-              <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Shown in the browser tab" />
+              <input
+                className="input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Shown in the browser tab"
+              />
             </Field>
 
             <div className="editor-head">
@@ -686,7 +734,11 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
               />
             )}
 
-            {err && <div className="note note-error" role="alert">{err}</div>}
+            {err && (
+              <div className="note note-error" role="alert">
+                {err}
+              </div>
+            )}
             <div>
               <button className="btn btn-primary" type="submit" disabled={saving}>
                 {saving ? <Spinner /> : <Icon.check />} {saving ? 'Saving…' : 'Save page'}
@@ -699,7 +751,12 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           <div className="pane-head">
             <h2>Live preview</h2>
             {previewSrc && (
-              <a className="btn btn-subtle" href={`https://${previewHost}${path}`} target="_blank" rel="noreferrer">
+              <a
+                className="btn btn-subtle"
+                href={`https://${previewHost}${path}`}
+                target="_blank"
+                rel="noreferrer"
+              >
                 Open <Icon.external size={13} />
                 <NewTabHint />
               </a>
@@ -756,12 +813,27 @@ function NewPageDialog({
         }}
       >
         <div className="body">
-          {err && <div className="note note-error" role="alert">{err}</div>}
+          {err && (
+            <div className="note note-error" role="alert">
+              {err}
+            </div>
+          )}
           <Field label="Path (must start with /)">
-            <input className="input mono" value={p} onChange={(e) => setP(e.target.value)} placeholder="/about" required />
+            <input
+              className="input mono"
+              value={p}
+              onChange={(e) => setP(e.target.value)}
+              placeholder="/about"
+              required
+            />
           </Field>
           <Field label="Type">
-            <input className="input" value={t} onChange={(e) => setT(e.target.value)} placeholder="page" />
+            <input
+              className="input"
+              value={t}
+              onChange={(e) => setT(e.target.value)}
+              placeholder="page"
+            />
           </Field>
         </div>
         <div className="actions">
@@ -821,10 +893,14 @@ function AgentAccessPanel({ api, store }: { api: Api; store: Store }) {
       <p className="muted" style={{ fontSize: 12.5 }}>
         Give an AI assistant a key to edit <strong>this store only</strong>. It expires
         automatically. Anyone with the key can edit this store until it expires — share it
-        carefully. Generating a new key does <strong>not</strong> disable an old one; each
-        key stays valid until it expires.
+        carefully. Generating a new key does <strong>not</strong> disable an old one; each key stays
+        valid until it expires.
       </p>
-      {err && <div className="note note-error" role="alert">{err}</div>}
+      {err && (
+        <div className="note note-error" role="alert">
+          {err}
+        </div>
+      )}
       {key && (
         <div style={{ marginTop: 12 }}>
           <div className="row" style={{ alignItems: 'flex-end' }}>
@@ -878,7 +954,11 @@ function AuditPanel({ api, store }: { api: Api; store: Store }) {
           Refresh
         </button>
       </div>
-      {err && <div className="note note-error" role="alert">{err}</div>}
+      {err && (
+        <div className="note note-error" role="alert">
+          {err}
+        </div>
+      )}
       {!entries && !err && (
         <div className="center-pad">
           <Spinner />
@@ -950,7 +1030,8 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
 
   const statusBadge = (d: DomainInfo) => {
     if (d.kind === 'platform') return <span className="badge dot-ok">live</span>;
-    if (d.status === 'active' && d.sslStatus === 'active') return <span className="badge dot-ok">live</span>;
+    if (d.status === 'active' && d.sslStatus === 'active')
+      return <span className="badge dot-ok">live</span>;
     if (d.status === 'unconfigured') return <span className="badge">not configured</span>;
     return <span className="badge dot-warn">pending</span>;
   };
@@ -963,8 +1044,16 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
           <Icon.plus size={14} /> Connect a domain
         </button>
       </div>
-      {err && <div className="note note-error" role="alert">{err}</div>}
-      {!domains && !err && <div className="center-pad"><Spinner /></div>}
+      {err && (
+        <div className="note note-error" role="alert">
+          {err}
+        </div>
+      )}
+      {!domains && !err && (
+        <div className="center-pad">
+          <Spinner />
+        </div>
+      )}
       <div className="domain-rows">
         {domains?.map((d) => (
           <div className="domain-row" key={d.host}>
@@ -979,7 +1068,11 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
                 <button className="btn btn-subtle btn-sm" onClick={() => setViewing(d.host)}>
                   View DNS records
                 </button>
-                <button className="icon-btn" aria-label="Remove domain" onClick={() => setRemoving(d.host)}>
+                <button
+                  className="icon-btn"
+                  aria-label="Remove domain"
+                  onClick={() => setRemoving(d.host)}
+                >
                   <Icon.trash size={14} />
                 </button>
               </div>
@@ -988,17 +1081,33 @@ function DomainsPanel({ api, store }: { api: Api; store: Store }) {
         ))}
       </div>
       {connecting && (
-        <ConnectDomainDialog api={api} store={store} onClose={() => setConnecting(false)} onDone={() => { setConnecting(false); load(); }} />
+        <ConnectDomainDialog
+          api={api}
+          store={store}
+          onClose={() => setConnecting(false)}
+          onDone={() => {
+            setConnecting(false);
+            load();
+          }}
+        />
       )}
       {viewing && (
-        <DomainRecordsDialog api={api} store={store} host={viewing} onClose={() => { setViewing(null); load(); }} />
+        <DomainRecordsDialog
+          api={api}
+          store={store}
+          host={viewing}
+          onClose={() => {
+            setViewing(null);
+            load();
+          }}
+        />
       )}
       {removing && (
         <Dialog title="Remove this domain?" onClose={() => setRemoving(null)}>
           <div className="body">
             <p>
-              Remove <span className="mono">{removing}</span> from this store? The store will
-              stop serving on it immediately until you reconnect it.
+              Remove <span className="mono">{removing}</span> from this store? The store will stop
+              serving on it immediately until you reconnect it.
             </p>
           </div>
           <div className="actions">
@@ -1065,8 +1174,8 @@ function DnsRecordsView({ result }: { result: DomainConnection }) {
       )}
       <p className="dns-intro">
         Add these records at your domain provider for <span className="mono">{result.host}</span>.{' '}
-        <em>Host/Name</em> is the part before your domain (the middle column) — use <strong>Copy</strong>{' '}
-        so values paste in exactly.
+        <em>Host/Name</em> is the part before your domain (the middle column) — use{' '}
+        <strong>Copy</strong> so values paste in exactly.
       </p>
       <table className="dns-table">
         <colgroup>
@@ -1141,12 +1250,24 @@ function DomainRecordsDialog({
   return (
     <Dialog title={`DNS records — ${host}`} onClose={onClose} size="wide">
       <div className="body">
-        {err && <div className="note note-error" role="alert">{err}</div>}
-        {!result && !err && <div className="center-pad"><Spinner /></div>}
+        {err && (
+          <div className="note note-error" role="alert">
+            {err}
+          </div>
+        )}
+        {!result && !err && (
+          <div className="center-pad">
+            <Spinner />
+          </div>
+        )}
         {result && (
           <>
             {result.status && (
-              <div className={result.status === 'active' ? 'note note-ok dns-status' : 'note dns-status'}>
+              <div
+                className={
+                  result.status === 'active' ? 'note note-ok dns-status' : 'note dns-status'
+                }
+              >
                 {result.status === 'active'
                   ? '✓ Live — your domain is connected and serving.'
                   : 'Waiting on your DNS. Add the records below; once they propagate we verify ownership and issue the SSL certificate automatically — usually 5–30 minutes, occasionally a few hours.'}
@@ -1200,12 +1321,23 @@ function ConnectDomainDialog({
         <form onSubmit={submit}>
           <div className="body">
             <Field label="Your domain">
-              <input className="input mono" value={host} onChange={(e) => setHost(e.target.value)} placeholder="shop.yourbrand.com" required />
+              <input
+                className="input mono"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                placeholder="shop.yourbrand.com"
+                required
+              />
             </Field>
             <p className="muted" style={{ fontSize: 12.5 }}>
-              We'll issue an SSL certificate and give you the exact DNS records to add at your registrar.
+              We'll issue an SSL certificate and give you the exact DNS records to add at your
+              registrar.
             </p>
-            {err && <div className="note note-error" role="alert">{err}</div>}
+            {err && (
+              <div className="note note-error" role="alert">
+                {err}
+              </div>
+            )}
           </div>
           <div className="actions">
             <button type="button" className="btn btn-ghost" onClick={onClose} disabled={busy}>

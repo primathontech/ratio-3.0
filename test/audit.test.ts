@@ -16,7 +16,7 @@ import {
   type Verifier,
 } from '../services/admin-api/auth';
 import { scopeFor, SCOPES } from '../services/admin-api/scopes';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const ALICE = 'user_alice_audit';
 const ID = 't_audit';

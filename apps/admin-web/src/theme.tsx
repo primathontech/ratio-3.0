@@ -3,7 +3,12 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 export type Theme = 'light' | 'dark' | 'system';
 const KEY = 'ratio-admin-theme';
 
-type Ctx = { theme: Theme; resolved: 'light' | 'dark'; setTheme: (t: Theme) => void; cycle: () => void };
+type Ctx = {
+  theme: Theme;
+  resolved: 'light' | 'dark';
+  setTheme: (t: Theme) => void;
+  cycle: () => void;
+};
 const ThemeCtx = createContext<Ctx | null>(null);
 
 // Shared light/dark/system state. 'system' clears data-theme so the CSS prefers-color-scheme
@@ -32,7 +37,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolved: 'light' | 'dark' = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
   const cycle = () => setTheme(resolved === 'dark' ? 'light' : 'dark');
 
-  return <ThemeCtx.Provider value={{ theme, resolved, setTheme, cycle }}>{children}</ThemeCtx.Provider>;
+  return (
+    <ThemeCtx.Provider value={{ theme, resolved, setTheme, cycle }}>{children}</ThemeCtx.Provider>
+  );
 }
 
 export function useTheme(): Ctx {

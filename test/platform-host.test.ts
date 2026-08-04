@@ -9,7 +9,7 @@ process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp, platformSubdomainAllowed } from '../services/admin-api/app';
 import { composeVerifiers, agentVerifier, type Verifier } from '../services/admin-api/auth';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 test('platformSubdomainAllowed: reserved/apex/multi-label blocked, normal + custom allowed', () => {
   // Non-admin

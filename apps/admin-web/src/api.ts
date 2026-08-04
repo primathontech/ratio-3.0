@@ -127,7 +127,12 @@ export function createApi(
       // Timeout and network failures both land here — turn them into a clean, retryable
       // error instead of a rejected fetch the loaders would otherwise hang on (M1).
       const timedOut = (e as Error).name === 'AbortError';
-      throw new ApiError(0, timedOut ? 'The request timed out. Please try again.' : 'Network error — check your connection and try again.');
+      throw new ApiError(
+        0,
+        timedOut
+          ? 'The request timed out. Please try again.'
+          : 'Network error — check your connection and try again.'
+      );
     } finally {
       clearTimeout(timer);
     }
@@ -176,7 +181,12 @@ export function createApi(
         pickArray<AuditEntry>(d, 'entries')
       ),
     assistant: (message: string, storeId?: string, idempotencyKey?: string) =>
-      req<AssistantReply>('POST', '/assistant', { message, storeId, idempotencyKey }, assistantTimeoutMs),
+      req<AssistantReply>(
+        'POST',
+        '/assistant',
+        { message, storeId, idempotencyKey },
+        assistantTimeoutMs
+      ),
   };
 }
 

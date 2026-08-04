@@ -33,7 +33,7 @@
     --surface-2: #1b1f28;
     --text: #e7e9ee;
     --muted: #98a0ad;
-  --badge-text: #aab2bf;
+    --badge-text: #aab2bf;
     --line: #252a34;
     --line-strong: #313846;
     --accent: #818cf8;
@@ -174,7 +174,11 @@ h2 {
   width: 28px;
   height: 28px;
   border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #ec4899));
+  background: linear-gradient(
+    135deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 55%, #ec4899)
+  );
   color: #fff;
   font-weight: 800;
   font-size: 15px;

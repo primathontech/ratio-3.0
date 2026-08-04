@@ -3,7 +3,7 @@
 // store sweeps), bounded to once per window so the sweep cost stays amortized-cheap.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createRateLimiter } from '../packages/shared/ratelimit';
+import { createRateLimiter } from '../packages/data/shared/ratelimit';
 
 test('expired windows are evicted so the store does not grow unboundedly', () => {
   const store = new Map();

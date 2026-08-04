@@ -10,8 +10,8 @@ import {
   markDomainVerified,
   markDomainConnected,
   ConflictError,
-} from '../packages/provisioning/index';
-import { pool } from '../packages/shared/db';
+} from '../packages/data/provisioning/index';
+import { pool } from '../packages/data/shared/db';
 
 const A = 't_dvc_a';
 const B = 't_dvc_b';

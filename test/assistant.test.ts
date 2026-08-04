@@ -19,7 +19,7 @@ import {
 import { runAssistant, type AnthropicLike } from '../services/admin-api/assistant';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { recentAudit } from '../services/admin-api/audit';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const ALICE = 'user_alice_assistant';
 const ID = 't_ai';

@@ -1,7 +1,7 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyToken } from '@clerk/backend';
-import { pool } from '../../packages/shared/db';
+import { pool } from '../../packages/data/shared/db';
 
 // ADR-010 admin auth. Split by design:
 //  - authN (who is this user) is Clerk's job — we verify its session JWT offline.

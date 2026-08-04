@@ -22,7 +22,7 @@ import {
   type AnthropicLike,
 } from '../services/admin-api/assistant';
 import { RatioControlPlane } from '@ratio/control-plane-client';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const OWNER = 'user_owner_scope';
 const TS = 't_scope'; // the store the assistant is opened on

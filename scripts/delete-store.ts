@@ -1,7 +1,7 @@
 // Ops: hard-delete one or more stores by tenant id (atomic purge + zero-residual proof).
 // Usage: DATABASE_URL=... npx tsx scripts/delete-store.ts <id> [<id> ...]
-import { deleteStore } from '../packages/provisioning/index';
-import { pool } from '../packages/shared/db';
+import { deleteStore } from '../packages/data/provisioning/index';
+import { pool } from '../packages/data/shared/db';
 
 const ids = process.argv.slice(2);
 if (ids.length === 0) {
