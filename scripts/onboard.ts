@@ -1,7 +1,7 @@
 // Onboard a new store in seconds — it's just rows (no repo, no build, no restart).
 // usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]
-import { onboardStore } from '../packages/provisioning/index';
-import { pool } from '../packages/shared/db';
+import { onboardStore } from '../packages/data/provisioning/index';
+import { pool } from '../packages/data/shared/db';
 
 const [, , id, name, host, color = '#333333'] = process.argv;
 if (!id || !name || !host) {

@@ -9,10 +9,10 @@
 // mutates the old one. Pages pin the version they were built with, so a section update can't
 // silently change already-published pages (they re-render on their own edit→purge cycle).
 
-import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '../liquid-render/engine';
-import { renderUntrusted } from '../liquid-render/isolate';
-import { inferTier, type Binding, type Tier } from '../liquid-render/infer';
-import { FIRST_PARTY_SECTIONS } from '../liquid-render/sections';
+import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '../render/engine';
+import { renderUntrusted } from '../render/isolate';
+import { inferTier, type Binding, type Tier } from '../render/infer';
+import { FIRST_PARTY_SECTIONS } from '../render/sections';
 import type { SettingDef } from './settings';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────

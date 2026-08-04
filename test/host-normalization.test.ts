@@ -8,7 +8,7 @@ process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp } from '../services/admin-api/app';
 import { composeVerifiers, agentVerifier, type Verifier } from '../services/admin-api/auth';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 const ID = 't_hostnorm';
 const humans: Verifier = async (t) => (t === 'tok-a' ? { userId: 'user_hostnorm' } : null);

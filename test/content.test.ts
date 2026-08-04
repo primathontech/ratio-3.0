@@ -4,8 +4,8 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../services/admin-api/app';
-import { app as origin } from '../apps/origin/index';
-import { pool } from '../packages/shared/db';
+import { app as origin } from '../services/origin/index';
+import { pool } from '../packages/data/shared/db';
 
 const OWNER = 'user_owner';
 const OTHER = 'user_other';

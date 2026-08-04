@@ -7,9 +7,9 @@ import assert from 'node:assert';
 
 process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
-import { app as origin, resolveEdgeSecret } from '../apps/origin/index';
-import { storeOverrideAllowed } from '../packages/edge-core/index';
-import { pool } from '../packages/shared/db';
+import { app as origin, resolveEdgeSecret } from '../services/origin/index';
+import { storeOverrideAllowed } from '../packages/edge/core/index';
+import { pool } from '../packages/data/shared/db';
 
 const SECRET = process.env.EDGE_SECRET as string;
 const TX = 't_sec_xss';

@@ -1,7 +1,7 @@
 // Full-stack E2E proof of the S2 invariants. Run: tsx test/prove.ts (servers must be up).
 import http from 'http';
-import { pool } from '../packages/shared/db';
-import { forTenant } from '../packages/repo/index';
+import { pool } from '../packages/data/shared/db';
+import { forTenant } from '../packages/data/repo/index';
 
 const EDGE = Number(process.env.EDGE_PORT || 8080);
 const ORIGIN = Number(process.env.ORIGIN_PORT || 9090);

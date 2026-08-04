@@ -29,10 +29,16 @@ export const SECTION_TYPES: { kind: Section['kind']; label: string; make: () => 
 // Accept both the new {sections} shape and legacy {title, body, price} rows.
 export function toEditable(pc: unknown): PageConfig {
   const o = (pc ?? {}) as Record<string, unknown>;
-  if (Array.isArray(o.sections)) return { title: (o.title as string) ?? '', sections: o.sections as Section[] };
+  if (Array.isArray(o.sections))
+    return { title: (o.title as string) ?? '', sections: o.sections as Section[] };
   const sections: Section[] = [];
   if (o.price) {
-    sections.push({ kind: 'product', title: o.title as string, price: o.price as string, description: o.body as string });
+    sections.push({
+      kind: 'product',
+      title: o.title as string,
+      price: o.price as string,
+      description: o.body as string,
+    });
   } else if (o.title) {
     sections.push({ kind: 'hero', heading: o.title as string, sub: (o.body as string) ?? '' });
   } else if (o.body) {
@@ -41,7 +47,12 @@ export function toEditable(pc: unknown): PageConfig {
   return { title: (o.title as string) ?? '', sections };
 }
 
-function TextInput(props: { value?: string; onChange: (v: string) => void; placeholder?: string; mono?: boolean }) {
+function TextInput(props: {
+  value?: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  mono?: boolean;
+}) {
   return (
     <input
       className={props.mono ? 'input mono' : 'input'}
@@ -52,7 +63,13 @@ function TextInput(props: { value?: string; onChange: (v: string) => void; place
   );
 }
 
-function ProductsEditor({ items, onChange }: { items: ProductCard[]; onChange: (p: ProductCard[]) => void }) {
+function ProductsEditor({
+  items,
+  onChange,
+}: {
+  items: ProductCard[];
+  onChange: (p: ProductCard[]) => void;
+}) {
   const set = (i: number, patch: Partial<ProductCard>) =>
     onChange(items.map((p, j) => (j === i ? { ...p, ...patch } : p)));
   return (
@@ -61,7 +78,12 @@ function ProductsEditor({ items, onChange }: { items: ProductCard[]; onChange: (
         <div className="product-row" key={i}>
           <TextInput value={p.title} placeholder="Title" onChange={(v) => set(i, { title: v })} />
           <TextInput value={p.price} placeholder="Price" onChange={(v) => set(i, { price: v })} />
-          <TextInput value={p.href} placeholder="/link" mono onChange={(v) => set(i, { href: v })} />
+          <TextInput
+            value={p.href}
+            placeholder="/link"
+            mono
+            onChange={(v) => set(i, { href: v })}
+          />
           <button
             type="button"
             className="icon-btn"
@@ -83,14 +105,23 @@ function ProductsEditor({ items, onChange }: { items: ProductCard[]; onChange: (
   );
 }
 
-function SectionFields({ section, onChange }: { section: Section; onChange: (s: Section) => void }) {
+function SectionFields({
+  section,
+  onChange,
+}: {
+  section: Section;
+  onChange: (s: Section) => void;
+}) {
   switch (section.kind) {
     case 'hero':
       return (
         <div className="sec-fields">
           <label className="field">
             <span>Heading</span>
-            <TextInput value={section.heading} onChange={(v) => onChange({ ...section, heading: v })} />
+            <TextInput
+              value={section.heading}
+              onChange={(v) => onChange({ ...section, heading: v })}
+            />
           </label>
           <label className="field">
             <span>Subheading</span>
@@ -132,7 +163,10 @@ function SectionFields({ section, onChange }: { section: Section; onChange: (s: 
         <div className="sec-fields">
           <label className="field">
             <span>Heading</span>
-            <TextInput value={section.heading} onChange={(v) => onChange({ ...section, heading: v })} />
+            <TextInput
+              value={section.heading}
+              onChange={(v) => onChange({ ...section, heading: v })}
+            />
           </label>
           <ProductsEditor
             items={section.products ?? []}
@@ -146,16 +180,25 @@ function SectionFields({ section, onChange }: { section: Section; onChange: (s: 
           <div className="row">
             <label className="field">
               <span>Title</span>
-              <TextInput value={section.title} onChange={(v) => onChange({ ...section, title: v })} />
+              <TextInput
+                value={section.title}
+                onChange={(v) => onChange({ ...section, title: v })}
+              />
             </label>
             <label className="field">
               <span>Price</span>
-              <TextInput value={section.price} onChange={(v) => onChange({ ...section, price: v })} />
+              <TextInput
+                value={section.price}
+                onChange={(v) => onChange({ ...section, price: v })}
+              />
             </label>
           </div>
           <label className="field">
             <span>Description</span>
-            <TextInput value={section.description} onChange={(v) => onChange({ ...section, description: v })} />
+            <TextInput
+              value={section.description}
+              onChange={(v) => onChange({ ...section, description: v })}
+            />
           </label>
         </div>
       );
@@ -191,7 +234,13 @@ export function SectionEditor({
           <div className="sec-head">
             <span className="badge badge-accent">{label(s.kind)}</span>
             <div className="sec-actions">
-              <button type="button" className="icon-btn" aria-label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Move up"
+                disabled={i === 0}
+                onClick={() => move(i, -1)}
+              >
                 <Icon.up size={14} />
               </button>
               <button
@@ -218,7 +267,12 @@ export function SectionEditor({
       ))}
       <div className="add-section">
         {SECTION_TYPES.map((t) => (
-          <button key={t.kind} type="button" className="btn btn-ghost btn-sm" onClick={() => onChange([...sections, t.make()])}>
+          <button
+            key={t.kind}
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => onChange([...sections, t.make()])}
+          >
             <Icon.plus size={13} /> {t.label}
           </button>
         ))}

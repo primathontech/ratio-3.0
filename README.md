@@ -71,19 +71,19 @@ curl -si localhost:8080/products/red-shoe -H 'Host: acme.localhost' | grep -i x-
 ## Layout (control plane / data plane — ADR-014)
 
 ```
-apps/edge/worker.ts       DATA PLANE — Cloudflare Worker (host→tenant, inject header, proxy)
-apps/origin/index.ts      DATA PLANE — Hono app (shared host)
-apps/origin/server.ts     DATA PLANE — container entrypoint
-apps/admin/               CONTROL PLANE — Ratio merchant dashboard (planned, OFCE-362)
-services/admin-api/   CONTROL PLANE — authed onboarding/content API (planned, OFCE-362)
-packages/repo/            tenant-scoped repository — the one gate (deny-by-default)
-packages/provisioning/    onboardStore() / deleteStore()  (→ moves into services/admin-api)
-packages/shared/          db · metrics · ratelimit
-dev/                      local two-server simulator (edge-sim + server) — dev only
-db/migrations/            schema migrations + runner (scripts/migrate.ts)
-.github/workflows/        CI/CD + ops workflows (see INFRASTRUCTURE.md)
+services/edge-cloudflare/     DATA PLANE — Cloudflare Worker (host→tenant, inject header, proxy)
+services/origin/              DATA PLANE — Hono app + container entrypoint (shared host)
+services/admin-api/          CONTROL PLANE — authed onboarding/content API (OFCE-362)
+apps/admin-web/              CONTROL PLANE — Ratio merchant dashboard SPA (OFCE-362)
+packages/page-builder/       page builder — core · registry · render (ADR-013/015)
+packages/data/               repo (the one gate) · provisioning · shared (db·metrics·ratelimit)
+packages/edge/               edge cache-spine seams (core · provider)
+packages/theme/              storefront theme tokens
+dev/                         local two-server simulator (edge-sim + server) — dev only
+db/migrations/               schema migrations + runner (scripts/migrate.ts)
+.github/workflows/           CI/CD + ops workflows (see INFRASTRUCTURE.md)
 ```
 
-> Data plane (shopper runtime) is built + live. Control plane (`apps/admin` +
+> Data plane (shopper runtime) is built + live. Control plane (`apps/admin-web` +
 > `services/admin-api`) is the next build — onboarding/editing move there as an
 > authenticated product, off the ops workflows.

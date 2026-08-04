@@ -6,9 +6,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePageDoc, InvalidPageDoc, type PageDoc } from '../packages/page-builder/doc';
-import { composePage } from '../packages/page-builder/compose';
-import { SectionRegistry, defaultRegistry } from '../packages/section-registry/registry';
+import { validatePageDoc, InvalidPageDoc, type PageDoc } from '../packages/page-builder/core/doc';
+import { composePage } from '../packages/page-builder/core/compose';
+import { SectionRegistry, defaultRegistry } from '../packages/page-builder/registry/registry';
 
 const heroPage = (path: string, heading: string): PageDoc => ({
   path,

@@ -13,10 +13,7 @@ import {
 /* Error boundary --------------------------------------------------------- */
 // A render-time throw (e.g. a malformed pageConfig reaching the editor) would otherwise unmount
 // the whole app to a blank screen (M-4). Contain it to a scoped, recoverable fallback.
-export class ErrorBoundary extends Component<
-  { children: ReactNode },
-  { hasError: boolean }
-> {
+export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
   static getDerivedStateFromError() {
     return { hasError: true };
@@ -65,7 +62,8 @@ export const Icon = {
       </>,
       size
     ),
-  moon: ({ size }: IconProps) => svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />, size),
+  moon: ({ size }: IconProps) =>
+    svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />, size),
   plus: ({ size }: IconProps) => svg(<path d="M12 5v14M5 12h14" />, size),
   external: ({ size }: IconProps) =>
     svg(

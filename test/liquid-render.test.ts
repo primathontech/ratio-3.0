@@ -5,10 +5,14 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { render, compile, UNTRUSTED_LIMITS } from '../packages/liquid-render/engine';
-import { renderUntrusted, RenderTimeout, RenderFailed } from '../packages/liquid-render/isolate';
-import { inferTier } from '../packages/liquid-render/infer';
-import { FIRST_PARTY_SECTIONS } from '../packages/liquid-render/sections';
+import { render, compile, UNTRUSTED_LIMITS } from '../packages/page-builder/render/engine';
+import {
+  renderUntrusted,
+  RenderTimeout,
+  RenderFailed,
+} from '../packages/page-builder/render/isolate';
+import { inferTier } from '../packages/page-builder/render/infer';
+import { FIRST_PARTY_SECTIONS } from '../packages/page-builder/render/sections';
 
 const trusted = { trusted: true };
 const untrusted = { trusted: false, limits: UNTRUSTED_LIMITS };

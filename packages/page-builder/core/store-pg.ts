@@ -3,7 +3,7 @@
 // purge intents. publish() promotes + enqueues in a single transaction.
 import type { PageDoc } from './doc';
 import type { PageStore } from './store';
-import { pool } from '../shared/db';
+import { pool } from '../../data/shared/db';
 
 export class PgPageStore implements PageStore {
   async saveDraft(tenantId: string, doc: PageDoc): Promise<void> {

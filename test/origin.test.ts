@@ -1,8 +1,8 @@
 // Origin contract tests — in-process via app.fetch() (no server, real test DB).
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { app, edgeAuthOk } from '../apps/origin/index';
-import { pool } from '../packages/shared/db';
+import { app, edgeAuthOk } from '../services/origin/index';
+import { pool } from '../packages/data/shared/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const call = (path: string, headers: Record<string, string> = {}) =>

@@ -3,7 +3,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../services/admin-api/app';
-import { pool } from '../packages/shared/db';
+import { pool } from '../packages/data/shared/db';
 
 after(() => pool.end());
 

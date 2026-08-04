@@ -21,7 +21,10 @@ function clerkAppearance(isDark: boolean) {
 function Root() {
   const { resolved } = useTheme();
   return (
-    <ClerkProvider publishableKey={publishableKey} appearance={clerkAppearance(resolved === 'dark')}>
+    <ClerkProvider
+      publishableKey={publishableKey}
+      appearance={clerkAppearance(resolved === 'dark')}
+    >
       <App />
     </ClerkProvider>
   );

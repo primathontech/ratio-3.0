@@ -1,10 +1,10 @@
 // Onboarding = provisioning: a new store is just rows. Real test DB.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { onboardStore } from '../packages/provisioning/index';
-import { forTenant } from '../packages/repo/index';
-import { app } from '../apps/origin/index';
-import { pool } from '../packages/shared/db';
+import { onboardStore } from '../packages/data/provisioning/index';
+import { forTenant } from '../packages/data/repo/index';
+import { app } from '../services/origin/index';
+import { pool } from '../packages/data/shared/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const ID = 't_onb';
