@@ -17,8 +17,8 @@ import {
   composeVerifiers,
   type Verifier,
 } from '../services/admin-api/auth';
-import { forTenant } from '../packages/data/repo/index';
-import { pool } from '../packages/data/shared/db';
+import { forTenant } from '@ratio/repo';
+import { pool } from '@ratio/shared/db';
 
 const ALICE = 'user_alice_agent';
 const BOB = 'user_bob_agent';

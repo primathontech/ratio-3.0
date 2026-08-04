@@ -7,7 +7,7 @@ process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 
 import { purgeUrls, storeCacheUrls, deleteCustomHostname } from '../services/admin-api/domains';
 import { app as origin } from '../services/origin/index';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const cfg = { token: 't', zone: 'ratiodev.in', fallback: 'service.ratiodev.in' };
 const json = (body: unknown) =>

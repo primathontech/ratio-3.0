@@ -11,9 +11,9 @@ import {
   markDomainVerified,
   markDomainConnected,
   ConflictError,
-} from '../../packages/data/provisioning/index';
-import { forTenant, StaleWriteError } from '../../packages/data/repo/index';
-import { pool } from '../../packages/data/shared/db';
+} from '@ratio/provisioning';
+import { forTenant, StaleWriteError } from '@ratio/repo';
+import { pool } from '@ratio/shared/db';
 import {
   cfConfig,
   connectCustomHostname,
@@ -42,7 +42,7 @@ import {
 } from './auth';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
-import { createPgRateLimiter } from '../../packages/data/shared/ratelimit';
+import { createPgRateLimiter } from '@ratio/shared/ratelimit';
 import {
   createPgIdempotencyStore,
   idempotencyKeyFor,

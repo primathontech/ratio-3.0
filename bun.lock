@@ -35,6 +35,46 @@
       "name": "@ratio/control-plane-client",
       "version": "0.1.0",
     },
+    "packages/data/content-model": {
+      "name": "@ratio/content-model",
+      "version": "0.1.0",
+    },
+    "packages/data/provisioning": {
+      "name": "@ratio/provisioning",
+      "version": "0.1.0",
+    },
+    "packages/data/repo": {
+      "name": "@ratio/repo",
+      "version": "0.1.0",
+    },
+    "packages/data/shared": {
+      "name": "@ratio/shared",
+      "version": "0.1.0",
+    },
+    "packages/edge/core": {
+      "name": "@ratio/edge-core",
+      "version": "0.1.0",
+    },
+    "packages/edge/provider": {
+      "name": "@ratio/edge-provider",
+      "version": "0.1.0",
+    },
+    "packages/page-builder/core": {
+      "name": "@ratio/page-builder-core",
+      "version": "0.1.0",
+    },
+    "packages/page-builder/registry": {
+      "name": "@ratio/page-builder-registry",
+      "version": "0.1.0",
+    },
+    "packages/page-builder/render": {
+      "name": "@ratio/page-builder-render",
+      "version": "0.1.0",
+    },
+    "packages/theme": {
+      "name": "@ratio/theme",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.111.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-1hUqKi+uJQoS5X90+InwHbFAXMvgq0DnsC5hVLEeSRaODiU5WvmqDAcVCmGS2wC0pN9Z8jtWCbWw7JLzeDdm/Q=="],
@@ -215,7 +255,27 @@
 
     "@poppinss/exception": ["@poppinss/exception@1.2.3", "", {}, "sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw=="],
 
+    "@ratio/content-model": ["@ratio/content-model@workspace:packages/data/content-model"],
+
     "@ratio/control-plane-client": ["@ratio/control-plane-client@workspace:packages/control-plane-client"],
+
+    "@ratio/edge-core": ["@ratio/edge-core@workspace:packages/edge/core"],
+
+    "@ratio/edge-provider": ["@ratio/edge-provider@workspace:packages/edge/provider"],
+
+    "@ratio/page-builder-core": ["@ratio/page-builder-core@workspace:packages/page-builder/core"],
+
+    "@ratio/page-builder-registry": ["@ratio/page-builder-registry@workspace:packages/page-builder/registry"],
+
+    "@ratio/page-builder-render": ["@ratio/page-builder-render@workspace:packages/page-builder/render"],
+
+    "@ratio/provisioning": ["@ratio/provisioning@workspace:packages/data/provisioning"],
+
+    "@ratio/repo": ["@ratio/repo@workspace:packages/data/repo"],
+
+    "@ratio/shared": ["@ratio/shared@workspace:packages/data/shared"],
+
+    "@ratio/theme": ["@ratio/theme@workspace:packages/theme"],
 
     "@redocly/ajv": ["@redocly/ajv@8.11.2", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2", "uri-js-replace": "^1.0.1" } }, "sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg=="],
 

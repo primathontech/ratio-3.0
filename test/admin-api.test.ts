@@ -5,8 +5,8 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../services/admin-api/app';
 import { getMembership } from '../services/admin-api/auth';
-import { forTenant } from '../packages/data/repo/index';
-import { pool } from '../packages/data/shared/db';
+import { forTenant } from '@ratio/repo';
+import { pool } from '@ratio/shared/db';
 
 const ALICE = 'user_alice';
 const BOB = 'user_bob';

@@ -5,8 +5,8 @@ import http from 'http';
 import { serve } from '@hono/node-server';
 import { app } from '../services/origin/index';
 import { edge } from '../dev/edge-sim';
-import { onboardStore, deleteStore } from '../packages/data/provisioning/index';
-import { pool } from '../packages/data/shared/db';
+import { onboardStore, deleteStore } from '@ratio/provisioning';
+import { pool } from '@ratio/shared/db';
 
 const ORIGIN_PORT = 19090;
 process.env.ORIGIN_PORT = String(ORIGIN_PORT); // edge reads the origin port lazily (per request)

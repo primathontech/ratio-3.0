@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { normalizePage } from '../../packages/data/content-model/index';
-import { renderPage, esc } from '../../packages/theme/index';
+import { normalizePage } from '@ratio/content-model';
+import { renderPage, esc } from '@ratio/theme';
 import {
   originTarget,
   proxyInit,
@@ -18,7 +18,7 @@ import {
   type EdgeCache,
   type TenantKV,
   type AnalyticsEngineDataset,
-} from '../../packages/edge/core/index';
+} from '@ratio/edge-core';
 
 // The portable edge logic lives in packages/edge-core (shared by every edge adapter, tested there).
 // This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core

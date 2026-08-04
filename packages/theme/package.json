@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/theme",
+  "version": "0.1.0",
+  "description": "storefront theme tokens + render",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

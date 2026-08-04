@@ -1,14 +1,14 @@
 import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
-import { forTenant } from '../../packages/data/repo/index';
-import { pool } from '../../packages/data/shared/db';
-import { normalizePage } from '../../packages/data/content-model/index';
-import { renderPage, esc } from '../../packages/theme/index';
-import { PgPageStore } from '../../packages/page-builder/core/store-pg';
-import { composePage } from '../../packages/page-builder/core/compose';
-import { defaultRegistry } from '../../packages/page-builder/registry/registry';
-import { canonicalPath } from '../../packages/page-builder/core/path';
-import { pageTag, tenantTag } from '../../packages/page-builder/core/tags';
+import { forTenant } from '@ratio/repo';
+import { pool } from '@ratio/shared/db';
+import { normalizePage } from '@ratio/content-model';
+import { renderPage, esc } from '@ratio/theme';
+import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { composePage } from '@ratio/page-builder-core/compose';
+import { defaultRegistry } from '@ratio/page-builder-registry/registry';
+import { canonicalPath } from '@ratio/page-builder-core/path';
+import { pageTag, tenantTag } from '@ratio/page-builder-core/tags';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.

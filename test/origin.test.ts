@@ -2,7 +2,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { app, edgeAuthOk } from '../services/origin/index';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const call = (path: string, headers: Record<string, string> = {}) =>

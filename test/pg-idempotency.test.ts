@@ -8,7 +8,7 @@ import {
   createPgIdempotencyStore,
   IdempotencyInProgressError,
 } from '../services/admin-api/idempotency';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const KEYS = ['idem:one', 'idem:concurrent', 'idem:fail', 'idem:expired'];
 async function clean() {

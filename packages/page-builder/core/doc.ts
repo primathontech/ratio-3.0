@@ -4,11 +4,11 @@
 // supply data for its section's DECLARED bindings — there is no side door for extra data to reach
 // a template, so inference done at registration stays true at render.
 
-import type { SectionRegistry } from '../registry/registry';
-import { BINDING_CATALOG } from '../registry/registry';
-import { validateSettings } from '../registry/settings';
+import type { SectionRegistry } from '@ratio/page-builder-registry/registry';
+import { BINDING_CATALOG } from '@ratio/page-builder-registry/registry';
+import { validateSettings } from '@ratio/page-builder-registry/settings';
 import { canonicalPath } from './path';
-import { safeRichText } from '../../theme/index';
+import { safeRichText } from '@ratio/theme';
 
 export interface BlockInstance {
   id: string; // unique within its section

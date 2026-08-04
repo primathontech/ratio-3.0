@@ -6,7 +6,7 @@ permissions:
 on:
   # Runs ONLY on a merge/push to main + manual dispatch — PR runs are intentionally disabled to
   # conserve the free GitHub Actions minutes (2000/mo). Validate PRs locally before merging:
-  # `npm run typecheck && npm run lint && npm run format:check && npm test`.
+  # `bun run typecheck && bun run lint && bun run format:check && bun run test`.
   push:
     branches: [main]
   workflow_dispatch:
@@ -39,10 +39,10 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm test # npm run so the pretest hook (ensure-test-db + migrate + seed) fires
+      - run: bun run typecheck
+      - run: bun run lint
+      - run: bun run format:check
+      - run: bun run test # runs test:setup (ensure-test-db + migrate + seed) then node --test
 
   deploy:
     needs: build
@@ -62,7 +62,7 @@ jobs:
       # Only apply schema to prod. db/seed.sql is a DEV/TEST demo fixture (Acme/Beta +
       # *.localhost domains) — never seed it into prod; real stores come from onboarding.
       - name: Migrate Neon
-        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" npm run migrate
+        run: DATABASE_URL="${{ secrets.DATABASE_URL }}" bun run migrate
       - name: Deploy Worker
         run: npx wrangler deploy
       - name: Set Worker DATABASE_URL secret

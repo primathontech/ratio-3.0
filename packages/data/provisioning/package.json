@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/provisioning",
+  "version": "0.1.0",
+  "description": "onboardStore / deleteStore",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

@@ -5,7 +5,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../services/admin-api/app';
 import { app as origin } from '../services/origin/index';
-import { pool } from '../packages/data/shared/db';
+import { pool } from '@ratio/shared/db';
 
 const OWNER = 'user_owner';
 const OTHER = 'user_other';
