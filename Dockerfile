@@ -1,11 +1,12 @@
 # Ratio container (ADR-012: Hono on a container, pg -> Neon). The edge is Cloudflare,
 # NOT in this image. One image serves either role, chosen at runtime by RATIO_SERVICE:
 # unset/anything -> the public data-plane origin; "admin-api" -> the authed control plane.
-FROM node:22-slim AS deps
+# Install with Bun (the repo's lockfile is bun.lock; package-lock.json was removed).
+FROM oven/bun:1 AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json bun.lock ./
 COPY packages/control-plane-client/package.json ./packages/control-plane-client/package.json
-RUN npm ci
+RUN bun install --frozen-lockfile
 
 FROM node:22-slim AS runtime
 WORKDIR /app
