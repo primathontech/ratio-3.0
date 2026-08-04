@@ -1,0 +1,162 @@
+// PageBuilder — the save→purge orchestration (the whole D38 publish flow for the common case):
+// validate → pin versions → durable save + durable purge INTENT → attempt Fast Purge. No
+// materialization, no release pointer: the next visitor's request re-renders lazily.
+//
+// Why an outbox (review finding #7): under our year-long shell TTL, a lost purge = stale content
+// effectively forever. Two failure shapes both need durable intent:
+//   - purge API fails      → save succeeded; the tag must be retried until purged
+//   - process crash after save, before purge → same
+// So the tag is enqueued durably BEFORE the purge attempt (real impl: same PG transaction as the
+// page write), marked done only on success, and drainPurges() retries the remainder — the same
+// outbox discipline the POC-1 publisher proved (H-3), applied to purges. remove() enqueues
+// BEFORE deleting, so a crash mid-remove can never strand a cached copy of a deleted page.
+
+import type { PageDoc } from './doc';
+import { validatePageDoc } from './doc';
+import type { WidgetRegistry } from '../widget-registry/registry';
+import type { PurgeLike } from '../edge-port/akamai-cache';
+import { tenantTag, pageTag } from '../edge-port/tags';
+
+// The DB seam. Real impl = Postgres (pages table keyed tenant+path, doc as JSONB); tests in-memory.
+// `revision` is a per-path monotonic counter bumped by EVERY save and delete — it is the write
+// generation the last-good store orders by (review blocker #4), so it must never regress and must
+// survive deletion (a delete then re-create keeps counting up).
+export interface PageStore {
+  get(tenantId: string, path: string): Promise<PageDoc | null>;
+  save(tenantId: string, doc: PageDoc): Promise<number>; // returns the new revision
+  delete(tenantId: string, path: string): Promise<{ existed: boolean; revision: number }>;
+  revision(tenantId: string, path: string): Promise<number>; // 0 if never written
+  listPaths(tenantId: string): Promise<string[]>;
+}
+
+// Durable purge intent. Real impl = PG table written in the SAME transaction as the page write.
+export interface PurgeOutbox {
+  enqueue(tenantId: string, tags: string[]): Promise<number>; // returns entry id
+  markDone(id: number): Promise<void>;
+  pending(tenantId: string): Promise<{ id: number; tags: string[] }[]>;
+}
+
+export class PurgeFailed extends Error {
+  constructor(cause: unknown) {
+    super(
+      `content SAVED and purge intent RECORDED, but the purge call FAILED — cached pages stay ` +
+        `stale until drainPurges() succeeds: ${String(cause)}`
+    );
+  }
+}
+
+export class PageBuilder {
+  constructor(
+    private store: PageStore,
+    private registry: WidgetRegistry,
+    private purge: PurgeLike,
+    private outbox: PurgeOutbox
+  ) {}
+
+  private async purgeDurably(tenantId: string, tags: string[]): Promise<void> {
+    const id = await this.outbox.enqueue(tenantId, tags); // intent FIRST — crash-safe from here
+    try {
+      await this.purge.invalidateByTags(tags);
+    } catch (e) {
+      throw new PurgeFailed(e); // entry stays pending; drainPurges() retries
+    }
+    await this.outbox.markDone(id);
+  }
+
+  // Save one page: the single-page edit path (D39: clean, no mixed-render window).
+  async save(tenantId: string, doc: PageDoc): Promise<PageDoc> {
+    const pinned = validatePageDoc(doc, this.registry);
+    await this.store.save(tenantId, pinned); // durable first — a purge for unsaved content is a lie
+    await this.purgeDurably(tenantId, [pageTag(tenantId, pinned.path)]);
+    return pinned;
+  }
+
+  // Delete a page. Intent is enqueued BEFORE the row disappears: a retry after any failure still
+  // knows the tag to purge, even though the row no longer exists (review finding #7). The purge
+  // makes the cached copy stale; the next visit re-renders → origin 404s → the 404 caches and
+  // the origin tombstones last-good (D41/D44).
+  async remove(tenantId: string, path: string): Promise<boolean> {
+    const tag = pageTag(tenantId, path);
+    const id = await this.outbox.enqueue(tenantId, [tag]);
+    const { existed } = await this.store.delete(tenantId, path);
+    if (!existed) {
+      await this.outbox.markDone(id); // never existed → nothing cached → nothing to purge
+      return false;
+    }
+    try {
+      await this.purge.invalidateByTags([tag]);
+    } catch (e) {
+      throw new PurgeFailed(e); // intent stays pending; drainPurges() retries the tag
+    }
+    await this.outbox.markDone(id);
+    return true;
+  }
+
+  // Theme-wide change: ONE tenant-tag purge, not O(pages) calls. Brief mixed-render window while
+  // pages revalidate on their next visits — accepted (D39).
+  async themeChanged(tenantId: string): Promise<void> {
+    await this.purgeDurably(tenantId, [tenantTag(tenantId)]);
+  }
+
+  // Retry every pending purge (cron / on-demand from the editor's error banner). Idempotent —
+  // invalidate is safe to repeat.
+  async drainPurges(tenantId: string): Promise<number> {
+    const pending = await this.outbox.pending(tenantId);
+    let drained = 0;
+    for (const entry of pending) {
+      await this.purge.invalidateByTags(entry.tags); // throws → stop; remainder stays pending
+      await this.outbox.markDone(entry.id);
+      drained++;
+    }
+    return drained;
+  }
+}
+
+export class InMemoryPageStore implements PageStore {
+  private docs = new Map<string, PageDoc>();
+  private revs = new Map<string, number>(); // survives delete — generations must never regress
+  private key = (t: string, p: string) => `${t} ${p}`;
+
+  async get(t: string, p: string) {
+    return this.docs.get(this.key(t, p)) ?? null;
+  }
+  async save(t: string, doc: PageDoc) {
+    const k = this.key(t, doc.path);
+    const rev = (this.revs.get(k) ?? 0) + 1;
+    this.docs.set(k, doc);
+    this.revs.set(k, rev);
+    return rev;
+  }
+  async delete(t: string, p: string) {
+    const k = this.key(t, p);
+    const existed = this.docs.delete(k);
+    const revision = (this.revs.get(k) ?? 0) + 1;
+    if (existed) this.revs.set(k, revision); // deletion is a write — it gets a generation too
+    return { existed, revision: existed ? revision : (this.revs.get(k) ?? 0) };
+  }
+  async revision(t: string, p: string) {
+    return this.revs.get(this.key(t, p)) ?? 0;
+  }
+  async listPaths(t: string) {
+    return [...this.docs.keys()].filter((k) => k.startsWith(t + ' ')).map((k) => k.split(' ')[1]);
+  }
+}
+
+export class InMemoryPurgeOutbox implements PurgeOutbox {
+  private entries: { id: number; tenantId: string; tags: string[]; done: boolean }[] = [];
+  private seq = 0;
+  async enqueue(tenantId: string, tags: string[]) {
+    const id = ++this.seq;
+    this.entries.push({ id, tenantId, tags, done: false });
+    return id;
+  }
+  async markDone(id: number) {
+    const e = this.entries.find((x) => x.id === id);
+    if (e) e.done = true;
+  }
+  async pending(tenantId: string) {
+    return this.entries
+      .filter((e) => !e.done && e.tenantId === tenantId)
+      .map(({ id, tags }) => ({ id, tags }));
+  }
+}

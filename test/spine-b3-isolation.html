@@ -1,0 +1,356 @@
+<meta charset="utf-8" />
+<title>B3 App-Isolation Spike — Sandbox + Capability Bridge</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #191c23;
+    --border: #2b303b;
+    --text: #e6e8ee;
+    --muted: #9aa2b1;
+    --pass: #34d399;
+    --fail: #f87171;
+    --accent: #60a5fa;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 -apple-system, system-ui, Segoe UI, Roboto, sans-serif;
+    padding: 24px;
+    max-width: 960px;
+    margin-inline: auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; color: var(--accent); }
+  p.lead { color: var(--muted); margin-top: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  /* The app island frame. Kept small; resize is negotiated over the bridge. */
+  #app-island {
+    width: 100%;
+    height: 120px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #000;
+    transition: height 0.2s ease;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  td.result { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .badge { font-family: var(--mono); font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+  .badge.pass { background: rgba(52,211,153,.15); color: var(--pass); }
+  .badge.fail { background: rgba(248,113,113,.15); color: var(--fail); }
+  .tally { font-size: 18px; font-weight: 700; }
+  .tally.ok { color: var(--pass); }
+  .tally.bad { color: var(--fail); }
+  code { font-family: var(--mono); background: rgba(255,255,255,.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .cat { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+</style>
+
+<h1>B3 App-Isolation Spike</h1>
+<p class="lead">
+  Third-party "app island" running in a cross-origin sandbox with a postMessage capability bridge.
+  The harness below <strong>attempts every known escape</strong> and reports whether the boundary held.
+</p>
+
+<div class="panel">
+  <h2 style="margin-top:0">The app island (sandboxed, untrusted)</h2>
+  <p class="lead" style="margin-bottom:12px">
+    <code>sandbox="allow-scripts"</code> — no <code>allow-same-origin</code>, no <code>allow-top-navigation</code>.
+    Loaded via <code>srcdoc</code> so it runs at an opaque (null) origin, exactly like a real cross-origin app frame.
+  </p>
+  <!-- Sandbox attributes are set from JS below so the choice is documented in one place. -->
+  <iframe id="app-island" title="untrusted app island"></iframe>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">Attack scoreboard <span id="tally" class="tally">running…</span></h2>
+  <table>
+    <thead>
+      <tr><th>Attack / control</th><th>Vector</th><th class="result">Observed</th><th>Verdict</th></tr>
+    </thead>
+    <tbody id="scoreboard"></tbody>
+  </table>
+</div>
+
+<script>
+// =============================================================================
+//  HOST (trusted storefront page)
+// =============================================================================
+//  Responsibilities:
+//    1. Mint the sandboxed iframe with the minimal sandbox token set.
+//    2. Run the capability bridge: origin/source check -> schema -> allowlist ->
+//       sanitize -> budget enforcement -> dispatch to a whitelisted handler.
+//    3. Host the test harness (a scoreboard). The harness is TEST-ONLY plumbing;
+//       the production bridge is the code between the "BRIDGE" banners below.
+// =============================================================================
+
+// ---- Scoreboard plumbing (test instrumentation, not shipped) ----------------
+const ROWS = {
+  doc:      { name: 'Read host DOM',            vector: 'parent.document.body' },
+  cookie:   { name: 'Read host cookies',        vector: 'parent.document.cookie' },
+  storage:  { name: 'Read host localStorage',   vector: 'parent.localStorage' },
+  topnav:   { name: 'Navigate the top frame',   vector: 'top.location = evil' },
+  nonallow: { name: 'Non-allowlisted capability',vector: "bridge: 'purge-database'" },
+  spoof:    { name: 'Spoofed sender / origin',  vector: 'postMessage from wrong window' },
+  pollute:  { name: 'Prototype pollution',      vector: 'payload {"__proto__":…}' },
+  budget:   { name: 'Exceed resize budget',     vector: 'request-resize h=999999' },
+  c_cart:   { name: 'Control: get-cart-count',  vector: 'valid allowlisted call' },
+  c_resize: { name: 'Control: resize in budget',vector: 'request-resize h=360' },
+};
+const results = {};
+function record(id, pass, observed) {
+  results[id] = { pass, observed };
+  render();
+}
+function render() {
+  const tbody = document.getElementById('scoreboard');
+  tbody.innerHTML = '';
+  let done = 0, ok = 0;
+  for (const [id, meta] of Object.entries(ROWS)) {
+    const r = results[id];
+    const tr = document.createElement('tr');
+    const verdict = !r ? '<span class="cat">pending</span>'
+      : `<span class="badge ${r.pass ? 'pass' : 'fail'}">${r.pass ? 'PASS' : 'FAIL'}</span>`;
+    tr.innerHTML =
+      `<td><strong>${meta.name}</strong></td>` +
+      `<td class="cat">${meta.vector}</td>` +
+      `<td class="result">${r ? escapeHtml(r.observed) : '—'}</td>` +
+      `<td>${verdict}</td>`;
+    tbody.appendChild(tr);
+    if (r) { done++; if (r.pass) ok++; }
+  }
+  const total = Object.keys(ROWS).length;
+  const tally = document.getElementById('tally');
+  if (done < total) { tally.textContent = `running… ${done}/${total}`; tally.className = 'tally'; }
+  else {
+    tally.textContent = `${ok}/${total} held`;
+    tally.className = 'tally ' + (ok === total ? 'ok' : 'bad');
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+}
+render();
+
+// =============================================================================
+//  ==== BRIDGE (production, trusted) =========================================
+// =============================================================================
+
+// The origin we accept messages from. In production this is the fixed app
+// origin, e.g. "https://apps.gokwik.io". A srcdoc sandbox with no
+// allow-same-origin reports its origin as the string "null", so locally we
+// accept "null" — but this MUST be pinned to the real app origin in prod.
+const EXPECTED_ORIGIN = 'null';
+
+// The ONLY capabilities the app island may invoke. Everything else is dropped.
+const CAPABILITY_ALLOWLIST = new Set(['get-cart-count', 'request-resize']);
+
+// Resize budget: the app can ask, but the host clamps. Prevents layout hijack.
+const MAX_ISLAND_HEIGHT = 600;
+const MIN_ISLAND_HEIGHT = 80;
+
+// Message schema: a message is valid only if it is a plain object with a string
+// `type`, a string `id` (for request/response correlation), and a `payload`
+// that is a plain object. Anything else is rejected before it reaches a handler.
+function isPlainObject(v) {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+function validateSchema(msg) {
+  if (!isPlainObject(msg)) return 'not an object';
+  if (typeof msg.type !== 'string') return 'type not a string';
+  if (typeof msg.id !== 'string') return 'id not a string';
+  if (!isPlainObject(msg.payload)) return 'payload not an object';
+  return null; // valid
+}
+
+// Prototype-pollution guard: reject any object that carries a dangerous own key
+// at any depth. Structured-clone preserves an own "__proto__" key created via
+// JSON.parse, so a naive deep-merge downstream could be poisoned — we refuse
+// the whole message instead.
+const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+function hasDangerousKey(obj, depth = 0) {
+  if (!isPlainObject(obj) || depth > 6) return false;
+  for (const key of Object.getOwnPropertyNames(obj)) {
+    if (FORBIDDEN_KEYS.has(key)) return true;
+    if (hasDangerousKey(obj[key], depth + 1)) return true;
+  }
+  return false;
+}
+
+// Capability handlers. Each returns the response payload sent back to the app.
+const HANDLERS = {
+  'get-cart-count': () => ({ count: 3 }), // stubbed host state
+  'request-resize': (payload) => {
+    const asked = Number(payload.height);
+    const granted = Math.max(MIN_ISLAND_HEIGHT, Math.min(MAX_ISLAND_HEIGHT, isFinite(asked) ? asked : MIN_ISLAND_HEIGHT));
+    document.getElementById('app-island').style.height = granted + 'px';
+    return { granted, asked, clamped: granted !== asked };
+  },
+};
+
+const appFrame = document.getElementById('app-island');
+
+// The single window-level listener. Every gate is applied in order; the first
+// failure drops the message silently (untrusted senders get no oracle).
+window.addEventListener('message', (event) => {
+  const msg = event.data;
+
+  // --- Test hook: collect self-reported results from the sandbox. This is the
+  //     ONLY branch that is test-only; it is fenced off before the bridge gates
+  //     and would be deleted in production. It never dispatches a capability.
+  if (isPlainObject(msg) && msg.__harness === true && event.source === appFrame.contentWindow) {
+    record(msg.testId, msg.blocked === true, msg.detail);
+    return;
+  }
+
+  // --- GATE 1: sender identity. The browser sets event.source; it cannot be
+  //     forged. Only the live app frame window may talk to the bridge. This
+  //     alone defeats sibling frames / other tabs posting to us.
+  if (event.source !== appFrame.contentWindow) {
+    record('spoof', true, 'rejected: event.source !== app frame');
+    return;
+  }
+
+  // --- GATE 2: origin allowlist. Belt-and-braces with GATE 1.
+  if (event.origin !== EXPECTED_ORIGIN) {
+    // In this local prototype the sandbox origin is "null"; real app messages
+    // pass, a wrong origin would be dropped here.
+    return;
+  }
+
+  // --- GATE 3: schema.
+  const schemaErr = validateSchema(msg);
+  if (schemaErr) return;
+
+  // --- GATE 4: prototype-pollution guard.
+  if (hasDangerousKey(msg)) {
+    record('pollute', true, 'rejected: dangerous key in payload');
+    return;
+  }
+
+  // --- GATE 5: capability allowlist.
+  if (!CAPABILITY_ALLOWLIST.has(msg.type)) {
+    record('nonallow', true, `rejected: '${msg.type}' not allowlisted`);
+    // Optional: tell the app its request was denied (no host data leaked).
+    appFrame.contentWindow.postMessage({ id: msg.id, ok: false, error: 'capability-denied' }, '*');
+    return;
+  }
+
+  // --- DISPATCH: run the whitelisted handler and reply.
+  const responsePayload = HANDLERS[msg.type](msg.payload);
+  appFrame.contentWindow.postMessage({ id: msg.id, ok: true, payload: responsePayload }, '*');
+
+  // Test hooks for the two bridge attacks the host adjudicates directly.
+  if (msg.type === 'request-resize') {
+    if (responsePayload.clamped && responsePayload.asked > MAX_ISLAND_HEIGHT) {
+      record('budget', true, `clamped ${responsePayload.asked} -> ${responsePayload.granted}`);
+    } else if (msg.id.startsWith('ctl-')) {
+      record('c_resize', responsePayload.granted === responsePayload.asked, `granted ${responsePayload.granted}px`);
+    }
+  }
+  if (msg.type === 'get-cart-count' && msg.id.startsWith('ctl-')) {
+    record('c_cart', responsePayload.count === 3, `returned count=${responsePayload.count}`);
+  }
+});
+// =============================================================================
+//  ==== /BRIDGE ==============================================================
+// =============================================================================
+
+// Host-initiated spoof attack: post to our OWN window from the top frame,
+// impersonating an app message. Because event.source will be `window` (top),
+// not the iframe's contentWindow, GATE 1 drops it. A malicious sibling frame or
+// popup posting to us hits the exact same wall.
+window.postMessage({ type: 'get-cart-count', id: 'spoof-1', payload: {} }, '*');
+
+// =============================================================================
+//  APP ISLAND (untrusted). Runs inside the sandbox at a null origin. Attempts
+//  every escape it can from the guest side, catches the failures, and reports
+//  each outcome to the host over the test-only __harness channel.
+// =============================================================================
+const APP_SRC = `
+<!doctype html><meta charset="utf-8">
+<style>
+  body{margin:0;font:13px system-ui,sans-serif;color:#8ab4f8;background:#000;padding:12px}
+  b{color:#e6e8ee}
+</style>
+<body>
+  <b>3rd-party app island</b> — sandboxed, opaque origin. Running self-tests…
+  <div id="log"></div>
+<script>
+  var log = document.getElementById('log');
+  function report(testId, blocked, detail){
+    log.innerHTML += '<div>'+testId+': '+detail+'</div>';
+    // Report to host over the test-only channel.
+    parent.postMessage({ __harness:true, testId:testId, blocked:blocked, detail:detail }, '*');
+  }
+
+  // 1) Read the host DOM. Cross-origin => SecurityError on property access.
+  try { var x = parent.document.body.innerHTML; report('doc', false, 'LEAKED: '+String(x).slice(0,20)); }
+  catch (e) { report('doc', true, 'blocked: '+e.name); }
+
+  // 2) Read host cookies.
+  try { var c = parent.document.cookie; report('cookie', false, 'LEAKED: '+c); }
+  catch (e) { report('cookie', true, 'blocked: '+e.name); }
+
+  // 3) Read host localStorage. With no allow-same-origin, even our OWN
+  //    localStorage is inaccessible — the opaque origin has no storage.
+  try { var v = parent.localStorage.getItem('session'); report('storage', false, 'LEAKED: '+v); }
+  catch (e) { report('storage', true, 'blocked: '+e.name); }
+
+  // 4) Navigate the top frame. No allow-top-navigation => blocked.
+  try {
+    top.location.href = 'https://evil.example/phish';
+    // If it neither threw nor navigated, the sandbox swallowed it => still safe.
+    report('topnav', true, 'blocked: sandbox suppressed top navigation');
+  } catch (e) { report('topnav', true, 'blocked: '+e.name); }
+
+  // 5) Non-allowlisted capability over the bridge.
+  parent.postMessage({ type:'purge-database', id:'atk-1', payload:{} }, '*');
+
+  // 6) Prototype pollution. JSON.parse gives us a real own "__proto__" key that
+  //    survives structured clone; a naive host merge would be poisoned.
+  var evil = JSON.parse('{"type":"get-cart-count","id":"atk-2","payload":{"__proto__":{"polluted":true}}}');
+  parent.postMessage(evil, '*');
+
+  // 7) Exceed the resize budget.
+  parent.postMessage({ type:'request-resize', id:'atk-3', payload:{ height: 999999 } }, '*');
+
+  // --- Positive controls: prove the bridge actually works for legit calls. ---
+  var pending = {};
+  window.addEventListener('message', function(ev){
+    var m = ev.data;
+    if (!m || typeof m !== 'object' || !pending[m.id]) return;
+    pending[m.id](m);
+  });
+  function call(type, id, payload){
+    return new Promise(function(res){ pending[id] = res; parent.postMessage({type:type,id:id,payload:payload}, '*'); });
+  }
+  call('get-cart-count', 'ctl-cart', {}).then(function(r){
+    report('c_cart', r.ok && r.payload.count === 3, r.ok ? 'host replied count='+r.payload.count : 'denied');
+  });
+  call('request-resize', 'ctl-resize', { height: 360 }).then(function(r){
+    report('c_resize', r.ok && r.payload.granted === 360, r.ok ? 'resized to '+r.payload.granted : 'denied');
+  });
+<\/script>
+`;
+
+// Set the sandbox token set explicitly, then load the app. Critically:
+//   allow-scripts        -> the app needs JS to be an app at all.
+//   NO allow-same-origin -> pins the frame to an opaque origin, so it can never
+//                           reach host DOM / cookies / storage, and the two
+//                           tokens together would re-grant same-origin script
+//                           access — NEVER combine them.
+//   NO allow-top-navigation, allow-popups, allow-forms, allow-modals, allow-downloads.
+appFrame.setAttribute('sandbox', 'allow-scripts');
+appFrame.srcdoc = APP_SRC;
+</script>
