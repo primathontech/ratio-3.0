@@ -353,3 +353,57 @@ test('settings: block setting types are validated too', () => {
       /setting 'slide.image' must be a string/.test(e.problems.join(' '))
   );
 });
+
+// ─── library breadth (Slice 2c) ─────────────────────────────────────────────────
+
+test('compose: a basic page built from library sections renders all of them', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    {
+      path: '/',
+      title: 'Store',
+      sections: [
+        { id: 'h', type: 'hero', data: { hero: { heading: 'Welcome' } } },
+        { id: 'hd', type: 'heading', data: { heading: { text: 'New in' } } },
+        { id: 'im', type: 'image', data: { image: { src: '/banner.jpg', alt: 'Banner' } } },
+        { id: 'bt', type: 'button', data: { button: { label: 'Shop', href: '/shop' } } },
+        { id: 'sp', type: 'spacer', data: { spacer: { size: 40 } } },
+      ],
+    },
+    reg
+  );
+  const page = await composePage(doc, reg);
+  assert.match(page.html, /class="heading">New in/);
+  assert.match(page.html, /class="image"><img src="\/banner\.jpg"/);
+  assert.match(page.html, /class="button" href="\/shop">Shop/);
+  assert.match(page.html, /class="spacer" style="height:40px"/);
+  assert.equal(page.tier, 'static');
+  assert.equal(page.cacheable, true);
+});
+
+test('settings: library block validation — bad button URL and out-of-range spacer are rejected', () => {
+  const reg = defaultRegistry();
+  assert.throws(
+    () =>
+      validatePageDoc(
+        {
+          path: '/',
+          sections: [{ id: 'bt', type: 'button', data: { button: { href: 'javascript:1' } } }],
+        },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /setting 'button.href' must be an absolute URL/.test(e.problems.join(' '))
+  );
+  assert.throws(
+    () =>
+      validatePageDoc(
+        { path: '/', sections: [{ id: 'sp', type: 'spacer', data: { spacer: { size: 9999 } } }] },
+        reg
+      ),
+    (e: unknown) =>
+      e instanceof InvalidPageDoc &&
+      /setting 'spacer.size' must be <= 200/.test(e.problems.join(' '))
+  );
+});

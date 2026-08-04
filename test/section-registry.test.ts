@@ -33,7 +33,10 @@ test('defaultRegistry: first-party sections load with INFERRED tiers (never decl
   // nested: the slideshow section + its slide block both infer static
   assert.equal(reg.get('slideshow')!.tier, 'static');
   assert.equal(reg.get('slide')!.tier, 'static');
-  assert.equal(reg.list().length, 6);
+  // library blocks (Slice 2c) — all authored config, all static
+  for (const t of ['heading', 'image', 'button', 'spacer'])
+    assert.equal(reg.get(t)!.tier, 'static', `${t} is static`);
+  assert.equal(reg.list().length, 10);
   assert.ok(reg.list().every((w) => w.trusted));
 });
 
