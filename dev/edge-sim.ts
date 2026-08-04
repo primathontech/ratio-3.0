@@ -41,6 +41,18 @@ function purge(key: string | null): number {
     }
   return n;
 }
+// Purge every cached page of one tenant. Keyed on the cache-key prefix (`${tenantId} `) so it
+// doesn't depend on the origin's surrogate-key format — which differs between the page-builder
+// and content-model render paths. Used by the local control plane on save (see purgeLocalEdge).
+function purgeTenant(tenant: string): number {
+  let n = 0;
+  for (const k of cache.keys())
+    if (k.startsWith(`${tenant} `)) {
+      cache.delete(k);
+      n++;
+    }
+  return n;
+}
 
 export const edge = http.createServer(async (req: IncomingMessage, res: ServerResponse) => {
   try {
@@ -56,6 +68,11 @@ export const edge = http.createServer(async (req: IncomingMessage, res: ServerRe
         const key = url.searchParams.get('key');
         res.writeHead(200, { 'content-type': 'application/json' });
         return res.end(JSON.stringify({ purged: purge(key), key }));
+      }
+      if (path === '/__admin/purge-tenant') {
+        const tenant = url.searchParams.get('tenant');
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ purged: tenant ? purgeTenant(tenant) : 0, tenant }));
       }
       if (path === '/__admin/stats') {
         res.writeHead(200, { 'content-type': 'application/json' });

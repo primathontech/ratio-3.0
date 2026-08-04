@@ -14,6 +14,7 @@ import {
 } from '@ratio/provisioning';
 import { forTenant, StaleWriteError } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
+import { isLocal } from '@ratio/shared/env';
 import {
   cfConfig,
   connectCustomHostname,
@@ -60,6 +61,20 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // createApp takes the verifier so tests can inject identity without calling Clerk. The
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
 type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
+
+// Local dev only: *.localhost storefronts are served by the in-memory dev edge (dev/edge-sim.ts),
+// which the Cloudflare purge can't reach (no zone). Clear the local edge's per-tenant cache so a
+// save shows on the next reload — the same purge-on-publish contract, pointed at the local edge.
+// Gated by RATIO_LOCAL and best-effort, so it never runs (and never throws) on a deployed plane.
+async function purgeLocalEdge(tenant: string): Promise<void> {
+  if (!isLocal) return;
+  const port = process.env.EDGE_PORT || '8080';
+  const secret = process.env.EDGE_SECRET || 'private-link-secret';
+  await fetch(
+    `http://127.0.0.1:${port}/__admin/purge-tenant?tenant=${encodeURIComponent(tenant)}`,
+    { headers: { 'x-admin-secret': secret } }
+  ).catch(() => {});
+}
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
 // platform's own domain (H-1 — subdomain squat: e.g. login.ratiodev.in served attacker
@@ -466,6 +481,10 @@ export function createApp(
         .map((h) => `https://${h}${body.path}`);
       void purgeUrls(cfg, urls).catch(() => {});
     }
+    // The Cloudflare purge above skips *.localhost (no zone). In local dev the storefront is served
+    // by the in-memory dev edge, so clear its cache directly — same purge-on-publish contract,
+    // pointed at the local edge. No-op unless RATIO_LOCAL=true.
+    await purgeLocalEdge(id);
     return c.json({ path: body.path, pageType, pageConfig: body.pageConfig, version });
   });
 
