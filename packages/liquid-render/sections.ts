@@ -78,6 +78,40 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     template: `<section class="rich">{{ rich.html }}</section>`,
   },
 
+  heading: {
+    type: 'heading',
+    bindings: [{ name: 'heading', tier: 'static' }],
+    settings: [{ key: 'heading.text', type: 'text', label: 'Heading' }],
+    template: `<h2 class="heading">{{ heading.text | escape }}</h2>`,
+  },
+
+  image: {
+    type: 'image',
+    bindings: [{ name: 'image', tier: 'static' }],
+    settings: [
+      { key: 'image.src', type: 'image', label: 'Image' },
+      { key: 'image.alt', type: 'text', label: 'Alt text' },
+    ],
+    template: `<figure class="image"><img src="{{ image.src | escape }}" alt="{{ image.alt | escape }}"></figure>`,
+  },
+
+  button: {
+    type: 'button',
+    bindings: [{ name: 'button', tier: 'static' }],
+    settings: [
+      { key: 'button.label', type: 'text', label: 'Label' },
+      { key: 'button.href', type: 'url', label: 'Link' },
+    ],
+    template: `<a class="button" href="{{ button.href | escape }}">{{ button.label | escape }}</a>`,
+  },
+
+  spacer: {
+    type: 'spacer',
+    bindings: [{ name: 'spacer', tier: 'static' }],
+    settings: [{ key: 'spacer.size', type: 'range', min: 0, max: 200, label: 'Height (px)' }],
+    template: `<div class="spacer" style="height:{{ spacer.size }}px"></div>`,
+  },
+
   // A nested section: it renders no content of its own beyond a wrapper, and injects its child
   // blocks (already composed) where `{{ blocks }}` sits. `blocks` is a reserved global (infer.ts)
   // — the section reads no data bindings itself; its tier is the max of its slides'.
