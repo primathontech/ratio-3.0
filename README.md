@@ -43,15 +43,21 @@ on hold (see Jira OFCE-359 / INFRASTRUCTURE.md).
 ## Local development
 
 ```bash
-cp .env.example .env      # point DATABASE_URL at your local Postgres
+cp .env.example .env      # sets RATIO_LOCAL=true + the docker DATABASE_URL
 bun install               # Bun is the package manager AND the script runner
 bun run db:init           # run migrations + seed
 bun start                 # edge :8080 + origin :9090 (two-server local sim)
+RATIO_LOCAL=true bun run admin-api   # control plane :8787 (dev Clerk bypass — no secret needed)
 bun run test              # test:setup (ensure-db + migrate + seed) then node:test
 bun run typecheck && bun run lint
 bun run prove             # S2 full-stack proof — expect ALL GREEN
 bun run prove:s1          # S1 cacheability proof — expect ALL GREEN
 ```
+
+`RATIO_LOCAL=true` marks a developer machine (see `@ratio/shared/env`): it turns on a dev-only
+Clerk bypass so the admin API runs without a Clerk secret. Unset means staging/prod, and it is
+hard-blocked whenever `NODE_ENV=production` (which the Dockerfile sets on every deployed container),
+so it can never authenticate off a dev box.
 
 Manual poke (local):
 

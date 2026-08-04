@@ -34,6 +34,7 @@ import {
   listAllStores,
   isPlatformAdmin,
   clerkVerifier,
+  insecureDevClerkVerifier,
   agentVerifier,
   composeVerifiers,
   mintAgentToken,
@@ -142,7 +143,7 @@ export interface AppOptions {
 }
 
 export function createApp(
-  verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier),
+  verify: Verifier = composeVerifiers(agentVerifier, insecureDevClerkVerifier, clerkVerifier),
   opts: AppOptions = {}
 ) {
   const app = new Hono<Vars>();
