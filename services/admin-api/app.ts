@@ -15,6 +15,10 @@ import {
 import { forTenant, StaleWriteError } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
 import { isLocal } from '@ratio/shared/env';
+import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
+import type { PageDoc } from '@ratio/page-builder-core/doc';
+import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import {
   cfConfig,
   connectCustomHostname,
@@ -75,6 +79,25 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
     { headers: { 'x-admin-secret': secret } }
   ).catch(() => {});
 }
+
+// Page-builder authoring (draft -> publish, D4). The publish path purges by the EXACT surrogate
+// tag the origin stamps on a page-builder response, so a publish invalidates precisely that page.
+// Prod tag-purge (Cloudflare/Akamai) is a separate wiring; here it's local-only + the publish
+// transaction records a durable outbox intent regardless, so nothing is stranded.
+const pbStore = new PgPageStore();
+const pbPurge: PurgeLike = {
+  async invalidateByTags(tags) {
+    if (!isLocal) return;
+    const port = process.env.EDGE_PORT || '8080';
+    const secret = process.env.EDGE_SECRET || 'private-link-secret';
+    for (const tag of tags) {
+      await fetch(`http://127.0.0.1:${port}/__admin/purge?key=${encodeURIComponent(tag)}`, {
+        headers: { 'x-admin-secret': secret },
+      }).catch(() => {});
+    }
+  },
+};
+const pageBuilder = new PageBuilder(pbStore, defaultRegistry(), pbPurge);
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
 // platform's own domain (H-1 — subdomain squat: e.g. login.ratiodev.in served attacker
@@ -434,6 +457,46 @@ export function createApp(
   app.get('/stores/:id/pages', requireMembership, async (c) => {
     const pages = await forTenant(c.req.param('id')).listRoutes();
     return c.json({ pages });
+  });
+
+  // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
+  // (validated + version-pinned, live page untouched), then publish to promote draft->live and
+  // purge. A published PageDoc wins over the legacy content-model route at the origin. ---
+
+  app.get('/stores/:id/page-builder', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const path = c.req.query('path') || '/';
+    const [draft, live, revision] = await Promise.all([
+      pbStore.getDraft(id, path),
+      pbStore.getLive(id, path),
+      pbStore.revision(id, path),
+    ]);
+    return c.json({ path, draft, live, revision, hasDraft: draft !== null });
+  });
+
+  app.put('/stores/:id/page-builder', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { doc?: unknown };
+    if (typeof body.doc !== 'object' || body.doc === null) {
+      return c.json({ error: 'doc (a PageDoc) is required' }, 400);
+    }
+    try {
+      // validatePageDoc (inside saveDraft) rejects unknown section/block types + bad settings.
+      const draft = await pageBuilder.saveDraft(id, body.doc as PageDoc);
+      c.set('auditTenant', id);
+      return c.json({ ok: true, draft });
+    } catch (e) {
+      return c.json({ error: 'invalid page doc', detail: (e as Error).message }, 422);
+    }
+  });
+
+  app.post('/stores/:id/page-builder/publish', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const path = ((await c.req.json().catch(() => ({}))) as { path?: string }).path || '/';
+    const res = await pageBuilder.publish(id, path);
+    if (!res) return c.json({ error: 'no draft to publish' }, 404);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, revision: res.revision });
   });
 
   app.get('/stores/:id/page', requireMembership, async (c) => {
