@@ -128,4 +128,60 @@ describe('admin api client', () => {
     const api = createApi('http://api', async () => 't', boom);
     await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
   });
+
+  test('pbCatalog unwraps the sections array', async () => {
+    const sections = [{ type: 'hero', kind: 'section', settings: [], blocks: [] }];
+    const api = createApi('http://api', async () => 't', fakeFetch(200, { sections }));
+    expect(await api.pbCatalog()).toEqual(sections);
+  });
+
+  test('getPageBuilder GETs the page-builder state with the path query', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(
+        200,
+        { path: '/', draft: null, live: null, revision: 0, hasDraft: false },
+        (r) => (seen = r)
+      )
+    );
+    await api.getPageBuilder('t_x', '/');
+    expect(seen?.method).toBe('GET');
+    const u = new URL(seen!.url);
+    expect(u.pathname).toBe('/stores/t_x/page-builder');
+    expect(u.searchParams.get('path')).toBe('/');
+  });
+
+  test('savePbDraft PUTs the doc wrapped in { doc }', async () => {
+    let seen: Request | undefined;
+    let bodyText = '';
+    const capture = async (r: Request) => {
+      seen = r;
+      bodyText = await r.text();
+    };
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, draft: {} }, (r) => void capture(r))
+    );
+    const doc = { path: '/', title: 'T', sections: [] };
+    await api.savePbDraft('t_x', doc);
+    expect(seen?.method).toBe('PUT');
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x/page-builder');
+    expect(JSON.parse(bodyText)).toEqual({ doc });
+  });
+
+  test('publishPb POSTs the path to the publish endpoint', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, revision: 3 }, (r) => (seen = r))
+    );
+    const res = await api.publishPb('t_x', '/');
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x/page-builder/publish');
+    expect(res).toEqual({ ok: true, revision: 3 });
+  });
 });

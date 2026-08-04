@@ -21,6 +21,40 @@ export interface Page {
   version?: number;
 }
 
+// --- Page builder (section/block PageDoc) ---
+export interface PbSettingDef {
+  key: string; // dotted path into section data, e.g. 'hero.heading'
+  type: string; // text | url | richtext | range | number | select | color | boolean | image | ...
+  label?: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+}
+export interface PbSectionDef {
+  type: string;
+  kind: string; // 'section' | 'block'
+  settings: PbSettingDef[];
+  blocks: string[];
+}
+export interface PbSection {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+  version?: number;
+}
+export interface PbDoc {
+  path: string;
+  title: string;
+  sections: PbSection[];
+}
+export interface PbState {
+  path: string;
+  draft: PbDoc | null;
+  live: PbDoc | null;
+  revision: number;
+  hasDraft: boolean;
+}
+
 export interface DomainInfo {
   host: string;
   kind: 'platform' | 'custom';
@@ -180,6 +214,18 @@ export function createApi(
       req<Record<string, unknown>>('GET', `/stores/${id}/audit`).then((d) =>
         pickArray<AuditEntry>(d, 'entries')
       ),
+    pbCatalog: () =>
+      req<Record<string, unknown>>('GET', '/page-builder/catalog').then((d) =>
+        pickArray<PbSectionDef>(d, 'sections')
+      ),
+    getPageBuilder: (id: string, path: string) =>
+      req<PbState>('GET', `/stores/${id}/page-builder?path=${encodeURIComponent(path)}`),
+    savePbDraft: (id: string, doc: PbDoc) =>
+      req<{ ok: boolean; draft: PbDoc }>('PUT', `/stores/${id}/page-builder`, { doc }),
+    publishPb: (id: string, path: string) =>
+      req<{ ok: boolean; revision: number }>('POST', `/stores/${id}/page-builder/publish`, {
+        path,
+      }),
     assistant: (message: string, storeId?: string, idempotencyKey?: string) =>
       req<AssistantReply>(
         'POST',

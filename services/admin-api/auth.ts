@@ -2,6 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyToken } from '@clerk/backend';
 import { pool } from '@ratio/shared/db';
+import { devInsecureClerk } from '@ratio/shared/env';
 
 // ADR-010 admin auth. Split by design:
 //  - authN (who is this user) is Clerk's job — we verify its session JWT offline.
@@ -30,6 +31,21 @@ export const clerkVerifier: Verifier = async (token) => {
   try {
     const payload = await verifyToken(token, jwtKey ? { jwtKey } : { secretKey });
     return payload.sub ? { userId: payload.sub } : null;
+  } catch {
+    return null;
+  }
+};
+
+// DEV-ONLY convenience: trust the Clerk session JWT's `sub` WITHOUT verifying its signature, so a
+// local admin can run without the Clerk secret. Gated by `devInsecureClerk` (see @ratio/shared/env):
+// on when RATIO_LOCAL=true or DEV_INSECURE_CLERK=true, but HARD-blocked whenever NODE_ENV=production
+// — so it can never authenticate on a deployed container. authZ (memberships) still runs normally.
+export const insecureDevClerkVerifier: Verifier = async (token) => {
+  if (!devInsecureClerk) return null;
+  try {
+    const payloadB64 = token.split('.')[1];
+    const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    return payload.sub ? { userId: String(payload.sub) } : null;
   } catch {
     return null;
   }

@@ -14,6 +14,11 @@ import {
 } from '@ratio/provisioning';
 import { forTenant, StaleWriteError } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
+import { isLocal } from '@ratio/shared/env';
+import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
+import type { PageDoc } from '@ratio/page-builder-core/doc';
+import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import {
   cfConfig,
   connectCustomHostname,
@@ -34,6 +39,7 @@ import {
   listAllStores,
   isPlatformAdmin,
   clerkVerifier,
+  insecureDevClerkVerifier,
   agentVerifier,
   composeVerifiers,
   mintAgentToken,
@@ -59,6 +65,52 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // createApp takes the verifier so tests can inject identity without calling Clerk. The
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
 type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
+
+// Local dev only: *.localhost storefronts are served by the in-memory dev edge (dev/edge-sim.ts),
+// which the Cloudflare purge can't reach (no zone). Clear the local edge's per-tenant cache so a
+// save shows on the next reload — the same purge-on-publish contract, pointed at the local edge.
+// Gated by RATIO_LOCAL and best-effort, so it never runs (and never throws) on a deployed plane.
+async function purgeLocalEdge(tenant: string): Promise<void> {
+  if (!isLocal) return;
+  const port = process.env.EDGE_PORT || '8080';
+  const secret = process.env.EDGE_SECRET || 'private-link-secret';
+  await fetch(
+    `http://127.0.0.1:${port}/__admin/purge-tenant?tenant=${encodeURIComponent(tenant)}`,
+    { headers: { 'x-admin-secret': secret } }
+  ).catch(() => {});
+}
+
+// Page-builder authoring (draft -> publish, D4). The publish path purges by the EXACT surrogate
+// tag the origin stamps on a page-builder response, so a publish invalidates precisely that page.
+// Prod tag-purge (Cloudflare/Akamai) is a separate wiring; here it's local-only + the publish
+// transaction records a durable outbox intent regardless, so nothing is stranded.
+const pbStore = new PgPageStore();
+const pbRegistry = defaultRegistry();
+const pbPurge: PurgeLike = {
+  async invalidateByTags(tags) {
+    if (!isLocal) return;
+    const port = process.env.EDGE_PORT || '8080';
+    const secret = process.env.EDGE_SECRET || 'private-link-secret';
+    for (const tag of tags) {
+      await fetch(`http://127.0.0.1:${port}/__admin/purge?key=${encodeURIComponent(tag)}`, {
+        headers: { 'x-admin-secret': secret },
+      }).catch(() => {});
+    }
+  },
+};
+const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
+
+// The section catalog the editor renders forms from. Serializable metadata only (type + kind +
+// typed settings + accepted child block types) — never the render templates.
+function sectionCatalog() {
+  return pbRegistry.list().map((r) => ({
+    type: r.type,
+    // a type is a top-level section unless it's explicitly a child block
+    kind: r.kind === 'block' ? 'block' : 'section',
+    settings: r.settings ?? [],
+    blocks: r.blocks ?? [],
+  }));
+}
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
 // platform's own domain (H-1 — subdomain squat: e.g. login.ratiodev.in served attacker
@@ -142,7 +194,7 @@ export interface AppOptions {
 }
 
 export function createApp(
-  verify: Verifier = composeVerifiers(agentVerifier, clerkVerifier),
+  verify: Verifier = composeVerifiers(agentVerifier, insecureDevClerkVerifier, clerkVerifier),
   opts: AppOptions = {}
 ) {
   const app = new Hono<Vars>();
@@ -420,6 +472,49 @@ export function createApp(
     return c.json({ pages });
   });
 
+  // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
+  // (validated + version-pinned, live page untouched), then publish to promote draft->live and
+  // purge. A published PageDoc wins over the legacy content-model route at the origin. ---
+
+  // Global section catalog (any authenticated user) — the editor renders inputs from it.
+  app.get('/page-builder/catalog', (c) => c.json({ sections: sectionCatalog() }));
+
+  app.get('/stores/:id/page-builder', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const path = c.req.query('path') || '/';
+    const [draft, live, revision] = await Promise.all([
+      pbStore.getDraft(id, path),
+      pbStore.getLive(id, path),
+      pbStore.revision(id, path),
+    ]);
+    return c.json({ path, draft, live, revision, hasDraft: draft !== null });
+  });
+
+  app.put('/stores/:id/page-builder', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { doc?: unknown };
+    if (typeof body.doc !== 'object' || body.doc === null) {
+      return c.json({ error: 'doc (a PageDoc) is required' }, 400);
+    }
+    try {
+      // validatePageDoc (inside saveDraft) rejects unknown section/block types + bad settings.
+      const draft = await pageBuilder.saveDraft(id, body.doc as PageDoc);
+      c.set('auditTenant', id);
+      return c.json({ ok: true, draft });
+    } catch (e) {
+      return c.json({ error: 'invalid page doc', detail: (e as Error).message }, 422);
+    }
+  });
+
+  app.post('/stores/:id/page-builder/publish', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const path = ((await c.req.json().catch(() => ({}))) as { path?: string }).path || '/';
+    const res = await pageBuilder.publish(id, path);
+    if (!res) return c.json({ error: 'no draft to publish' }, 404);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, revision: res.revision });
+  });
+
   app.get('/stores/:id/page', requireMembership, async (c) => {
     const path = c.req.query('path');
     if (!path) return c.json({ error: 'path query param required' }, 400);
@@ -465,6 +560,10 @@ export function createApp(
         .map((h) => `https://${h}${body.path}`);
       void purgeUrls(cfg, urls).catch(() => {});
     }
+    // The Cloudflare purge above skips *.localhost (no zone). In local dev the storefront is served
+    // by the in-memory dev edge, so clear its cache directly — same purge-on-publish contract,
+    // pointed at the local edge. No-op unless RATIO_LOCAL=true.
+    await purgeLocalEdge(id);
     return c.json({ path: body.path, pageType, pageConfig: body.pageConfig, version });
   });
 

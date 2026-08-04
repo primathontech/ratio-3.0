@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
+import { isLocal } from '@ratio/shared/env';
 import { normalizePage } from '@ratio/content-model';
 import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
@@ -37,11 +38,12 @@ const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 let renders = 0;
 
 // Page builder (Slice 1, flag-gated). When PAGE_BUILDER_ENABLED is on, a published PageDoc for
-// this path wins over the legacy routes table; otherwise the origin is unchanged.
+// this path wins over the legacy routes table; otherwise the origin is unchanged. Always on in
+// local dev (RATIO_LOCAL) so the local loop exercises the real page-builder render path.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
 function pageBuilderEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.PAGE_BUILDER_ENABLED === 'true';
+  return env.PAGE_BUILDER_ENABLED === 'true' || isLocal;
 }
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
