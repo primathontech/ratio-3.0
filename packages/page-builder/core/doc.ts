@@ -27,16 +27,33 @@ export interface SectionInstance {
 }
 
 // A page declares its data sources ONCE (2.0 model); a data-backed section references one by key.
-// The reference + params are config — the actual product/collection data is fetched at render by
-// the resolver, never persisted here (config-not-data). params may hold {{params.x}} placeholders
-// interpolated from the route (e.g. a PDP's { handle: "{{params.handle}}" }).
-export type DataSourceType = 'product' | 'collectionByHandles' | 'collections';
+// The reference is config — the actual product/collection data is fetched at render by the resolver,
+// never persisted here (config-not-data). params may hold {{params.x}} placeholders interpolated
+// from the route (e.g. a PDP's { handle: "{{params.handle}}" }).
+//
+// A source is a serialized @ratio/data-layer call: `type` picks the method, `params` is its first
+// arg, `options` its second. Vocabulary mirrors the 2.0 DATA_SOURCE_TYPES so themes migrate as-is.
+export const DATA_SOURCE_TYPES = {
+  PRODUCT: 'PRODUCT',
+  PRODUCTS: 'PRODUCTS',
+  PRODUCTS_BY_HANDLES: 'PRODUCTS_BY_HANDLES',
+  COLLECTION: 'COLLECTION',
+  COLLECTIONS: 'COLLECTIONS',
+  COLLECTION_BY_HANDLES: 'COLLECTION_BY_HANDLES',
+  COLLECTION_FILTERS: 'COLLECTION_FILTERS',
+  STATIC: 'STATIC',
+  FETCH_REQUEST: 'FETCH_REQUEST',
+  GRAPHQL_REQUEST: 'GRAPHQL_REQUEST',
+} as const;
+export type DataSourceType = (typeof DATA_SOURCE_TYPES)[keyof typeof DATA_SOURCE_TYPES];
+
 export interface DataSource {
-  type: DataSourceType;
-  params?: Record<string, unknown>;
-  required?: boolean;
+  type: DataSourceType | string; // a DATA_SOURCE_TYPES value; string leaves room for custom sources
+  params?: Record<string, unknown>; // first arg to the data-layer method
+  required?: boolean; // if true, a fetch failure fails the page (else the page degrades)
+  options?: Record<string, unknown>; // second arg to the data-layer method (IOptionsRequest)
 }
-const DATA_SOURCE_TYPES = new Set<string>(['product', 'collectionByHandles', 'collections']);
+const KNOWN_SOURCE_TYPES = new Set<string>(Object.values(DATA_SOURCE_TYPES));
 
 export interface PageDoc {
   path: string; // canonical path (validated below)
@@ -81,7 +98,7 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
   const dataSources = doc.dataSources;
   if (dataSources) {
     for (const [key, src] of Object.entries(dataSources)) {
-      if (!src || !DATA_SOURCE_TYPES.has(src.type))
+      if (!src || !KNOWN_SOURCE_TYPES.has(src.type))
         problems.push(`data source '${key}' has unknown type '${src?.type}'`);
     }
   }

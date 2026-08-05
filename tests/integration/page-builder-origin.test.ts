@@ -47,7 +47,7 @@ before(async () => {
     title: 'Collection',
     dataSources: {
       main: {
-        type: 'collectionByHandles',
+        type: 'COLLECTION_BY_HANDLES',
         params: { handles: ['{{params.handle}}'], productLimit: 4 },
       },
     },

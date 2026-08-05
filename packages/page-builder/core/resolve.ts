@@ -6,6 +6,7 @@
 // change can purge exactly the pages that showed it.
 
 import type { PageDoc, DataSource } from './doc';
+import { DATA_SOURCE_TYPES } from './doc';
 import type { SectionRegistry } from '@ratio/page-builder-registry/registry';
 
 export interface ResolveContext {
@@ -77,43 +78,58 @@ export async function resolvePage(
   return { doc: { ...doc, sections }, tags: [...new Set(tags)] };
 }
 
-// Local stand-in for the CMS package: deterministic sample data so the whole render + cache + purge
-// path runs with no external dependency. Swapping in the real package is a one-file change.
+function sampleProducts(seed: string, n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `${seed}-${i + 1}`,
+    title: `Sample product ${i + 1}`,
+    href: `/products/sample-${i + 1}`,
+    image: '',
+    price: 499 + i * 100,
+  }));
+}
+
+// Local stand-in for @ratio/data-layer: deterministic sample data so the whole render+cache+purge
+// path runs with no external dependency. The REAL resolver dispatches the same DATA_SOURCE_TYPES to
+// the data-layer CommerceClient — COLLECTION_BY_HANDLES→getCollectionsByHandles, PRODUCT→getProduct,
+// COLLECTIONS→getCollections — and maps the response into the section's binding shape. Swapping the
+// stub for it is one file.
 export class StubResolver implements BindingResolver {
   async fetch(source: DataSource): Promise<ResolvedSource> {
-    if (source.type === 'collectionByHandles') {
-      const handles = (source.params?.handles as string[] | undefined) ?? [];
-      const limit = Math.max(1, Math.min(24, Number(source.params?.productLimit ?? 4)));
-      const products = Array.from({ length: limit }, (_, i) => ({
-        id: `${handles[0] ?? 'demo'}-${i + 1}`,
-        title: `Sample product ${i + 1}`,
-        href: `/products/sample-${i + 1}`,
-        image: '',
-        price: 499 + i * 100,
-      }));
-      return {
-        value: { products },
-        tags: [...handles.map((h) => `col:${h}`), ...products.map((p) => `prod:${p.id}`)],
-      };
+    const p = source.params ?? {};
+    const limit = Math.max(1, Math.min(24, Number(p.productLimit ?? p.first ?? 4)));
+    switch (source.type) {
+      case DATA_SOURCE_TYPES.COLLECTION_BY_HANDLES:
+      case DATA_SOURCE_TYPES.COLLECTION: {
+        const handles = (p.handles as string[] | undefined) ?? (p.handle ? [String(p.handle)] : []);
+        const products = sampleProducts(handles[0] ?? 'demo', limit);
+        return {
+          value: { products },
+          tags: [...handles.map((h) => `col:${h}`), ...products.map((x) => `prod:${x.id}`)],
+        };
+      }
+      case DATA_SOURCE_TYPES.PRODUCTS:
+      case DATA_SOURCE_TYPES.PRODUCTS_BY_HANDLES: {
+        const products = sampleProducts('demo', limit);
+        return { value: { products }, tags: products.map((x) => `prod:${x.id}`) };
+      }
+      case DATA_SOURCE_TYPES.PRODUCT: {
+        const handle = String(p.handle ?? 'demo');
+        return {
+          value: { title: `Sample: ${handle}`, sku: handle, amount: 999, description: 'Stub.' },
+          tags: [`prod:${handle}`],
+        };
+      }
+      case DATA_SOURCE_TYPES.COLLECTIONS: {
+        const collections = Array.from({ length: Math.min(limit, 6) }, (_, i) => ({
+          handle: `collection-${i + 1}`,
+          title: `Collection ${i + 1}`,
+        }));
+        return { value: { collections }, tags: ['col:*'] };
+      }
+      case DATA_SOURCE_TYPES.STATIC:
+        return { value: p, tags: [] }; // inline config, no fetch
+      default:
+        return { value: {}, tags: [] };
     }
-    if (source.type === 'product') {
-      const handle = String(source.params?.handle ?? 'demo');
-      return {
-        value: {
-          title: `Sample: ${handle}`,
-          sku: handle,
-          amount: 999,
-          description: 'Stub product.',
-        },
-        tags: [`prod:${handle}`],
-      };
-    }
-    // collections
-    const first = Math.max(1, Math.min(50, Number(source.params?.first ?? 10)));
-    const collections = Array.from({ length: Math.min(first, 6) }, (_, i) => ({
-      handle: `collection-${i + 1}`,
-      title: `Collection ${i + 1}`,
-    }));
-    return { value: { collections }, tags: ['col:*'] };
   }
 }

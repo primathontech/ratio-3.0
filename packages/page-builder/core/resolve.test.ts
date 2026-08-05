@@ -32,7 +32,7 @@ test('resolvePage injects collection products into the productGrid binding + emi
     title: 'Collection',
     dataSources: {
       main: {
-        type: 'collectionByHandles',
+        type: 'COLLECTION_BY_HANDLES',
         params: { handles: ['{{params.handle}}'], productLimit: 3 },
       },
     },
@@ -54,7 +54,7 @@ test('the saved doc is not mutated — injection is render-only', async () => {
   const doc: PageDoc = {
     path: '/',
     title: 'x',
-    dataSources: { main: { type: 'collectionByHandles', params: { handles: ['a'] } } },
+    dataSources: { main: { type: 'COLLECTION_BY_HANDLES', params: { handles: ['a'] } } },
     sections: [{ id: 'g', type: 'productGrid', dataSourceKey: 'main', data: { grid: {} } }],
   };
   await resolvePage(doc, registry, resolver, { tenantId: 't' });
