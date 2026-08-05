@@ -24,12 +24,14 @@ export async function onboardStore({
   host,
   color = '#333333',
   ownerUserId,
+  merchantId,
 }: {
   id?: string;
   name?: string;
   host?: string;
   color?: string;
   ownerUserId?: string;
+  merchantId?: string; // gokwik merchant id → tenants.commerce (data-layer). Synced at onboarding.
 }): Promise<{ hostReclaimedFrom: string | null }> {
   if (!id || !name || !host) {
     throw new Error('onboardStore requires id, name and host');
@@ -68,8 +70,11 @@ export async function onboardStore({
     const hostReclaimedFrom =
       claimed.rowCount && claimed.rows[0].tenant_id !== id ? claimed.rows[0].tenant_id : null;
     await client.query(
-      'INSERT INTO tenants (id, name, theme) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, theme=EXCLUDED.theme',
-      [id, name, JSON.stringify({ color })]
+      `INSERT INTO tenants (id, name, theme, commerce) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, theme=EXCLUDED.theme,
+         -- keep existing commerce on a re-onboard that doesn't carry a merchantId
+         commerce=COALESCE(EXCLUDED.commerce, tenants.commerce)`,
+      [id, name, JSON.stringify({ color }), merchantId ? JSON.stringify({ merchantId }) : null]
     );
     // Guard the upsert itself (not just the SELECT above): under READ COMMITTED two
     // concurrent onboards for the same host both pass the pre-check, so the reassignment

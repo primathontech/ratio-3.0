@@ -50,3 +50,14 @@ test('onboardStore is idempotent (re-onboard updates, no dup error)', async () =
 test('onboardStore rejects incomplete input (no half-provisioned store)', async () => {
   await assert.rejects(() => onboardStore({ id: ID, name: 'x' })); // missing host
 });
+
+test('onboardStore persists merchantId to tenants.commerce (data-layer)', async () => {
+  await onboardStore({ id: ID, name: 'Onb', host: HOST, merchantId: 'gk_persist' });
+  assert.deepStrictEqual((await forTenant(ID).getTenant())!.commerce, { merchantId: 'gk_persist' });
+});
+
+test('re-onboard without merchantId preserves existing commerce (COALESCE)', async () => {
+  await onboardStore({ id: ID, name: 'Onb', host: HOST, merchantId: 'gk_keep' });
+  await onboardStore({ id: ID, name: 'Onb', host: HOST }); // no merchantId
+  assert.deepStrictEqual((await forTenant(ID).getTenant())!.commerce, { merchantId: 'gk_keep' });
+});

@@ -88,9 +88,12 @@ test('POST /stores creates the store and makes the caller its owner', async () =
     name: 'CP',
     host: 'cp.localhost',
     color: '#123456',
+    merchantId: 'gk_cp',
   });
   assert.strictEqual(r.status, 201);
-  assert.strictEqual((await forTenant(ID).getTenant())!.name, 'CP');
+  const tenant = (await forTenant(ID).getTenant())!;
+  assert.strictEqual(tenant.name, 'CP');
+  assert.deepStrictEqual(tenant.commerce, { merchantId: 'gk_cp' }); // gokwik id persisted at create
   assert.strictEqual((await getMembership(ALICE, ID))!.role, 'owner');
 });
 
