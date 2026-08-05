@@ -422,17 +422,16 @@ function CreateStoreDialog({
               required
             />
           </Field>
-          <Field label="Merchant ID (gokwik)">
+          <Field
+            label="Merchant ID (gokwik)"
+            info="Connects live products from the commerce backend. Optional — leave blank for a store with no catalogue yet."
+          >
             <input
               className="input mono"
               placeholder="196jdfqy1aot"
               value={f.merchantId}
               onChange={set('merchantId')}
             />
-            <span className="muted" style={{ fontSize: 11 }}>
-              connects live products from the commerce backend. Optional — leave blank for a store
-              with no catalogue yet.
-            </span>
           </Field>
           <Field label="Accent colour">
             <input
