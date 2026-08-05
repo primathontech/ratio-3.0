@@ -146,6 +146,18 @@ export async function onboardStore({
       [host, tenantId, isPlatformHost(host), isPlatformHost(host) ? tenantId : null]
     );
     if (!dom.rowCount) throw new ConflictError('that domain is already connected to another store');
+    // Local dev only (RATIO_LOCAL): also expose the store at <label>.localhost so it has a
+    // browser-resolvable host on this machine. A store's real domain (*.ratiodev.in / custom)
+    // doesn't resolve to localhost, and a ?store= query override is lost on navigation — but
+    // *.localhost always resolves to 127.0.0.1, and host routing survives navigation. Best-effort
+    // (DO NOTHING on a taken alias); never runs on a deployed plane (RATIO_LOCAL unset there).
+    if (process.env.RATIO_LOCAL === 'true' && !host.endsWith('.localhost')) {
+      await client.query(
+        `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,true)
+         ON CONFLICT (host) DO NOTHING`,
+        [`${host.split('.')[0]}.localhost`, tenantId]
+      );
+    }
     await client.query(
       `INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES ($1,'/','home',$2)
        ON CONFLICT (tenant_id, path) DO UPDATE SET page_config=EXCLUDED.page_config`,

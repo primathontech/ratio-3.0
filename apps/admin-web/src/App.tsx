@@ -342,6 +342,9 @@ function hostsOf(store: Store): string[] {
 
 function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
   const hosts = hostsOf(store);
+  // *.localhost is the dev alias (added at onboard when RATIO_LOCAL); the real domains are the rest.
+  const prodHosts = hosts.filter((h) => !h.endsWith('.localhost'));
+  const localHost = hosts.find((h) => h.endsWith('.localhost'));
   return (
     <div className="card store-card">
       <div className="top">
@@ -351,9 +354,9 @@ function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void;
           <button type="button" className="name store-open" onClick={onOpen}>
             {store.name}
           </button>
-          {hosts.length > 0 ? (
+          {prodHosts.length > 0 ? (
             <div className="hosts">
-              {hosts.map((h) => (
+              {prodHosts.map((h) => (
                 <a key={h} className="host" href={`https://${h}`} target="_blank" rel="noreferrer">
                   {h} <Icon.external size={11} />
                   <NewTabHint />
@@ -363,17 +366,17 @@ function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void;
           ) : (
             <span className="host muted">no domain</span>
           )}
-          {/* Dev-only (RATIO_LOCAL, from /me): the real domain doesn't resolve locally, so link to
-              the storefront through the edge's ?store=<id> override on localhost. */}
-          {local && (
+          {/* Dev-only (RATIO_LOCAL, from /me): link to the storefront at its *.localhost host, which
+              resolves to 127.0.0.1 and — being a host, not a query param — survives navigation. */}
+          {local && localHost && (
             <div className="hosts">
               <a
                 className="host"
-                href={`http://localhost:8080/?store=${encodeURIComponent(store.id)}`}
+                href={`http://${localHost}:8080/`}
                 target="_blank"
                 rel="noreferrer"
               >
-                view locally <Icon.external size={11} />
+                {localHost}:8080 <Icon.external size={11} />
                 <NewTabHint />
               </a>
             </div>
