@@ -94,6 +94,7 @@ a{color:inherit;text-decoration:none}
 .card .ph img{width:100%;height:100%;object-fit:cover}
 .card .body{padding:12px 14px;font-size:.95rem}
 .card .price{color:var(--accent);font-weight:700;margin-top:4px}
+.price .was{color:var(--muted);font-weight:500;text-decoration:line-through;font-size:.82em;margin-left:8px}
 .slideshow{display:flex;gap:16px;overflow-x:auto;padding:6px 0 26px;scroll-snap-type:x mandatory}
 .slide{flex:0 0 min(82%,540px);scroll-snap-align:start;background:var(--surface);border-radius:var(--radius);padding:48px 30px;min-height:210px;display:flex;align-items:flex-end}
 .slide h2{font-size:1.6rem;margin:0;letter-spacing:-.01em}

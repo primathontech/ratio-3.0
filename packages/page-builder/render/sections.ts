@@ -48,7 +48,7 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     {% assign img = p.image_url | default: p.images.first.url %}
     <a class="card" href="/products/{{ p.handle | escape }}">
       <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
-      <div class="body"><div>{{ p.title | escape }}</div><div class="price">{{ p.price | money }}</div></div>
+      <div class="body"><div>{{ p.title | escape }}</div><div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div></div>
     </a>
     {% endfor %}
   </div>
@@ -65,7 +65,7 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   <div class="ph">{% if product.image_url %}<img src="{{ product.image_url | escape }}" alt="{{ product.title | escape }}">{% endif %}</div>
   <div>
     <h1>{{ product.title | escape }}</h1>
-    <div class="price">{{ product.price | money }}</div>
+    <div class="price">{{ product.price | money }}{% if product.compare_at_price and product.compare_at_price > product.price %} <s class="was">{{ product.compare_at_price | money }}</s>{% endif %}</div>
     {% if product.description %}<p>{{ product.description | escape }}</p>{% endif %}
     <div data-island="add-to-cart" data-sku="{{ product.handle | escape }}"></div>
   </div>

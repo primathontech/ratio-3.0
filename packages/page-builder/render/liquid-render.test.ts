@@ -39,6 +39,25 @@ test('engine: productGrid renders prices via money filter', async () => {
   assert.match(html, /Shoe/);
 });
 
+test('engine: productGrid strikes the compare-at price only when it beats the price', async () => {
+  const render1 = (products: unknown[]) =>
+    render(FIRST_PARTY_SECTIONS.productGrid.template, { grid: { products } }, trusted);
+
+  // on sale: compare_at_price (paise) > price → shown, struck
+  const sale = await render1([
+    { title: 'A', handle: 'a', price: 49900, compare_at_price: 79900, image_url: '' },
+  ]);
+  assert.match(sale, /<s class="was">₹799\.00<\/s>/, 'compare-at shown struck through');
+  assert.match(sale, /₹499\.00/, 'sale price still shown');
+
+  // not on sale: compare_at_price <= price (or absent) → no strike
+  const full = await render1([
+    { title: 'B', handle: 'b', price: 49900, compare_at_price: 49900, image_url: '' },
+    { title: 'C', handle: 'c', price: 29900, image_url: '' },
+  ]);
+  assert.ok(!full.includes('class="was"'), 'no strike when compare-at does not beat price/absent');
+});
+
 // ─── Sandbox: hostile templates are contained ────────────────────────────────
 test('sandbox: no JS constructor/prototype escape', async () => {
   const html = await render('{{ x.constructor }}{{ x.__proto__ }}', { x: {} }, untrusted);
