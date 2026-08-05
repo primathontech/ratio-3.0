@@ -7,6 +7,7 @@ import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
 import { composePage } from '@ratio/page-builder-core/compose';
 import { resolvePage, StubResolver } from '@ratio/page-builder-core/resolve';
+import { commerceResolverFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import { canonicalPath } from '@ratio/page-builder-core/path';
 import { pageTag, tenantTag } from '@ratio/page-builder-core/tags';
@@ -43,9 +44,10 @@ let renders = 0;
 // and is slated for removal once every store is on the page builder.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
-// Data-binding resolver (the renderer's 2nd input). StubResolver returns deterministic sample data;
-// swap for the CMS-npm-package resolver when it lands (one line).
-const resolver = new StubResolver();
+// Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
+// resolver when COMMERCE_* env is configured; otherwise the StubResolver (deterministic samples) so
+// local dev renders without a backend.
+const resolver = commerceResolverFromEnv() ?? new StubResolver();
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;
