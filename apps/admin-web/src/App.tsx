@@ -380,7 +380,7 @@ function CreateStoreDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [f, setF] = useState({ id: '', name: '', host: '', color: '#4f46e5' });
+  const [f, setF] = useState({ id: '', name: '', host: '', color: '#4f46e5', merchantId: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
@@ -391,7 +391,7 @@ function CreateStoreDialog({
     setBusy(true);
     setErr(null);
     try {
-      await api.createStore(f);
+      await api.createStore({ ...f, merchantId: f.merchantId.trim() || undefined });
       onCreated();
     } catch (e) {
       setErr((e as Error).message);
@@ -408,11 +408,14 @@ function CreateStoreDialog({
             <Field label="Store ID">
               <input
                 className="input mono"
-                placeholder="t_acme"
+                placeholder="ratio-production"
                 value={f.id}
                 onChange={set('id')}
                 required
               />
+              <span className="muted" style={{ fontSize: 11 }}>
+                our id — start with a lowercase letter. Not the merchant id.
+              </span>
             </Field>
             <Field label="Name">
               <input
@@ -432,6 +435,18 @@ function CreateStoreDialog({
               onChange={set('host')}
               required
             />
+          </Field>
+          <Field label="Merchant ID (gokwik)">
+            <input
+              className="input mono"
+              placeholder="196jdfqy1aot"
+              value={f.merchantId}
+              onChange={set('merchantId')}
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              connects live products from the commerce backend. Optional — leave blank for a store
+              with no catalogue yet.
+            </span>
           </Field>
           <Field label="Accent colour">
             <input
