@@ -13,7 +13,7 @@ function mockClient(collectionsResponse: unknown): ICommerceClient {
   } as unknown as ICommerceClient;
 }
 
-test('ShopkitResolver maps COLLECTION_BY_HANDLES → grid products (paise→rupees) + tags', async () => {
+test('ShopkitResolver passes COLLECTION_BY_HANDLES products through UNMODIFIED + tags', async () => {
   const resp = {
     success: true,
     message: 'ok',
@@ -48,20 +48,17 @@ test('ShopkitResolver maps COLLECTION_BY_HANDLES → grid products (paise→rupe
   );
   const products = (value as { products: Record<string, unknown>[] }).products;
   assert.strictEqual(products.length, 2);
-  assert.deepStrictEqual(products[0], {
-    id: 'p1',
-    title: 'Shoe A',
-    href: '/products/shoe-a',
-    image: 'https://img/a.jpg',
-    price: 499, // 49900 paise → 499 rupees (from variants[0])
-  });
-  assert.strictEqual(products[1].price, 1299); // 129900 paise → 1299 (product.price fallback)
-  assert.strictEqual(products[1].image, 'https://img/b.jpg'); // images[is_main].url
+  // products pass through UNMODIFIED (canonical): raw paise, backend field names. The display
+  // transform (paise→rupees, image pick, href) happens at RENDER, never here.
+  assert.strictEqual(products[0].title, 'Shoe A');
+  assert.strictEqual(products[0].handle, 'shoe-a'); // not reshaped to href
+  assert.strictEqual(products[0].image_url, 'https://img/a.jpg'); // not reshaped to image
+  assert.strictEqual(products[1].price, 129900); // raw paise, NOT converted
   assert.ok(tags.includes('col:summer'), 'collection tag');
   assert.ok(tags.includes('prod:p1'), 'per-product tags for purge');
 });
 
-test('ShopkitResolver maps a PRODUCT response into product + price bindings (paise→rupees)', async () => {
+test('ShopkitResolver passes the PRODUCT response through as the canonical product', async () => {
   const client = {
     getProduct: async () => ({
       success: true,
@@ -80,10 +77,10 @@ test('ShopkitResolver maps a PRODUCT response into product + price bindings (pai
     { type: DATA_SOURCE_TYPES.PRODUCT, params: { handle: 'shoe-a' } },
     { tenantId: 't' }
   );
-  const v = value as { product: { title: string; sku: string }; price: { amount: number } };
-  assert.strictEqual(v.product.title, 'Shoe A');
-  assert.strictEqual(v.product.sku, 'shoe-a');
-  assert.strictEqual(v.price.amount, 499); // 49900 paise → 499 rupees
+  const v = value as Record<string, unknown>;
+  assert.strictEqual(v.title, 'Shoe A'); // canonical product passed through, unmodified
+  assert.strictEqual(v.handle, 'shoe-a');
+  assert.deepStrictEqual(v.variants, [{ price: { amount: 49900 } }]); // raw paise, not converted
   assert.ok(tags.includes('prod:p1'));
 });
 

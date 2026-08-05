@@ -10,44 +10,21 @@ import type { BindingResolver, ResolveContext, ResolvedSource } from './resolve'
 import type { DataSource } from './doc';
 import { DATA_SOURCE_TYPES } from './doc';
 
-interface ApiProduct {
-  id?: string | number;
-  handle?: string;
-  title?: string;
-  description?: string;
-  price?: unknown; // paise
-  image_url?: string;
-  images?: { url: string; is_main?: boolean }[];
-  variants?: { price?: { amount?: unknown } }[];
-}
+type RawProduct = Record<string, unknown> & { id?: string | number };
 
-const paiseToRupees = (paise: unknown): number => {
-  const n = Number(paise);
-  return Number.isFinite(n) ? Math.round(n) / 100 : 0;
-};
-
-// One backend product → the shape the productGrid / product templates read.
-function toCard(p: ApiProduct): Record<string, unknown> {
-  return {
-    id: p.id,
-    title: p.title,
-    href: p.handle ? `/products/${p.handle}` : '#',
-    image: p.image_url || p.images?.find((i) => i.is_main)?.url || p.images?.[0]?.url || '',
-    price: paiseToRupees(p.variants?.[0]?.price?.amount ?? p.price),
-  };
-}
-
-// COLLECTION_BY_HANDLES response = [{ handle, data:{products} | products }] — flatten the products.
-function collectionProducts(data: unknown): ApiProduct[] {
+// COLLECTION_BY_HANDLES response = [{ handle, data:{products} | products }] — flatten the products
+// out of the response ENVELOPE. The product objects themselves are passed through UNMODIFIED; any
+// shaping/formatting (paise→rupees, image pick, href) happens at render (consumer-driven).
+function collectionProducts(data: unknown): RawProduct[] {
   const entries = Array.isArray(data) ? data : [];
   return entries.flatMap(
-    (e: { data?: { products?: ApiProduct[] }; products?: ApiProduct[] }) =>
+    (e: { data?: { products?: RawProduct[] }; products?: RawProduct[] }) =>
       e?.data?.products ?? e?.products ?? []
   );
 }
-function productList(data: unknown): ApiProduct[] {
-  if (Array.isArray(data)) return data as ApiProduct[];
-  return ((data as { products?: ApiProduct[] })?.products ?? []) as ApiProduct[];
+function productList(data: unknown): RawProduct[] {
+  if (Array.isArray(data)) return data as RawProduct[];
+  return ((data as { products?: RawProduct[] })?.products ?? []) as RawProduct[];
 }
 
 export class ShopkitResolver implements BindingResolver {
@@ -66,7 +43,7 @@ export class ShopkitResolver implements BindingResolver {
           source.type === DATA_SOURCE_TYPES.COLLECTION
             ? await client.getCollection(params as never, options)
             : await client.getCollectionsByHandles(params as never, options);
-        const products = collectionProducts(res.data).map(toCard);
+        const products = collectionProducts(res.data); // canonical, unmodified
         const handles =
           (params.handles as string[] | undefined) ??
           (params.handle ? [String(params.handle)] : []);
@@ -81,25 +58,13 @@ export class ShopkitResolver implements BindingResolver {
           source.type === DATA_SOURCE_TYPES.PRODUCTS_BY_HANDLES
             ? await client.getProductsByHandles(params as never, options)
             : await client.getProducts(params as never, options);
-        const products = productList(res.data).map(toCard);
+        const products = productList(res.data);
         return { value: { products }, tags: products.map((p) => `prod:${p.id}`) };
       }
       case DATA_SOURCE_TYPES.PRODUCT: {
         const res: IResponse = await client.getProduct(params as never, options);
-        const p = (res.data ?? {}) as ApiProduct;
-        const price = paiseToRupees(p.variants?.[0]?.price?.amount ?? p.price);
-        // binding-keyed: fills both the product and price bindings of the PDP section
-        return {
-          value: {
-            product: {
-              title: p.title,
-              sku: p.handle ?? String(p.id ?? ''),
-              description: p.description,
-            },
-            price: { amount: price },
-          },
-          tags: [`prod:${p.id ?? params.handle}`],
-        };
+        const product = (res.data ?? {}) as RawProduct; // canonical product, passed through
+        return { value: product, tags: [`prod:${product.id ?? params.handle}`] };
       }
       default:
         return { value: {}, tags: [] };
