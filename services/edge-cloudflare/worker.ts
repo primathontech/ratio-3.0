@@ -1,13 +1,10 @@
 import { Hono } from 'hono';
 import { neon } from '@neondatabase/serverless';
-import { normalizePage } from '@ratio/content-model';
-import { renderPage, esc } from '@ratio/theme';
 import {
   originTarget,
   proxyInit,
   publicHeaders,
   storeOverrideAllowed,
-  STOREFRONT_CSP,
   fetchViaOrigin,
   createCircuitBreaker,
   lookupTenant,
@@ -24,33 +21,16 @@ import {
 // This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core
 // and holds the Hono app. The Akamai adapter (apps/edge-akamai) reuses the same edge-core.
 
-// Cloudflare Worker = the EDGE. It resolves host->tenant and:
-//  - path B (ORIGIN_URL set): injects the trusted header + proxies to the private container origin.
-//  - path A (no ORIGIN_URL): renders directly from Neon (staging fallback).
+// Cloudflare Worker = the EDGE. It resolves host->tenant, serves from cache, and proxies every
+// miss to the private container ORIGIN — the single renderer (router + page builder). The origin's
+// response (HTML + cache-control + surrogate tags) is cached at the edge; internal x-* headers are
+// stripped before the client sees it (M-5). ORIGIN_URL is required — the edge never renders itself.
 interface Env {
   DATABASE_URL: string;
   ORIGIN_URL?: string;
   EDGE_SECRET?: string;
   TENANTS?: TenantKV;
   METRICS?: AnalyticsEngineDataset;
-}
-interface TenantRow {
-  id: string;
-  name: string;
-  status: string;
-  theme: { color?: string } | null;
-}
-interface RouteRow {
-  page_type: string;
-  page_config: { title?: string; body?: string; price?: string };
-}
-
-const CACHEABLE = new Set(['home', 'product', 'page', 'landing', 'blog']);
-
-function setStorefrontSecurity(c: { header: (k: string, v: string) => void }): void {
-  c.header('content-security-policy', STOREFRONT_CSP);
-  c.header('x-content-type-options', 'nosniff');
-  c.header('referrer-policy', 'strict-origin-when-cross-origin');
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { tenantId?: string } }>();
@@ -110,45 +90,22 @@ app.all('*', async (c) => {
   if (!tenantId) return c.html('<h1>Store not found</h1><p>No store for this domain.</p>', 404);
   c.set('tenantId', tenantId); // for the D-R8 access log
 
-  // path B: inject the trusted header + proxy to the private container origin. EDGE_SECRET has no
-  // default — if unset the origin refuses (fail closed). Internal x-* headers are stripped (M-5).
-  if (c.env.ORIGIN_URL) {
-    const cache = (globalThis as { caches?: { default?: EdgeCache } }).caches?.default;
-    const res = await fetchViaOrigin(
-      c.req.raw,
-      originTarget(c.env.ORIGIN_URL, path, url.search),
-      proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? ''),
-      cache,
-      undefined,
-      undefined,
-      originBreaker
-    );
-    return new Response(res.body, { status: res.status, headers: publicHeaders(res.headers) });
-  }
-
-  // path A: render directly from Neon (staging fallback).
-  const sql = neon(c.env.DATABASE_URL);
-  const t =
-    (await sql`SELECT id, name, status, theme FROM tenants WHERE id = ${tenantId}`) as TenantRow[];
-  const tenant = t[0];
-  // Unknown or suspended (OFCE-410) → not found; don't reveal a suspended store exists.
-  if (!tenant || tenant.status !== 'active') return c.html('<h1>Store not found</h1>', 404);
-  const r =
-    (await sql`SELECT page_type, page_config FROM routes WHERE tenant_id = ${tenantId} AND path = ${path}`) as RouteRow[];
-  const route = r[0];
-  if (!route) {
-    setStorefrontSecurity(c);
-    return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no route for ${esc(path)}</p>`, 404);
-  }
-
-  if (CACHEABLE.has(route.page_type)) {
-    // Short TTL + stale-while-revalidate (aligned with the origin path): edits surface
-    // within minutes even without a purge; the on-write purge (OFCE-411) makes it instant.
-    c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-  }
-  setStorefrontSecurity(c);
-  const page = normalizePage(route.page_config);
-  return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
+  // Always proxy to the private container origin (the single renderer). Inject the trusted tenant
+  // header + EDGE_SECRET (no default — the origin fails closed if unset). Cache the origin's
+  // response; strip internal x-* before the client sees it (M-5). No ORIGIN_URL → the edge cannot
+  // serve, so fail closed with the branded 503 rather than rendering itself.
+  if (!c.env.ORIGIN_URL) return storeUnavailable();
+  const cache = (globalThis as { caches?: { default?: EdgeCache } }).caches?.default;
+  const res = await fetchViaOrigin(
+    c.req.raw,
+    originTarget(c.env.ORIGIN_URL, path, url.search),
+    proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? ''),
+    cache,
+    undefined,
+    undefined,
+    originBreaker
+  );
+  return new Response(res.body, { status: res.status, headers: publicHeaders(res.headers) });
 });
 
 export default app;

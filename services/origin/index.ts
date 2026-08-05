@@ -2,7 +2,6 @@ import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
-import { isLocal } from '@ratio/shared/env';
 import { normalizePage } from '@ratio/content-model';
 import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
@@ -10,6 +9,7 @@ import { composePage } from '@ratio/page-builder-core/compose';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import { canonicalPath } from '@ratio/page-builder-core/path';
 import { pageTag, tenantTag } from '@ratio/page-builder-core/tags';
+import { matchRoute, type RouteMatch } from '@ratio/page-builder-core/router';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -37,14 +37,11 @@ const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
 
-// Page builder (Slice 1, flag-gated). When PAGE_BUILDER_ENABLED is on, a published PageDoc for
-// this path wins over the legacy routes table; otherwise the origin is unchanged. Always on in
-// local dev (RATIO_LOCAL) so the local loop exercises the real page-builder render path.
+// Page builder — the storefront renderer. A published PageDoc for the URL is served; the legacy
+// content-model route table (below) remains only as a fallback for URLs that have no PageDoc yet,
+// and is slated for removal once every store is on the page builder.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
-function pageBuilderEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.PAGE_BUILDER_ENABLED === 'true' || isLocal;
-}
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;
@@ -105,29 +102,42 @@ app.all('*', async (c) => {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
   }
-  // Page-builder render path (flag-gated). A published PageDoc wins over the legacy route.
-  if (pageBuilderEnabled()) {
+  // Page-builder render path — always the primary renderer. A published PageDoc wins; if the URL
+  // has none (exact or template), fall through to the legacy content-model route table below.
+  {
     const canon = canonicalPath(path);
-    const doc = await pageStore.getLive(tenantId as string, canon);
+    // Routing (ADR-013): the router labels the URL (home / page / collection / product) and picks
+    // the template. A custom doc AT this exact URL still wins (override); otherwise a shared
+    // template serves it (one Collection template for every /collections/:handle, etc.). An
+    // unrecognized path with a doc of its own still renders (pageType 'page').
+    const matched: RouteMatch | null = matchRoute(canon);
+    let doc = await pageStore.getLive(tenantId as string, canon);
+    let fromTemplate = false;
+    if (!doc && matched && matched.templateKey !== canon) {
+      doc = await pageStore.getLive(tenantId as string, matched.templateKey);
+      fromTemplate = true;
+    }
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
+      // matched.params ({ handle, ... }) will feed the data resolver ({{params.handle}}) next.
       const composed = await composePage(doc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
+      c.header('x-page-type', matched?.pageType ?? 'page');
       c.header('x-page-tier', composed.tier);
       c.header('x-render-count', String(renders));
-      // Tag with EXACTLY what publish() purges, so tag-purge (D2) invalidates this entry.
-      c.header(
-        'x-surrogate-keys',
-        `${pageTag(tenantId as string, canon)} ${tenantTag(tenantId as string)}`
-      );
+      // Tag by the CONCRETE url so /collections/summer purges independently of /winter; when a
+      // shared template rendered it, ALSO tag by the template so editing it purges every URL (D2).
+      const tags = [pageTag(tenantId as string, canon), tenantTag(tenantId as string)];
+      if (fromTemplate) tags.push(pageTag(tenantId as string, matched!.templateKey));
+      c.header('x-surrogate-keys', tags.join(' '));
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
       if (composed.cacheable)
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
       setStorefrontSecurity(c);
       return c.html(composed.html);
     }
-    // no live page-builder doc for this path → fall through to the legacy route table
+    // no page for this URL (exact or template) → fall through to the legacy route table
   }
   const route = await repo.getRoute(path);
   if (!route) {

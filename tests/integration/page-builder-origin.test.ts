@@ -1,11 +1,9 @@
 // Slice-1 walking skeleton, END TO END: save a Rich Text draft, publish it, and prove the
 // ORIGIN serves the composed HTML for that path (flag-gated), tagged with exactly what publish
 // purges. In-process via app.fetch(), real Postgres. Only the external purge service is faked.
-// Run: PAGE_BUILDER_ENABLED=true node --import tsx --test test/page-builder-origin.test.ts
-
+// The page builder is the origin's storefront renderer (no flag).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-process.env.PAGE_BUILDER_ENABLED = 'true';
 import { app } from '../../services/origin/index';
 import { pool } from '@ratio/shared/db';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
@@ -41,6 +39,20 @@ before(async () => {
     ],
   });
   await b.publish(T, '/pb-home');
+
+  // dynamic route templates (keyed by pattern) + a self-keyed static page
+  for (const [key, text] of [
+    ['/collections/:handle', 'Collection page'],
+    ['/products/:handle', 'Product page'],
+    ['/pages/about-us', 'About us page'],
+  ] as const) {
+    await b.saveDraft(T, {
+      path: key,
+      title: text,
+      sections: [{ id: 'h', type: 'heading', data: { heading: { text } } }],
+    });
+    await b.publish(T, key);
+  }
 });
 
 after(async () => {
@@ -71,4 +83,37 @@ test('unpublished path falls through to the legacy route table (404 here)', asyn
   const res = await call('/pb-missing', edge({ 'x-ratio-tenant': T }));
   assert.equal(res.status, 404);
   assert.equal(res.headers.get('x-handler'), null, 'page-builder did not handle it');
+});
+
+test('routing: a collection URL renders the one collection template + route metadata', async () => {
+  const res = await call('/collections/summer', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-handler'), 'page-builder');
+  assert.equal(res.headers.get('x-page-type'), 'collection');
+  const keys = res.headers.get('x-surrogate-keys') || '';
+  assert.ok(keys.includes(pageTag(T, '/collections/summer')), 'tagged by the concrete URL');
+  assert.ok(
+    keys.includes(pageTag(T, '/collections/:handle')),
+    'tagged by the template (purge-all)'
+  );
+  assert.match(await res.text(), /Collection page/);
+});
+
+test('routing: flat + nested product URLs both render the one product template', async () => {
+  for (const url of ['/products/air-max-90', '/collections/summer/products/air-max-90']) {
+    const res = await call(url, edge({ 'x-ratio-tenant': T }));
+    assert.equal(res.status, 200, url);
+    assert.equal(res.headers.get('x-page-type'), 'product', url);
+    assert.match(await res.text(), /Product page/, url);
+  }
+});
+
+test('routing: /pages/:handle is a self-keyed static page (its own doc, page type, no template tag)', async () => {
+  const res = await call('/pages/about-us', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-handler'), 'page-builder');
+  assert.equal(res.headers.get('x-page-type'), 'page');
+  const keys = res.headers.get('x-surrogate-keys') || '';
+  assert.ok(keys.includes(pageTag(T, '/pages/about-us')), 'tagged by its own path');
+  assert.match(await res.text(), /About us page/);
 });
