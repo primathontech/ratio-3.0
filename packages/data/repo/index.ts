@@ -4,11 +4,21 @@ export interface TenantCommerce {
   merchantId: string;
   storeId?: string; // defaults to merchantId
 }
+// Merchant storefront theme — global style knobs (see storefront.ts ThemeTokens). All optional,
+// all off a fixed scale except the free-form brand colour.
+export interface TenantTheme {
+  color?: string;
+  bodyFont?: string;
+  headingFont?: string;
+  baseSize?: string;
+  radius?: string;
+  container?: string;
+}
 export interface Tenant {
   id: string;
   name: string;
   status: string;
-  theme: { color?: string };
+  theme: TenantTheme;
   commerce?: TenantCommerce | null; // per-merchant data-layer config (null until connected)
 }
 export interface Route {
@@ -42,6 +52,12 @@ export function forTenant(tenantId: string) {
         [tenantId]
       );
       return rows[0] || null;
+    },
+    async setTheme(theme: TenantTheme): Promise<void> {
+      await pool.query('UPDATE tenants SET theme = $2 WHERE id = $1', [
+        tenantId,
+        JSON.stringify(theme),
+      ]);
     },
     async getRoute(path: string): Promise<Route | null> {
       const { rows } = await pool.query<Route>(

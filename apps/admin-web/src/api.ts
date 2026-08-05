@@ -10,6 +10,14 @@ export interface Store {
   host: string | null;
   hosts: string[];
 }
+export interface StoreTheme {
+  color?: string;
+  bodyFont?: string;
+  headingFont?: string;
+  baseSize?: string;
+  radius?: string;
+  container?: string;
+}
 export interface PageSummary {
   path: string;
   page_type: string;
@@ -220,6 +228,10 @@ export function createApi(
       merchantId?: string;
     }) => req<{ id: string; url: string }>('POST', '/stores', s),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
+    getTheme: (id: string) =>
+      req<{ theme: StoreTheme }>('GET', `/stores/${id}/theme`).then((d) => d.theme ?? {}),
+    saveTheme: (id: string, theme: StoreTheme) =>
+      req<{ ok: boolean; theme: StoreTheme }>('PUT', `/stores/${id}/theme`, theme),
     listPages: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>
         pickArray<PageSummary>(d, 'pages')

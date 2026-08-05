@@ -430,18 +430,42 @@ test('theme: composed page ships the storefront stylesheet + a content wrapper',
   assert.match(page.html, /name="viewport"/, 'responsive viewport meta present');
 });
 
-test('theme: a valid hex accent is applied; anything else is dropped (no CSS injection)', async () => {
+test('theme: a valid hex brand colour is applied; anything else is dropped (no CSS injection)', async () => {
   const reg = defaultRegistry();
   const doc = validatePageDoc(
     { path: '/', sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } }] },
     reg
   );
-  const ok = await composePage(doc, reg, { accent: '#e11d48' });
-  assert.match(ok.html, /--accent:#e11d48/, 'hex accent overrides the token');
-  const bad = await composePage(doc, reg, { accent: 'red;}body{display:none' });
+  const ok = await composePage(doc, reg, { color: '#e11d48' });
+  assert.match(ok.html, /--accent:#e11d48/, 'hex brand colour overrides the token');
+  const bad = await composePage(doc, reg, { color: 'red;}body{display:none' });
   assert.ok(
     !bad.html.includes('display:none'),
-    'a malicious accent value is dropped, never injected'
+    'a malicious brand-colour value is dropped, never injected'
   );
-  assert.ok(!/--accent:red/.test(bad.html), 'a non-hex accent is ignored');
+  assert.ok(!/--accent:red/.test(bad.html), 'a non-hex brand colour is ignored');
+});
+
+test('theme: scale knobs map to tokens; off-scale values are ignored; ink auto-contrasts', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc(
+    { path: '/', sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } }] },
+    reg
+  );
+  const dark = await composePage(doc, reg, {
+    color: '#111111',
+    bodyFont: 'serif',
+    baseSize: 'l',
+    radius: 'square',
+    container: 'wide',
+  });
+  assert.match(dark.html, /--accent-ink:#ffffff/, 'dark brand → white ink');
+  assert.match(dark.html, /--font:Georgia/, 'serif body font stack applied');
+  assert.match(dark.html, /--base:18px/, 'large base size applied');
+  assert.match(dark.html, /--radius:0px/, 'square radius applied');
+  assert.match(dark.html, /--maxw:1200px/, 'wide container applied');
+
+  const light = await composePage(doc, reg, { color: '#fef08a', bodyFont: 'comic-evil' });
+  assert.match(light.html, /--accent-ink:#111827/, 'light brand → dark ink');
+  assert.ok(!light.html.includes('comic-evil'), 'an off-scale font key is ignored');
 });

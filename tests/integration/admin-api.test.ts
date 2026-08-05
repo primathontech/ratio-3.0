@@ -113,6 +113,34 @@ test('GET /stores/:id/collections is membership-gated; empty when no backend con
   assert.deepStrictEqual(await r.json(), { collections: [] });
 });
 
+test('PUT /stores/:id/theme validates the scales, persists, and is membership-gated', async () => {
+  assert.strictEqual((await call('PUT', `/stores/${ID}/theme`, bob, {})).status, 403);
+
+  // off-scale knob is rejected at the boundary (not silently dropped)
+  const badFont = await call('PUT', `/stores/${ID}/theme`, alice, { bodyFont: 'comic-evil' });
+  assert.strictEqual(badFont.status, 400);
+  const badColor = await call('PUT', `/stores/${ID}/theme`, alice, { color: 'red;}x' });
+  assert.strictEqual(badColor.status, 400);
+
+  const ok = await call('PUT', `/stores/${ID}/theme`, alice, {
+    color: '#e11d48',
+    bodyFont: 'serif',
+    baseSize: 'l',
+    radius: 'rounded',
+    container: 'wide',
+  });
+  assert.strictEqual(ok.status, 200);
+  const persisted = (await forTenant(ID).getTenant())!.theme;
+  assert.strictEqual(persisted.color, '#e11d48');
+  assert.strictEqual(persisted.bodyFont, 'serif');
+  assert.strictEqual(persisted.container, 'wide');
+
+  const { theme } = (await (await call('GET', `/stores/${ID}/theme`, alice)).json()) as {
+    theme: Record<string, string>;
+  };
+  assert.strictEqual(theme.radius, 'rounded');
+});
+
 test('GET /stores lists only the caller’s own stores', async () => {
   const mine = await (await call('GET', '/stores', alice)).json();
   assert.ok((mine as { stores: { id: string }[] }).stores.some((s) => s.id === ID));
