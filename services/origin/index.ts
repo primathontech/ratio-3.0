@@ -10,6 +10,7 @@ import { composePage } from '@ratio/page-builder-core/compose';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import { canonicalPath } from '@ratio/page-builder-core/path';
 import { pageTag, tenantTag } from '@ratio/page-builder-core/tags';
+import { matchRoute, type RouteMatch } from '@ratio/page-builder-core/router';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -108,26 +109,35 @@ app.all('*', async (c) => {
   // Page-builder render path (flag-gated). A published PageDoc wins over the legacy route.
   if (pageBuilderEnabled()) {
     const canon = canonicalPath(path);
-    const doc = await pageStore.getLive(tenantId as string, canon);
+    // Routing (ADR-013): an EXACT stored page wins (home '/', custom pages); otherwise a dynamic
+    // route template serves the URL (one Collection template for every /collections/:handle, etc.).
+    let doc = await pageStore.getLive(tenantId as string, canon);
+    let matched: RouteMatch | null = null;
+    if (!doc) {
+      matched = matchRoute(canon);
+      if (matched) doc = await pageStore.getLive(tenantId as string, matched.templateKey);
+    }
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
+      // matched.params ({ handle, ... }) will feed the data resolver ({{params.handle}}) next.
       const composed = await composePage(doc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
+      c.header('x-page-type', matched?.pageType ?? (canon === '/' ? 'home' : 'page'));
       c.header('x-page-tier', composed.tier);
       c.header('x-render-count', String(renders));
-      // Tag with EXACTLY what publish() purges, so tag-purge (D2) invalidates this entry.
-      c.header(
-        'x-surrogate-keys',
-        `${pageTag(tenantId as string, canon)} ${tenantTag(tenantId as string)}`
-      );
+      // Tag by the CONCRETE url so /collections/summer purges independently of /winter; ALSO tag by
+      // the template key so editing the shared template purges every URL it renders (D2).
+      const tags = [pageTag(tenantId as string, canon), tenantTag(tenantId as string)];
+      if (matched) tags.push(pageTag(tenantId as string, matched.templateKey));
+      c.header('x-surrogate-keys', tags.join(' '));
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
       if (composed.cacheable)
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
       setStorefrontSecurity(c);
       return c.html(composed.html);
     }
-    // no live page-builder doc for this path → fall through to the legacy route table
+    // no page for this URL (exact or template) → fall through to the legacy route table
   }
   const route = await repo.getRoute(path);
   if (!route) {

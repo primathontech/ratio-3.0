@@ -41,6 +41,19 @@ before(async () => {
     ],
   });
   await b.publish(T, '/pb-home');
+
+  // dynamic route templates (one per type) — keyed by their pattern
+  for (const [key, text] of [
+    ['/collections/:handle', 'Collection page'],
+    ['/products/:handle', 'Product page'],
+  ] as const) {
+    await b.saveDraft(T, {
+      path: key,
+      title: text,
+      sections: [{ id: 'h', type: 'heading', data: { heading: { text } } }],
+    });
+    await b.publish(T, key);
+  }
 });
 
 after(async () => {
@@ -71,4 +84,27 @@ test('unpublished path falls through to the legacy route table (404 here)', asyn
   const res = await call('/pb-missing', edge({ 'x-ratio-tenant': T }));
   assert.equal(res.status, 404);
   assert.equal(res.headers.get('x-handler'), null, 'page-builder did not handle it');
+});
+
+test('routing: a collection URL renders the one collection template + route metadata', async () => {
+  const res = await call('/collections/summer', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-handler'), 'page-builder');
+  assert.equal(res.headers.get('x-page-type'), 'collection');
+  const keys = res.headers.get('x-surrogate-keys') || '';
+  assert.ok(keys.includes(pageTag(T, '/collections/summer')), 'tagged by the concrete URL');
+  assert.ok(
+    keys.includes(pageTag(T, '/collections/:handle')),
+    'tagged by the template (purge-all)'
+  );
+  assert.match(await res.text(), /Collection page/);
+});
+
+test('routing: flat + nested product URLs both render the one product template', async () => {
+  for (const url of ['/products/air-max-90', '/collections/summer/products/air-max-90']) {
+    const res = await call(url, edge({ 'x-ratio-tenant': T }));
+    assert.equal(res.status, 200, url);
+    assert.equal(res.headers.get('x-page-type'), 'product', url);
+    assert.match(await res.text(), /Product page/, url);
+  }
 });
