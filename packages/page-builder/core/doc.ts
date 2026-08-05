@@ -23,11 +23,25 @@ export interface SectionInstance {
   version?: number; // pinned at save; absent in editor input = pin latest
   data: Record<string, unknown>; // keys MUST be ⊆ the section's declared bindings
   blocks?: BlockInstance[]; // child blocks, only for sections that accept them (Shopify-shaped)
+  dataSourceKey?: string; // data-backed sections: names a page-level dataSource injected at render
 }
+
+// A page declares its data sources ONCE (2.0 model); a data-backed section references one by key.
+// The reference + params are config — the actual product/collection data is fetched at render by
+// the resolver, never persisted here (config-not-data). params may hold {{params.x}} placeholders
+// interpolated from the route (e.g. a PDP's { handle: "{{params.handle}}" }).
+export type DataSourceType = 'product' | 'collectionByHandles' | 'collections';
+export interface DataSource {
+  type: DataSourceType;
+  params?: Record<string, unknown>;
+  required?: boolean;
+}
+const DATA_SOURCE_TYPES = new Set<string>(['product', 'collectionByHandles', 'collections']);
 
 export interface PageDoc {
   path: string; // canonical path (validated below)
   title?: string;
+  dataSources?: Record<string, DataSource>; // named sources the sections bind to
   sections: SectionInstance[];
 }
 
@@ -64,6 +78,14 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
   if (RESERVED.some((r) => path === r || path.startsWith(r + '/')))
     problems.push(`path '${path}' is reserved`);
 
+  const dataSources = doc.dataSources;
+  if (dataSources) {
+    for (const [key, src] of Object.entries(dataSources)) {
+      if (!src || !DATA_SOURCE_TYPES.has(src.type))
+        problems.push(`data source '${key}' has unknown type '${src?.type}'`);
+    }
+  }
+
   const seen = new Set<string>();
   const sections: SectionInstance[] = [];
   for (const w of doc.sections ?? []) {
@@ -78,6 +100,9 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
       problems.push(`unknown section '${w.type}'${w.version ? `@${w.version}` : ''}`);
       continue;
     }
+    if (w.dataSourceKey && !(dataSources && w.dataSourceKey in dataSources))
+      problems.push(`section '${w.id}' references unknown data source '${w.dataSourceKey}'`);
+
     const declared = new Set(rec.bindings.map((b) => b.name));
     const extra = Object.keys(w.data ?? {}).filter((k) => !declared.has(k));
     if (extra.length)
@@ -136,5 +161,5 @@ export function validatePageDoc(doc: PageDoc, registry: SectionRegistry): PageDo
   }
 
   if (problems.length) throw new InvalidPageDoc(problems);
-  return { path, title: doc.title, sections };
+  return { path, title: doc.title, ...(dataSources ? { dataSources } : {}), sections };
 }

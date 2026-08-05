@@ -40,9 +40,31 @@ before(async () => {
   });
   await b.publish(T, '/pb-home');
 
-  // dynamic route templates (keyed by pattern) + a self-keyed static page
+  // collection template is DATA-BACKED: a productGrid bound to the route's collection via the
+  // resolver ({{params.handle}} → the CMS). Uses the StubResolver in tests.
+  await b.saveDraft(T, {
+    path: '/collections/:handle',
+    title: 'Collection',
+    dataSources: {
+      main: {
+        type: 'collectionByHandles',
+        params: { handles: ['{{params.handle}}'], productLimit: 4 },
+      },
+    },
+    sections: [
+      { id: 'h', type: 'heading', data: { heading: { text: 'Collection page' } } },
+      {
+        id: 'g',
+        type: 'productGrid',
+        dataSourceKey: 'main',
+        data: { grid: { heading: 'Products' } },
+      },
+    ],
+  });
+  await b.publish(T, '/collections/:handle');
+
+  // remaining simple templates + a self-keyed static page
   for (const [key, text] of [
-    ['/collections/:handle', 'Collection page'],
     ['/products/:handle', 'Product page'],
     ['/pages/about-us', 'About us page'],
   ] as const) {
@@ -106,6 +128,17 @@ test('routing: flat + nested product URLs both render the one product template',
     assert.equal(res.headers.get('x-page-type'), 'product', url);
     assert.match(await res.text(), /Product page/, url);
   }
+});
+
+test('data binding: the collection template renders resolved products + a col:<handle> tag', async () => {
+  const res = await call('/collections/summer', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /Sample product 1/, 'stub products injected into the grid');
+  assert.ok(
+    (res.headers.get('x-surrogate-keys') || '').includes('col:summer'),
+    'tagged with the resolved collection so a CMS change can purge it'
+  );
 });
 
 test('routing: /pages/:handle is a self-keyed static page (its own doc, page type, no template tag)', async () => {
