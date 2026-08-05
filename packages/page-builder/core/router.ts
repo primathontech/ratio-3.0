@@ -18,13 +18,15 @@ export interface RouteMatch {
 
 interface CompiledRoute {
   pageType: PageType;
-  templateKey: string;
+  templateKey: string | null; // null = self-keyed: the doc lives at the concrete request path
   regex: RegExp;
   keys: string[];
 }
 
-// `:name` captures one non-empty path segment.
-function compile(pageType: PageType, pattern: string, templateKey: string): CompiledRoute {
+// `:name` captures one non-empty path segment. templateKey null → the page is its own doc at the
+// concrete path (home '/', static /pages/:handle); a fixed key → one shared template serves many
+// URLs (collection, product).
+function compile(pageType: PageType, pattern: string, templateKey: string | null): CompiledRoute {
   const keys: string[] = [];
   const source = pattern.replace(/:[A-Za-z][A-Za-z0-9]*/g, (m) => {
     keys.push(m.slice(1));
@@ -33,8 +35,11 @@ function compile(pageType: PageType, pattern: string, templateKey: string): Comp
   return { pageType, templateKey, regex: new RegExp(`^${source}$`), keys };
 }
 
-// Most specific first (the nested product URL must win over nothing else, but keep it ordered).
+// Most specific first. Self-keyed pages (home, static) load the doc at the request path itself;
+// collection/product load one shared template.
 const ROUTES: CompiledRoute[] = [
+  compile('home', '/', null),
+  compile('page', '/pages/:handle', null),
   compile('product', '/collections/:collection/products/:handle', '/products/:handle'),
   compile('collection', '/collections/:handle', '/collections/:handle'),
   compile('product', '/products/:handle', '/products/:handle'),
@@ -56,7 +61,8 @@ export function matchRoute(path: string): RouteMatch | null {
         params[k] = raw;
       }
     });
-    return { templateKey: r.templateKey, pageType: r.pageType, params };
+    // self-keyed routes (home, /pages/:handle) load the doc at the concrete request path.
+    return { templateKey: r.templateKey ?? path, pageType: r.pageType, params };
   }
   return null;
 }

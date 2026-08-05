@@ -2,9 +2,24 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { matchRoute } from './router';
 
-test('home and unknown paths do not match a dynamic route (exact-page lane handles them)', () => {
-  assert.strictEqual(matchRoute('/'), null);
-  assert.strictEqual(matchRoute('/about'), null);
+test('home → self-keyed home doc', () => {
+  assert.deepStrictEqual(matchRoute('/'), {
+    templateKey: '/', // self: the home doc lives at '/'
+    pageType: 'home',
+    params: {},
+  });
+});
+
+test('static page → self-keyed page doc at the concrete path', () => {
+  assert.deepStrictEqual(matchRoute('/pages/about-us'), {
+    templateKey: '/pages/about-us', // self: each page is its own doc
+    pageType: 'page',
+    params: { handle: 'about-us' },
+  });
+});
+
+test('unknown paths do not match (exact-page lane / 404 handles them)', () => {
+  assert.strictEqual(matchRoute('/about'), null); // not under /pages/
   assert.strictEqual(matchRoute('/collections'), null); // no handle segment
   assert.strictEqual(matchRoute('/collections/'), null); // empty handle
 });

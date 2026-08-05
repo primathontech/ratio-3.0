@@ -109,13 +109,16 @@ app.all('*', async (c) => {
   // Page-builder render path (flag-gated). A published PageDoc wins over the legacy route.
   if (pageBuilderEnabled()) {
     const canon = canonicalPath(path);
-    // Routing (ADR-013): an EXACT stored page wins (home '/', custom pages); otherwise a dynamic
-    // route template serves the URL (one Collection template for every /collections/:handle, etc.).
+    // Routing (ADR-013): the router labels the URL (home / page / collection / product) and picks
+    // the template. A custom doc AT this exact URL still wins (override); otherwise a shared
+    // template serves it (one Collection template for every /collections/:handle, etc.). An
+    // unrecognized path with a doc of its own still renders (pageType 'page').
+    const matched: RouteMatch | null = matchRoute(canon);
     let doc = await pageStore.getLive(tenantId as string, canon);
-    let matched: RouteMatch | null = null;
-    if (!doc) {
-      matched = matchRoute(canon);
-      if (matched) doc = await pageStore.getLive(tenantId as string, matched.templateKey);
+    let fromTemplate = false;
+    if (!doc && matched && matched.templateKey !== canon) {
+      doc = await pageStore.getLive(tenantId as string, matched.templateKey);
+      fromTemplate = true;
     }
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
@@ -123,13 +126,13 @@ app.all('*', async (c) => {
       const composed = await composePage(doc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
-      c.header('x-page-type', matched?.pageType ?? (canon === '/' ? 'home' : 'page'));
+      c.header('x-page-type', matched?.pageType ?? 'page');
       c.header('x-page-tier', composed.tier);
       c.header('x-render-count', String(renders));
-      // Tag by the CONCRETE url so /collections/summer purges independently of /winter; ALSO tag by
-      // the template key so editing the shared template purges every URL it renders (D2).
+      // Tag by the CONCRETE url so /collections/summer purges independently of /winter; when a
+      // shared template rendered it, ALSO tag by the template so editing it purges every URL (D2).
       const tags = [pageTag(tenantId as string, canon), tenantTag(tenantId as string)];
-      if (matched) tags.push(pageTag(tenantId as string, matched.templateKey));
+      if (fromTemplate) tags.push(pageTag(tenantId as string, matched!.templateKey));
       c.header('x-surrogate-keys', tags.join(' '));
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
       if (composed.cacheable)

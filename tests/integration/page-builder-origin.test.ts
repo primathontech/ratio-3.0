@@ -42,10 +42,11 @@ before(async () => {
   });
   await b.publish(T, '/pb-home');
 
-  // dynamic route templates (one per type) — keyed by their pattern
+  // dynamic route templates (keyed by pattern) + a self-keyed static page
   for (const [key, text] of [
     ['/collections/:handle', 'Collection page'],
     ['/products/:handle', 'Product page'],
+    ['/pages/about-us', 'About us page'],
   ] as const) {
     await b.saveDraft(T, {
       path: key,
@@ -107,4 +108,14 @@ test('routing: flat + nested product URLs both render the one product template',
     assert.equal(res.headers.get('x-page-type'), 'product', url);
     assert.match(await res.text(), /Product page/, url);
   }
+});
+
+test('routing: /pages/:handle is a self-keyed static page (its own doc, page type, no template tag)', async () => {
+  const res = await call('/pages/about-us', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-handler'), 'page-builder');
+  assert.equal(res.headers.get('x-page-type'), 'page');
+  const keys = res.headers.get('x-surrogate-keys') || '';
+  assert.ok(keys.includes(pageTag(T, '/pages/about-us')), 'tagged by its own path');
+  assert.match(await res.text(), /About us page/);
 });
