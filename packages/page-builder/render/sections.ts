@@ -39,12 +39,15 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     type: 'productGrid',
     bindings: [{ name: 'grid', tier: 'shared-volatile' }], // prices inside → shared-volatile
     settings: [{ key: 'grid.heading', type: 'text', label: 'Section heading' }],
+    // Reads the CANONICAL product fields straight from the data layer (handle, image_url, price in
+    // paise) — the resolver passes products through unmodified; the shaping happens HERE.
     template: `<section>
   {% if grid.heading %}<h2>{{ grid.heading | escape }}</h2>{% endif %}
   <div class="grid">
     {% for p in grid.products %}
-    <a class="card" href="{{ p.href | escape }}">
-      <div class="ph">{% if p.image %}<img src="{{ p.image | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
+    {% assign img = p.image_url | default: p.images.first.url %}
+    <a class="card" href="/products/{{ p.handle | escape }}">
+      <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
       <div class="body"><div>{{ p.title | escape }}</div><div class="price">{{ p.price | money }}</div></div>
     </a>
     {% endfor %}
@@ -54,19 +57,17 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
 
   product: {
     type: 'product',
-    // title/description = static; price = shared-volatile; the add-to-cart + live stock are an
-    // island (per-user), hydrated client-side — NOT rendered into the cached shell here.
-    bindings: [
-      { name: 'product', tier: 'static' },
-      { name: 'price', tier: 'shared-volatile' },
-    ],
+    // ONE canonical product binding (carries the volatile price → shared-volatile). Reads the data
+    // layer's fields as-is; the add-to-cart + live stock are an island (per-user), hydrated
+    // client-side — NOT rendered into the cached shell here.
+    bindings: [{ name: 'product', tier: 'shared-volatile' }],
     template: `<section class="pdp">
-  <div class="ph"></div>
+  <div class="ph">{% if product.image_url %}<img src="{{ product.image_url | escape }}" alt="{{ product.title | escape }}">{% endif %}</div>
   <div>
     <h1>{{ product.title | escape }}</h1>
-    <div class="price">{{ price.amount | money }}</div>
+    <div class="price">{{ product.price | money }}</div>
     {% if product.description %}<p>{{ product.description | escape }}</p>{% endif %}
-    <div data-island="add-to-cart" data-sku="{{ product.sku | escape }}"></div>
+    <div data-island="add-to-cart" data-sku="{{ product.handle | escape }}"></div>
   </div>
 </section>`,
   },

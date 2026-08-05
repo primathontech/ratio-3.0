@@ -77,11 +77,13 @@ function buildEngine(opts: EngineOptions): Liquid {
     dynamicPartials: false, // partial names must be string literals, not expressions
   });
 
-  // Register our own `money` filter (LiquidJS has no built-in). Locale/currency-aware → per-locale.
+  // Register our own `money` filter (LiquidJS has no built-in). The backend returns prices in PAISE
+  // (canonical); the paise→rupees conversion is a DISPLAY transform, done here at the point of use —
+  // never in the fetch/resolver layer (consumer-driven transformation). Locale-aware → per-locale.
   engine.registerFilter('money', (v: unknown) => {
     const n = typeof v === 'number' ? v : Number(v);
     if (!Number.isFinite(n)) return '';
-    return '₹' + n.toFixed(2);
+    return '₹' + (n / 100).toFixed(2);
   });
 
   // For untrusted templates, strip every filter that is not on the allowlist. LiquidJS registers

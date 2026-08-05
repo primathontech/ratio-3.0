@@ -50,7 +50,7 @@ test('resolvePage injects collection products into the productGrid binding + emi
   assert.ok(tags.includes('col:summer'), 'collection tag from the interpolated handle');
 });
 
-test('resolvePage fills MULTIPLE bindings from one source (product PDP: product + price)', async () => {
+test('resolvePage injects the canonical product into the PDP product binding (raw, unmodified)', async () => {
   const doc: PageDoc = {
     path: '/products/:handle',
     title: 'PDP',
@@ -61,12 +61,9 @@ test('resolvePage fills MULTIPLE bindings from one source (product PDP: product 
     tenantId: 't',
     routeParams: { handle: 'shoe' },
   });
-  const data = out.sections[0].data as {
-    product: { title: string };
-    price: { amount: number };
-  };
-  assert.match(data.product.title, /shoe/); // product binding filled
-  assert.strictEqual(data.price.amount, 999); // price binding filled too
+  const data = out.sections[0].data as { product: { title: string; price: number } };
+  assert.match(data.product.title, /shoe/); // canonical product on the product binding
+  assert.strictEqual(data.product.price, 99900); // raw paise, NOT converted (transform is at render)
 });
 
 test('the saved doc is not mutated — injection is render-only', async () => {

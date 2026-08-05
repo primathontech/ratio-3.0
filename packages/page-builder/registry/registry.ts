@@ -33,7 +33,7 @@ export interface CatalogEntry {
 
 export const BINDING_CATALOG: Record<string, CatalogEntry> = {
   // platform data sources
-  product: { tier: 'static' },
+  product: { tier: 'shared-volatile' }, // the canonical product carries its (volatile) price
   collection: { tier: 'static' },
   price: { tier: 'shared-volatile' },
   stock: { tier: 'shared-volatile' },

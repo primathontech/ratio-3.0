@@ -95,13 +95,15 @@ export async function resolvePage(
   return { doc: { ...doc, sections }, tags: [...new Set(tags)] };
 }
 
+// Gokwik-shaped samples (paise, image_url, handle) — the SAME canonical shape the real backend
+// returns, so templates behave identically offline. No display transform here (that's the render).
 function sampleProducts(seed: string, n: number) {
   return Array.from({ length: n }, (_, i) => ({
     id: `${seed}-${i + 1}`,
     title: `Sample product ${i + 1}`,
-    href: `/products/sample-${i + 1}`,
-    image: '',
-    price: 499 + i * 100,
+    handle: `sample-${i + 1}`,
+    price: 49900 + i * 10000, // paise
+    image_url: '',
   }));
 }
 
@@ -131,11 +133,15 @@ export class StubResolver implements BindingResolver {
       }
       case DATA_SOURCE_TYPES.PRODUCT: {
         const handle = String(p.handle ?? 'demo');
-        // binding-keyed: fills BOTH the product and price bindings of the PDP section
+        // flat canonical product → the section's `product` binding (price in paise)
         return {
           value: {
-            product: { title: `Sample: ${handle}`, sku: handle, description: 'Stub product.' },
-            price: { amount: 999 },
+            id: handle,
+            title: `Sample: ${handle}`,
+            handle,
+            price: 99900,
+            description: 'Stub product.',
+            image_url: '',
           },
           tags: [`prod:${handle}`],
         };

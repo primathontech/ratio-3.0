@@ -29,12 +29,13 @@ test('engine: productGrid renders prices via money filter', async () => {
     {
       grid: {
         heading: 'Shop',
-        products: [{ title: 'Shoe', price: 1999, href: '/p/shoe', image: '' }],
+        // canonical product fields (price in PAISE, handle, image_url) — as the backend returns
+        products: [{ title: 'Shoe', price: 199900, handle: 'shoe', image_url: '' }],
       },
     },
     trusted
   );
-  assert.match(html, /₹1999\.00/, 'price formatted by money filter');
+  assert.match(html, /₹1999\.00/, 'money filter converts paise→rupees at render');
   assert.match(html, /Shoe/);
 });
 
@@ -52,7 +53,7 @@ test('sandbox: unlisted filter is rejected (strictFilters + allowlist)', () => {
 test('sandbox: allowlisted filters still work for untrusted', async () => {
   const html = await render(
     '{{ name | upcase }}-{{ price | money }}',
-    { name: 'a', price: 5 },
+    { name: 'a', price: 500 }, // paise → ₹5.00
     untrusted
   );
   assert.equal(html, 'A-₹5.00');
