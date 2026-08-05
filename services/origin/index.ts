@@ -6,6 +6,8 @@ import { normalizePage } from '@ratio/content-model';
 import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
 import { composePage } from '@ratio/page-builder-core/compose';
+import { resolvePage, StubResolver } from '@ratio/page-builder-core/resolve';
+import { commerceResolverFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import { canonicalPath } from '@ratio/page-builder-core/path';
 import { pageTag, tenantTag } from '@ratio/page-builder-core/tags';
@@ -42,6 +44,10 @@ let renders = 0;
 // and is slated for removal once every store is on the page builder.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
+// Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
+// resolver when COMMERCE_* env is configured; otherwise the StubResolver (deterministic samples) so
+// local dev renders without a backend.
+const resolver = commerceResolverFromEnv() ?? new StubResolver();
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;
@@ -119,16 +125,23 @@ app.all('*', async (c) => {
     }
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
-      // matched.params ({ handle, ... }) will feed the data resolver ({{params.handle}}) next.
-      const composed = await composePage(doc, pbRegistry, { accent: tenant.theme?.color });
+      // Resolve data sources (collection/product) via the CMS, interpolating the router's params
+      // ({{params.handle}}), then compose. composePage stays pure — data goes in already resolved.
+      const { doc: resolvedDoc, tags: dataTags } = await resolvePage(doc, pbRegistry, resolver, {
+        tenantId: tenantId as string,
+        routeParams: matched?.params,
+        commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
+      });
+      const composed = await composePage(resolvedDoc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
       c.header('x-page-type', matched?.pageType ?? 'page');
       c.header('x-page-tier', composed.tier);
       c.header('x-render-count', String(renders));
       // Tag by the CONCRETE url so /collections/summer purges independently of /winter; when a
-      // shared template rendered it, ALSO tag by the template so editing it purges every URL (D2).
-      const tags = [pageTag(tenantId as string, canon), tenantTag(tenantId as string)];
+      // shared template rendered it, ALSO tag by the template so editing it purges every URL (D2);
+      // and by each data source's tags (col:*/prod:*) so a CMS change purges the pages showing it.
+      const tags = [pageTag(tenantId as string, canon), tenantTag(tenantId as string), ...dataTags];
       if (fromTemplate) tags.push(pageTag(tenantId as string, matched!.templateKey));
       c.header('x-surrogate-keys', tags.join(' '));
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');

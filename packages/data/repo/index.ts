@@ -1,10 +1,15 @@
 import { pool } from '@ratio/shared/db';
 
+export interface TenantCommerce {
+  merchantId: string;
+  storeId?: string; // defaults to merchantId
+}
 export interface Tenant {
   id: string;
   name: string;
   status: string;
   theme: { color?: string };
+  commerce?: TenantCommerce | null; // per-merchant data-layer config (null until connected)
 }
 export interface Route {
   tenant_id: string;
@@ -33,7 +38,7 @@ export function forTenant(tenantId: string) {
   return {
     async getTenant(): Promise<Tenant | null> {
       const { rows } = await pool.query<Tenant>(
-        'SELECT id, name, status, theme FROM tenants WHERE id = $1',
+        'SELECT id, name, status, theme, commerce FROM tenants WHERE id = $1',
         [tenantId]
       );
       return rows[0] || null;

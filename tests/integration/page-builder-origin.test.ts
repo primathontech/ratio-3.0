@@ -40,19 +40,49 @@ before(async () => {
   });
   await b.publish(T, '/pb-home');
 
-  // dynamic route templates (keyed by pattern) + a self-keyed static page
-  for (const [key, text] of [
-    ['/collections/:handle', 'Collection page'],
-    ['/products/:handle', 'Product page'],
-    ['/pages/about-us', 'About us page'],
-  ] as const) {
-    await b.saveDraft(T, {
-      path: key,
-      title: text,
-      sections: [{ id: 'h', type: 'heading', data: { heading: { text } } }],
-    });
-    await b.publish(T, key);
-  }
+  // collection template is DATA-BACKED: a productGrid bound to the route's collection via the
+  // resolver ({{params.handle}} → the CMS). Uses the StubResolver in tests.
+  await b.saveDraft(T, {
+    path: '/collections/:handle',
+    title: 'Collection',
+    dataSources: {
+      main: {
+        type: 'COLLECTION_BY_HANDLES',
+        params: { handles: ['{{params.handle}}'], productLimit: 4 },
+      },
+    },
+    sections: [
+      { id: 'h', type: 'heading', data: { heading: { text: 'Collection page' } } },
+      {
+        id: 'g',
+        type: 'productGrid',
+        dataSourceKey: 'main',
+        data: { grid: { heading: 'Products' } },
+      },
+    ],
+  });
+  await b.publish(T, '/collections/:handle');
+
+  // product template is DATA-BACKED: a PDP section bound to the route's product — fills BOTH the
+  // product and price bindings.
+  await b.saveDraft(T, {
+    path: '/products/:handle',
+    title: 'Product',
+    dataSources: { main: { type: 'PRODUCT', params: { handle: '{{params.handle}}' } } },
+    sections: [
+      { id: 'h', type: 'heading', data: { heading: { text: 'Product page' } } },
+      { id: 'p', type: 'product', dataSourceKey: 'main', data: {} },
+    ],
+  });
+  await b.publish(T, '/products/:handle');
+
+  // self-keyed static page
+  await b.saveDraft(T, {
+    path: '/pages/about-us',
+    title: 'About us page',
+    sections: [{ id: 'h', type: 'heading', data: { heading: { text: 'About us page' } } }],
+  });
+  await b.publish(T, '/pages/about-us');
 });
 
 after(async () => {
@@ -106,6 +136,28 @@ test('routing: flat + nested product URLs both render the one product template',
     assert.equal(res.headers.get('x-page-type'), 'product', url);
     assert.match(await res.text(), /Product page/, url);
   }
+});
+
+test('data binding: the product PDP fills BOTH product and price bindings from a PRODUCT source', async () => {
+  const res = await call('/products/air-max-90', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /Sample: air-max-90/, 'product.title injected into the PDP');
+  assert.ok(
+    (res.headers.get('x-surrogate-keys') || '').includes('prod:air-max-90'),
+    'product tag for purge'
+  );
+});
+
+test('data binding: the collection template renders resolved products + a col:<handle> tag', async () => {
+  const res = await call('/collections/summer', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  const body = await res.text();
+  assert.match(body, /Sample product 1/, 'stub products injected into the grid');
+  assert.ok(
+    (res.headers.get('x-surrogate-keys') || '').includes('col:summer'),
+    'tagged with the resolved collection so a CMS change can purge it'
+  );
 });
 
 test('routing: /pages/:handle is a self-keyed static page (its own doc, page type, no template tag)', async () => {
