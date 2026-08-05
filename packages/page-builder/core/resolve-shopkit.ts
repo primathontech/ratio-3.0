@@ -75,31 +75,52 @@ export class ShopkitResolver implements BindingResolver {
 // Platform-global service base URLs (one backend for every merchant) — env, not per-tenant.
 export interface CustomBackendUrls {
   productApiBaseUrl: string;
-  cartApiBaseUrl?: string;
-  orderApiBaseUrl?: string;
+  cartApiBaseUrl: string;
+  orderApiBaseUrl: string;
 }
 
-// Build a resolver whose client is constructed PER-TENANT: platform URLs (arg) + the tenant's own
-// merchantId/storeId (ctx.commerce, from the DB). A tenant with no commerce config → no client →
-// the section renders empty (no crash).
-export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver {
-  return new ShopkitResolver((ctx) => {
-    const merchantId = ctx.commerce?.merchantId;
-    if (!merchantId) return null;
-    const storeId = ctx.commerce?.storeId ?? merchantId; // storeId defaults to merchantId for now
-    return createCommerceClient({
-      type: 'custom',
-      config: {
-        merchantId,
-        storeId,
-        services: {
-          product: { apiBaseUrl: urls.productApiBaseUrl },
-          cart: { apiBaseUrl: urls.cartApiBaseUrl ?? urls.productApiBaseUrl },
-          order: { apiBaseUrl: urls.orderApiBaseUrl ?? urls.productApiBaseUrl },
-        },
-      } as ICustomConfig,
-    });
+// Build a custom CommerceClient from per-tenant creds (DB) + platform URLs (env). Null when the
+// tenant has no merchantId (not connected). Shared by the resolver AND the admin collection list.
+export function buildCustomClient(
+  commerce: { merchantId?: string; storeId?: string } | null | undefined,
+  urls: CustomBackendUrls
+): ICommerceClient | null {
+  const merchantId = commerce?.merchantId;
+  if (!merchantId) return null;
+  const storeId = commerce?.storeId ?? merchantId; // storeId defaults to merchantId for now
+  return createCommerceClient({
+    type: 'custom',
+    config: {
+      merchantId,
+      storeId,
+      services: {
+        product: { apiBaseUrl: urls.productApiBaseUrl },
+        cart: { apiBaseUrl: urls.cartApiBaseUrl },
+        order: { apiBaseUrl: urls.orderApiBaseUrl },
+      },
+    } as ICustomConfig,
   });
+}
+
+// Platform service URLs from env, or null if not configured.
+export function commerceUrlsFromEnv(
+  env: NodeJS.ProcessEnv = process.env
+): CustomBackendUrls | null {
+  const productApiBaseUrl = env.COMMERCE_PRODUCT_API_URL;
+  const cartApiBaseUrl = env.COMMERCE_CART_API_URL;
+  const orderApiBaseUrl = env.COMMERCE_ORDER_API_URL;
+
+  if (!productApiBaseUrl || !cartApiBaseUrl || !orderApiBaseUrl) return null;
+  return {
+    productApiBaseUrl,
+    cartApiBaseUrl,
+    orderApiBaseUrl,
+  };
+}
+
+// Build a resolver whose client is constructed PER-TENANT (platform URLs + ctx.commerce from DB).
+export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver {
+  return new ShopkitResolver((ctx) => buildCustomClient(ctx.commerce, urls));
 }
 
 // Origin factory: real resolver when the platform URLs are configured, else null (caller falls back
@@ -107,11 +128,6 @@ export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver
 export function commerceResolverFromEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ShopkitResolver | null {
-  const productApiBaseUrl = env.COMMERCE_PRODUCT_API_URL;
-  if (!productApiBaseUrl) return null;
-  return customCommerceResolver({
-    productApiBaseUrl,
-    cartApiBaseUrl: env.COMMERCE_CART_API_URL,
-    orderApiBaseUrl: env.COMMERCE_ORDER_API_URL,
-  });
+  const urls = commerceUrlsFromEnv(env);
+  return urls ? customCommerceResolver(urls) : null;
 }

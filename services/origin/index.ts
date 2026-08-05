@@ -132,7 +132,7 @@ app.all('*', async (c) => {
         routeParams: matched?.params,
         commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
       });
-      const composed = await composePage(resolvedDoc, pbRegistry, { accent: tenant.theme?.color });
+      const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {});
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
       c.header('x-page-type', matched?.pageType ?? 'page');

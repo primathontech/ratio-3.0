@@ -25,6 +25,7 @@ import {
 } from './ui';
 import { SectionEditor, toEditable, type Section } from './sections';
 import { PageBuilderPanel } from './pagebuilder';
+import { ThemeSettingsPanel } from './theme-settings';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -624,6 +625,8 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
           )}
         </div>
       </div>
+
+      <ThemeSettingsPanel api={api} store={store} />
 
       <PageBuilderPanel api={api} store={store} />
 

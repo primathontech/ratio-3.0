@@ -18,6 +18,15 @@ import { isLocal } from '@ratio/shared/env';
 import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
 import type { PageDoc } from '@ratio/page-builder-core/doc';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
+import { tenantTag } from '@ratio/page-builder-core/tags';
+import {
+  FONTS,
+  BASE_SIZE,
+  RADIUS,
+  CONTAINER,
+  type ThemeTokens,
+} from '@ratio/page-builder-core/storefront';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import {
   cfConfig,
@@ -133,8 +142,12 @@ function verifyWebhookSignature(rawBody: string, signature: string | undefined, 
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+// Section bindings that are backed by the commerce data layer — their presence tells the editor to
+// show a data-source picker (collection/product) instead of just field inputs.
+const DATA_BINDINGS = new Set(['grid', 'product', 'collection', 'price', 'stock']);
+
 // The section catalog the editor renders forms from. Serializable metadata only (type + kind +
-// typed settings + accepted child block types) — never the render templates.
+// typed settings + accepted child block types + which data binding, if any) — never the templates.
 function sectionCatalog() {
   return pbRegistry.list().map((r) => ({
     type: r.type,
@@ -142,7 +155,33 @@ function sectionCatalog() {
     kind: r.kind === 'block' ? 'block' : 'section',
     settings: r.settings ?? [],
     blocks: r.blocks ?? [],
+    // the section's commerce data binding (e.g. productGrid→'grid', product→'product'), or null
+    dataBinding: (r.bindings ?? []).map((b) => b.name).find((n) => DATA_BINDINGS.has(n)) ?? null,
   }));
+}
+
+// Validate a theme at the boundary: brand colour is free-form hex, every other knob must be a key
+// of its fixed scale. Reject anything off-scale (don't silently drop) so the editor surfaces it.
+const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+function validateTheme(input: unknown): ThemeTokens {
+  if (!input || typeof input !== 'object') throw new Error('theme must be an object');
+  const t = input as Record<string, unknown>;
+  const pick = (key: string, scale: Record<string, string>): string | undefined => {
+    const v = t[key];
+    if (v == null) return undefined;
+    if (typeof v !== 'string' || !(v in scale)) throw new Error(`invalid ${key}`);
+    return v;
+  };
+  if (t.color != null && (typeof t.color !== 'string' || !HEX.test(t.color)))
+    throw new Error('color must be a hex value');
+  return {
+    color: typeof t.color === 'string' ? t.color : undefined,
+    bodyFont: pick('bodyFont', FONTS),
+    headingFont: pick('headingFont', FONTS),
+    baseSize: pick('baseSize', BASE_SIZE),
+    radius: pick('radius', RADIUS),
+    container: pick('container', CONTAINER),
+  };
 }
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
@@ -537,6 +576,44 @@ export function createApp(
   app.get('/stores/:id/pages', requireMembership, async (c) => {
     const pages = await forTenant(c.req.param('id')).listRoutes();
     return c.json({ pages });
+  });
+
+  // The store's collections, for the editor's collection picker. Builds the tenant's commerce client
+  // (env service URLs + the tenant's own merchantId) and returns the CANONICAL collections envelope-
+  // navigated only — no shaping here (the SPA maps to {handle,title}). Empty when not connected.
+  app.get('/stores/:id/collections', requireMembership, async (c) => {
+    const urls = commerceUrlsFromEnv();
+    if (!urls) return c.json({ collections: [] });
+    const tenant = await forTenant(c.req.param('id')).getTenant();
+    const client = buildCustomClient(tenant?.commerce, urls);
+    if (!client) return c.json({ collections: [] });
+    const res = await client.getCollections({ first: 100 });
+    const data = res?.data;
+    const collections = Array.isArray(data) ? data : (data?.collections ?? []);
+    return c.json({ collections });
+  });
+
+  // The store's storefront theme (global style knobs) — read by the Theme Settings panel.
+  app.get('/stores/:id/theme', requireMembership, async (c) => {
+    const tenant = await forTenant(c.req.param('id')).getTenant();
+    if (!tenant) return c.json({ error: 'not found' }, 404);
+    return c.json({ theme: tenant.theme ?? {} });
+  });
+
+  // Save the theme. Validated against the fixed scales, persisted, then the tenant's pages are
+  // purged — the theme is baked into every cached shell, so a change invalidates all of them.
+  app.put('/stores/:id/theme', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    let theme: ThemeTokens;
+    try {
+      theme = validateTheme(await c.req.json().catch(() => ({})));
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'invalid theme' }, 400);
+    }
+    await forTenant(id).setTheme(theme);
+    await purgeEdgeTags([tenantTag(id)]);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, theme });
   });
 
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft

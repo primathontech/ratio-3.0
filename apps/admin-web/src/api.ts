@@ -10,6 +10,14 @@ export interface Store {
   host: string | null;
   hosts: string[];
 }
+export interface StoreTheme {
+  color?: string;
+  bodyFont?: string;
+  headingFont?: string;
+  baseSize?: string;
+  radius?: string;
+  container?: string;
+}
 export interface PageSummary {
   path: string;
   page_type: string;
@@ -35,6 +43,7 @@ export interface PbSectionDef {
   kind: string; // 'section' | 'block'
   settings: PbSettingDef[];
   blocks: string[];
+  dataBinding?: string | null; // commerce data binding (e.g. 'grid', 'product') if data-backed
 }
 export interface PbBlock {
   id: string;
@@ -48,11 +57,23 @@ export interface PbSection {
   data: Record<string, unknown>;
   blocks?: PbBlock[];
   version?: number;
+  dataSourceKey?: string; // which page dataSource feeds this section
+}
+export interface PbDataSource {
+  type: string;
+  params?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+  required?: boolean;
 }
 export interface PbDoc {
   path: string;
   title: string;
   sections: PbSection[];
+  dataSources?: Record<string, PbDataSource>;
+}
+export interface PbCollection {
+  handle: string;
+  title: string;
 }
 export interface PbState {
   path: string;
@@ -207,6 +228,10 @@ export function createApi(
       merchantId?: string;
     }) => req<{ id: string; url: string }>('POST', '/stores', s),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
+    getTheme: (id: string) =>
+      req<{ theme: StoreTheme }>('GET', `/stores/${id}/theme`).then((d) => d.theme ?? {}),
+    saveTheme: (id: string, theme: StoreTheme) =>
+      req<{ ok: boolean; theme: StoreTheme }>('PUT', `/stores/${id}/theme`, theme),
     listPages: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>
         pickArray<PageSummary>(d, 'pages')
@@ -239,6 +264,13 @@ export function createApi(
     listPbPages: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/page-builder/pages`).then((d) =>
         pickArray<PbPageMeta>(d, 'pages')
+      ),
+    listCollections: (id: string) =>
+      req<Record<string, unknown>>('GET', `/stores/${id}/collections`).then((d) =>
+        pickArray<Record<string, unknown>>(d, 'collections').map((col) => ({
+          handle: String(col.handle ?? ''),
+          title: String(col.title ?? col.name ?? col.handle ?? ''),
+        }))
       ),
     getPageBuilder: (id: string, path: string) =>
       req<PbState>('GET', `/stores/${id}/page-builder?path=${encodeURIComponent(path)}`),

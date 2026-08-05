@@ -3,19 +3,67 @@
 // radius) come from the tenant's theme and are sanitized before they touch CSS — a merchant value
 // can never break out of the `:root` block (the storefront CSP already allows inline <style>).
 
+// Merchant theme = a handful of GLOBAL knobs, every value chosen from a FIXED scale (consistency by
+// construction). Only the brand colour is free-form; the rest are keys into the maps below, so a
+// merchant can never emit an arbitrary CSS value. Anything off-scale is ignored → base default.
 export interface ThemeTokens {
-  accent?: string; // brand colour — hex only, else ignored
-  radius?: number; // corner radius in px, clamped
+  color?: string; // brand colour — hex only, else ignored
+  bodyFont?: string; // key of FONTS
+  headingFont?: string; // key of FONTS
+  baseSize?: string; // 's' | 'm' | 'l'
+  radius?: string; // 'square' | 'soft' | 'rounded'
+  container?: string; // 'narrow' | 'normal' | 'wide'
 }
 
+// Curated, self-hostable / websafe font stacks (no external CDN — CSP is font-src 'self' data:).
+// Indic-capable self-hosted families are a follow-up; the vocabulary is ready for them.
+export const FONTS: Record<string, string> = {
+  system: `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`,
+  sans: `'Helvetica Neue',Arial,sans-serif`,
+  serif: `Georgia,'Times New Roman',serif`,
+  rounded: `'Trebuchet MS','Segoe UI',system-ui,sans-serif`,
+  mono: `ui-monospace,'SF Mono',Menlo,monospace`,
+};
+export const BASE_SIZE: Record<string, string> = { s: '15px', m: '16px', l: '18px' };
+export const RADIUS: Record<string, string> = { square: '0px', soft: '10px', rounded: '18px' };
+export const CONTAINER: Record<string, string> = {
+  narrow: '960px',
+  normal: '1120px',
+  wide: '1200px',
+};
+
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+// Auto-derive readable text colour ON the brand fill from its luminance — the merchant picks one
+// colour, we guarantee the contrast (no second knob to get wrong).
+function onBrandInk(hex: string): string {
+  const h = hex.slice(1);
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.6 ? '#111827' : '#ffffff';
+}
 
 // Only emit overrides that are provably safe — anything else falls back to the base defaults.
 function rootVars(t: ThemeTokens): string {
   const vars: string[] = [];
-  if (t.accent && HEX.test(t.accent)) vars.push(`--accent:${t.accent}`);
-  if (typeof t.radius === 'number' && Number.isFinite(t.radius))
-    vars.push(`--radius:${Math.max(0, Math.min(32, Math.round(t.radius)))}px`);
+  if (t.color && HEX.test(t.color)) {
+    vars.push(`--accent:${t.color}`);
+    vars.push(`--accent-ink:${onBrandInk(t.color)}`);
+  }
+  if (t.bodyFont && FONTS[t.bodyFont]) vars.push(`--font:${FONTS[t.bodyFont]}`);
+  if (t.headingFont && FONTS[t.headingFont]) vars.push(`--font-heading:${FONTS[t.headingFont]}`);
+  if (t.baseSize && BASE_SIZE[t.baseSize]) vars.push(`--base:${BASE_SIZE[t.baseSize]}`);
+  if (t.radius && RADIUS[t.radius]) vars.push(`--radius:${RADIUS[t.radius]}`);
+  if (t.container && CONTAINER[t.container]) vars.push(`--maxw:${CONTAINER[t.container]}`);
   return vars.length ? `:root{${vars.join(';')}}` : '';
 }
 
@@ -23,11 +71,13 @@ const BASE = `
 *,*::before,*::after{box-sizing:border-box}
 :root{
   --accent:#4f46e5;--accent-ink:#fff;--ink:#18181b;--muted:#6b7280;--bg:#fff;
-  --surface:#f6f6f8;--border:#e7e7ec;--radius:14px;--maxw:1120px;
+  --surface:#f6f6f8;--border:#e7e7ec;--radius:14px;--maxw:1120px;--base:16px;
   --font:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --font-heading:var(--font);
 }
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;font-size:var(--base)}
 body{margin:0;font-family:var(--font);color:var(--ink);background:var(--bg);line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:var(--font-heading)}
 img{max-width:100%;display:block}
 a{color:inherit;text-decoration:none}
 .rt{max-width:var(--maxw);margin:0 auto;padding:0 20px}

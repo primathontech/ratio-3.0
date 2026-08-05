@@ -10,6 +10,8 @@ import type {
   PbSection,
   PbBlock,
   PbDoc,
+  PbDataSource,
+  PbCollection,
   PbPageMeta,
   Store,
 } from './api';
@@ -244,13 +246,52 @@ function BlocksEditor({
   );
 }
 
+// Collection picker for a data-backed section (def.dataBinding === 'grid'). Selecting a collection
+// sets the section's page-level dataSource instead of hand-writing dataSources JSON.
+function CollectionPicker({
+  collections,
+  dataSource,
+  onSelect,
+}: {
+  collections: PbCollection[] | null;
+  dataSource: PbDataSource | undefined;
+  onSelect: (handle: string) => void;
+}) {
+  const handles = (dataSource?.params?.handles as string[] | undefined) ?? [];
+  const selected = handles[0] ?? '';
+  return (
+    <label className="field" style={{ display: 'block', marginBottom: 8 }}>
+      <span className="muted" style={{ fontSize: 12 }}>
+        Collection <span style={{ opacity: 0.5 }}>(data source)</span>
+      </span>
+      {collections === null ? (
+        <p className="muted">Loading collections…</p>
+      ) : collections.length === 0 ? (
+        <p className="muted">No collections — connect the store's commerce backend.</p>
+      ) : (
+        <select className="input" value={selected} onChange={(e) => onSelect(e.target.value)}>
+          <option value="">—</option>
+          {collections.map((col) => (
+            <option key={col.handle} value={col.handle}>
+              {col.title || col.handle}
+            </option>
+          ))}
+        </select>
+      )}
+    </label>
+  );
+}
+
 function SectionCard({
   section,
   def,
   defOf,
   index,
   count,
+  collections,
+  dataSource,
   onChange,
+  onSelectCollection,
   onMove,
   onDelete,
 }: {
@@ -259,7 +300,10 @@ function SectionCard({
   defOf: (type: string) => PbSectionDef | undefined;
   index: number;
   count: number;
+  collections: PbCollection[] | null;
+  dataSource: PbDataSource | undefined;
   onChange: (s: PbSection) => void;
+  onSelectCollection: (handle: string) => void;
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
 }) {
@@ -295,6 +339,13 @@ function SectionCard({
         <p className="muted">Unknown section type — not in the catalog.</p>
       ) : (
         <>
+          {def.dataBinding === 'grid' && (
+            <CollectionPicker
+              collections={collections}
+              dataSource={dataSource}
+              onSelect={onSelectCollection}
+            />
+          )}
           <SettingsForm
             settings={def.settings}
             data={section.data}
@@ -317,6 +368,7 @@ function SectionCard({
 export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
   const toast = useToast();
   const [catalog, setCatalog] = useState<PbSectionDef[] | null>(null);
+  const [collections, setCollections] = useState<PbCollection[] | null>(null);
   const [pages, setPages] = useState<PbPageMeta[]>([]);
   const [path, setPath] = useState('/');
   const [doc, setDoc] = useState<PbDoc | null>(null);
@@ -351,9 +403,13 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
       .pbCatalog()
       .then(setCatalog)
       .catch((e) => err(e, 'Failed to load catalog'));
+    api
+      .listCollections(store.id)
+      .then(setCollections)
+      .catch(() => setCollections([]));
     loadPages();
     loadDoc('/').catch((e) => err(e, 'Failed to load page'));
-  }, [api, loadPages, loadDoc, err]);
+  }, [api, store.id, loadPages, loadDoc, err]);
 
   const defOf = useCallback((type: string) => catalog?.find((c) => c.type === type), [catalog]);
   const sectionTypes = (catalog ?? []).filter((c) => c.kind === 'section');
@@ -378,6 +434,28 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
   function patchSection(i: number, s: PbSection) {
     if (!doc) return;
     setDoc({ ...doc, sections: doc.sections.map((x, j) => (j === i ? s : x)) });
+  }
+  // Point a section at a collection: keyed by the section id, sets the page dataSource + the
+  // section's dataSourceKey (or clears both when deselected).
+  function selectCollection(i: number, handle: string) {
+    if (!doc) return;
+    const key = doc.sections[i].id;
+    const dataSources = { ...(doc.dataSources ?? {}) };
+    if (handle) {
+      dataSources[key] = {
+        type: 'COLLECTION_BY_HANDLES',
+        params: { handles: [handle], productLimit: 12 },
+      };
+    } else {
+      delete dataSources[key];
+    }
+    setDoc({
+      ...doc,
+      dataSources,
+      sections: doc.sections.map((x, j) =>
+        j === i ? { ...x, dataSourceKey: handle ? key : undefined } : x
+      ),
+    });
   }
   function addSection() {
     if (!doc || !addType) return;
@@ -505,9 +583,15 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
               defOf={defOf}
               index={i}
               count={doc.sections.length}
+              collections={collections}
+              dataSource={s.dataSourceKey ? doc.dataSources?.[s.dataSourceKey] : undefined}
               onChange={(ns) => patchSection(i, ns)}
+              onSelectCollection={(h) => selectCollection(i, h)}
               onMove={(dir) => setDoc({ ...doc, sections: move(doc.sections, i, dir) })}
-              onDelete={() => setDoc({ ...doc, sections: doc.sections.filter((_, j) => j !== i) })}
+              onDelete={() => {
+                const { [s.id]: _drop, ...dataSources } = doc.dataSources ?? {};
+                setDoc({ ...doc, dataSources, sections: doc.sections.filter((_, j) => j !== i) });
+              }}
             />
           ))}
 
