@@ -217,7 +217,7 @@ export function createApi(
   }
 
   return {
-    me: () => req<{ userId: string; isPlatformAdmin: boolean }>('GET', '/me'),
+    me: () => req<{ userId: string; isPlatformAdmin: boolean; isLocal?: boolean }>('GET', '/me'),
     listStores: () =>
       req<Record<string, unknown>>('GET', '/stores').then((d) => pickArray<Store>(d, 'stores')),
     createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>

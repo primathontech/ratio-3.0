@@ -215,7 +215,11 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   const [stores, setStores] = useState<Store[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [me, setMe] = useState<{ userId: string; isPlatformAdmin: boolean } | null>(null);
+  const [me, setMe] = useState<{
+    userId: string;
+    isPlatformAdmin: boolean;
+    isLocal?: boolean;
+  } | null>(null);
 
   // Focus the heading when the list view (re)opens — e.g. returning via "All stores" — so
   // focus isn't dropped to <body> on the transition (M5 / WCAG 2.4.3).
@@ -305,7 +309,7 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
       {stores && stores.length > 0 && (
         <div className="grid">
           {stores.map((s) => (
-            <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} />
+            <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} local={!!me?.isLocal} />
           ))}
         </div>
       )}
@@ -336,7 +340,7 @@ function hostsOf(store: Store): string[] {
   return store.hosts ?? (store.host ? [store.host] : []);
 }
 
-function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
+function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
   const hosts = hostsOf(store);
   return (
     <div className="card store-card">
@@ -358,6 +362,21 @@ function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
             </div>
           ) : (
             <span className="host muted">no domain</span>
+          )}
+          {/* Dev-only (RATIO_LOCAL, from /me): the real domain doesn't resolve locally, so link to
+              the storefront through the edge's ?store=<id> override on localhost. */}
+          {local && (
+            <div className="hosts">
+              <a
+                className="host"
+                href={`http://localhost:8080/?store=${encodeURIComponent(store.id)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                view locally <Icon.external size={11} />
+                <NewTabHint />
+              </a>
+            </div>
           )}
         </div>
       </div>

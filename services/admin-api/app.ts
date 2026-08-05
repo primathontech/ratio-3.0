@@ -382,7 +382,9 @@ export function createApp(
   // Who am I — also surfaces the caller's Clerk id (for PLATFORM_ADMIN_IDS setup).
   app.get('/me', (c) => {
     const userId = c.get('userId');
-    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId) });
+    // isLocal (RATIO_LOCAL) lets the SPA show dev-only affordances — e.g. a local storefront link
+    // via the edge's ?store=<id> override — driven by the one run-environment flag, not a guess.
+    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId), isLocal });
   });
 
   // Commerce change webhook (gokwik → cache invalidation). Public + HMAC-verified. Maps the event

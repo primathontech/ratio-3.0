@@ -218,6 +218,9 @@ test('GET /me reports platform-admin status', async () => {
       .isPlatformAdmin,
     false
   );
+  // isLocal (RATIO_LOCAL) is surfaced so the SPA can show dev-only affordances (local storefront link)
+  const me = (await (await call('GET', '/me', bob)).json()) as { isLocal: boolean };
+  assert.strictEqual(typeof me.isLocal, 'boolean');
 });
 
 test('a non-member cannot connect a domain (403)', async () => {
