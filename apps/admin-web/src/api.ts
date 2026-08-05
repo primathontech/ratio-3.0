@@ -36,10 +36,17 @@ export interface PbSectionDef {
   settings: PbSettingDef[];
   blocks: string[];
 }
+export interface PbBlock {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+  version?: number;
+}
 export interface PbSection {
   id: string;
   type: string;
   data: Record<string, unknown>;
+  blocks?: PbBlock[];
   version?: number;
 }
 export interface PbDoc {
@@ -52,6 +59,12 @@ export interface PbState {
   draft: PbDoc | null;
   live: PbDoc | null;
   revision: number;
+  hasDraft: boolean;
+}
+export interface PbPageMeta {
+  path: string;
+  revision: number;
+  published: boolean;
   hasDraft: boolean;
 }
 
@@ -217,6 +230,10 @@ export function createApi(
     pbCatalog: () =>
       req<Record<string, unknown>>('GET', '/page-builder/catalog').then((d) =>
         pickArray<PbSectionDef>(d, 'sections')
+      ),
+    listPbPages: (id: string) =>
+      req<Record<string, unknown>>('GET', `/stores/${id}/page-builder/pages`).then((d) =>
+        pickArray<PbPageMeta>(d, 'pages')
       ),
     getPageBuilder: (id: string, path: string) =>
       req<PbState>('GET', `/stores/${id}/page-builder?path=${encodeURIComponent(path)}`),

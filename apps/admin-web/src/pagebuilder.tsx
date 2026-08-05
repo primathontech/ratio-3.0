@@ -1,12 +1,20 @@
-// Page-builder editor: author a section/block PageDoc (ADR-013), save a draft, publish it live.
+// Page-builder editor: author section/block PageDocs (ADR-013), save a draft, publish live.
 // Forms are generated from the section catalog the API returns, so adding a first-party section
-// server-side surfaces here with no client change. v1 edits the home page ('/') and flat sections.
+// server-side surfaces here with no client change. Supports multiple pages per store and nested
+// child blocks for sections that accept them (Shopify-shaped, one nesting level).
 import { useCallback, useEffect, useState } from 'react';
-import type { Api, PbSectionDef, PbSettingDef, PbSection, PbDoc, Store } from './api';
+import type {
+  Api,
+  PbSectionDef,
+  PbSettingDef,
+  PbSection,
+  PbBlock,
+  PbDoc,
+  PbPageMeta,
+  Store,
+} from './api';
 import { ApiError } from './api';
 import { Icon, Spinner, Badge, useToast } from './ui';
-
-const PATH = '/';
 
 function getPath(o: unknown, key: string): unknown {
   return key.split('.').reduce<unknown>((a, k) => {
@@ -27,6 +35,15 @@ function setPath(o: Record<string, unknown>, key: string, val: unknown): Record<
 
 let idSeq = 0;
 const newId = (type: string) => `${type}-${Date.now().toString(36)}-${idSeq++}`;
+const blankDoc = (path: string): PbDoc => ({ path, title: '', sections: [] });
+
+function move<T>(arr: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir;
+  if (j < 0 || j >= arr.length) return arr;
+  const next = [...arr];
+  [next[i], next[j]] = [next[j], next[i]];
+  return next;
+}
 
 function SettingInput({
   def,
@@ -111,9 +128,126 @@ function SettingInput({
   );
 }
 
+function SettingsForm({
+  settings,
+  data,
+  onChange,
+}: {
+  settings: PbSettingDef[];
+  data: Record<string, unknown>;
+  onChange: (data: Record<string, unknown>) => void;
+}) {
+  if (settings.length === 0) return <p className="muted">No editable fields.</p>;
+  return (
+    <>
+      {settings.map((s) => (
+        <SettingInput
+          key={s.key}
+          def={s}
+          value={getPath(data, s.key)}
+          onChange={(v) => onChange(setPath(data, s.key, v))}
+        />
+      ))}
+    </>
+  );
+}
+
+// Child-block editor for sections that accept blocks (e.g. slideshow → slide).
+function BlocksEditor({
+  section,
+  def,
+  defOf,
+  onChange,
+}: {
+  section: PbSection;
+  def: PbSectionDef;
+  defOf: (type: string) => PbSectionDef | undefined;
+  onChange: (blocks: PbBlock[]) => void;
+}) {
+  const blocks = (section.blocks as PbBlock[] | undefined) ?? [];
+  const [addType, setAddType] = useState('');
+  return (
+    <div style={{ marginTop: 10, borderTop: '1px solid var(--border, #ddd)', paddingTop: 10 }}>
+      <span className="muted" style={{ fontSize: 12, fontWeight: 600 }}>
+        Blocks
+      </span>
+      {blocks.map((b, i) => (
+        <div
+          key={b.id}
+          className="card"
+          style={{ padding: 10, margin: '8px 0', background: 'var(--bg-subtle, #fafafa)' }}
+        >
+          <div className="pane-head" style={{ marginBottom: 6 }}>
+            <span className="mono" style={{ fontSize: 12, textTransform: 'capitalize' }}>
+              {b.type}
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={i === 0}
+                onClick={() => onChange(move(blocks, i, -1))}
+                aria-label="Move block up"
+              >
+                ↑
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={i === blocks.length - 1}
+                onClick={() => onChange(move(blocks, i, 1))}
+                aria-label="Move block down"
+              >
+                ↓
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => onChange(blocks.filter((_, j) => j !== i))}
+                aria-label="Delete block"
+              >
+                <Icon.trash size={13} />
+              </button>
+            </div>
+          </div>
+          <SettingsForm
+            settings={defOf(b.type)?.settings ?? []}
+            data={b.data}
+            onChange={(data) => onChange(blocks.map((x, j) => (j === i ? { ...x, data } : x)))}
+          />
+        </div>
+      ))}
+      <div className="row" style={{ marginTop: 6, alignItems: 'flex-end', gap: 8 }}>
+        <select
+          className="input"
+          value={addType}
+          onChange={(e) => setAddType(e.target.value)}
+          aria-label="Block type"
+        >
+          <option value="">Add a block…</option>
+          {def.blocks.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={!addType}
+          onClick={() => {
+            if (!addType) return;
+            onChange([...blocks, { id: newId(addType), type: addType, data: {} }]);
+            setAddType('');
+          }}
+        >
+          <Icon.plus size={13} /> Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SectionCard({
   section,
   def,
+  defOf,
   index,
   count,
   onChange,
@@ -122,9 +256,10 @@ function SectionCard({
 }: {
   section: PbSection;
   def: PbSectionDef | undefined;
+  defOf: (type: string) => PbSectionDef | undefined;
   index: number;
   count: number;
-  onChange: (data: Record<string, unknown>) => void;
+  onChange: (s: PbSection) => void;
   onMove: (dir: -1 | 1) => void;
   onDelete: () => void;
 }) {
@@ -156,16 +291,25 @@ function SectionCard({
           </button>
         </div>
       </div>
-      {!def && <p className="muted">Unknown section type — not in the catalog.</p>}
-      {def?.settings.length === 0 && <p className="muted">No editable fields.</p>}
-      {def?.settings.map((s) => (
-        <SettingInput
-          key={s.key}
-          def={s}
-          value={getPath(section.data, s.key)}
-          onChange={(v) => onChange(setPath(section.data, s.key, v))}
-        />
-      ))}
+      {!def ? (
+        <p className="muted">Unknown section type — not in the catalog.</p>
+      ) : (
+        <>
+          <SettingsForm
+            settings={def.settings}
+            data={section.data}
+            onChange={(data) => onChange({ ...section, data })}
+          />
+          {def.blocks.length > 0 && (
+            <BlocksEditor
+              section={section}
+              def={def}
+              defOf={defOf}
+              onChange={(blocks) => onChange({ ...section, blocks } as PbSection)}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -173,36 +317,67 @@ function SectionCard({
 export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
   const toast = useToast();
   const [catalog, setCatalog] = useState<PbSectionDef[] | null>(null);
+  const [pages, setPages] = useState<PbPageMeta[]>([]);
+  const [path, setPath] = useState('/');
   const [doc, setDoc] = useState<PbDoc | null>(null);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const [addType, setAddType] = useState('');
+  const [newPath, setNewPath] = useState('');
 
-  const load = useCallback(async () => {
-    const [cat, state] = await Promise.all([api.pbCatalog(), api.getPageBuilder(store.id, PATH)]);
-    setCatalog(cat);
-    setRevision(state.revision);
-    setDoc(state.draft ?? state.live ?? { path: PATH, title: store.name, sections: [] });
-  }, [api, store.id, store.name]);
+  const err = useCallback(
+    (e: unknown, fallback: string) => toast(e instanceof ApiError ? e.message : fallback, 'error'),
+    [toast]
+  );
+
+  const loadPages = useCallback(() => {
+    api
+      .listPbPages(store.id)
+      .then(setPages)
+      .catch((e) => err(e, 'Failed to list pages'));
+  }, [api, store.id, err]);
+
+  const loadDoc = useCallback(
+    async (p: string) => {
+      const state = await api.getPageBuilder(store.id, p);
+      setRevision(state.revision);
+      setDoc(state.draft ?? state.live ?? blankDoc(p));
+    },
+    [api, store.id]
+  );
 
   useEffect(() => {
-    load().catch((e) => toast(e instanceof ApiError ? e.message : 'Failed to load', 'error'));
-  }, [load, toast]);
+    api
+      .pbCatalog()
+      .then(setCatalog)
+      .catch((e) => err(e, 'Failed to load catalog'));
+    loadPages();
+    loadDoc('/').catch((e) => err(e, 'Failed to load page'));
+  }, [api, loadPages, loadDoc, err]);
 
-  const defOf = (type: string) => catalog?.find((c) => c.type === type);
+  const defOf = useCallback((type: string) => catalog?.find((c) => c.type === type), [catalog]);
   const sectionTypes = (catalog ?? []).filter((c) => c.kind === 'section');
 
-  function patchSection(i: number, data: Record<string, unknown>) {
-    if (!doc) return;
-    setDoc({ ...doc, sections: doc.sections.map((s, j) => (j === i ? { ...s, data } : s)) });
+  async function selectPage(p: string) {
+    if (p === path) return;
+    setPath(p);
+    setDoc(null);
+    await loadDoc(p).catch((e) => err(e, 'Failed to load page'));
   }
-  function moveSection(i: number, dir: -1 | 1) {
+  function createPage() {
+    const p = newPath.trim();
+    if (!p.startsWith('/')) return toast('Path must start with /', 'error');
+    if (pages.some((x) => x.path === p) || p === path)
+      return toast('That page already exists', 'error');
+    setNewPath('');
+    setPath(p);
+    setRevision(0);
+    setDoc(blankDoc(p));
+  }
+
+  function patchSection(i: number, s: PbSection) {
     if (!doc) return;
-    const next = [...doc.sections];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    setDoc({ ...doc, sections: next });
+    setDoc({ ...doc, sections: doc.sections.map((x, j) => (j === i ? s : x)) });
   }
   function addSection() {
     if (!doc || !addType) return;
@@ -219,45 +394,85 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
     try {
       await api.savePbDraft(store.id, doc);
       toast('Draft saved', 'ok');
+      loadPages();
       return true;
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : 'Save failed';
-      toast(msg, 'error');
+      err(e, 'Save failed');
       return false;
     } finally {
       setBusy(false);
     }
   }
   async function publish() {
-    if (!(await saveDraft())) return; // publish the exact thing on screen
+    if (!(await saveDraft())) return; // publish exactly what's on screen
     setBusy(true);
     try {
-      const res = await api.publishPb(store.id, PATH);
+      const res = await api.publishPb(store.id, path);
       setRevision(res.revision);
-      toast(`Published (revision ${res.revision})`, 'ok');
+      toast(`Published ${path} (revision ${res.revision})`, 'ok');
+      loadPages();
     } catch (e) {
-      toast(e instanceof ApiError ? e.message : 'Publish failed', 'error');
+      err(e, 'Publish failed');
     } finally {
       setBusy(false);
     }
   }
 
+  const knownPaths = pages.map((p) => p.path);
+  const isNewPage = !knownPaths.includes(path);
+
   return (
     <div className="card pane" style={{ marginBottom: 18 }}>
       <div className="pane-head">
         <h2>
-          Page builder <Badge accent>live rev {revision}</Badge>
+          Page builder{' '}
+          <Badge accent>
+            {path} · rev {revision}
+          </Badge>
         </h2>
         {store.host && (
           <a
             className="btn btn-ghost btn-sm"
-            href={`http://${store.host}:8080`}
+            href={`http://${store.host}:8080${path}`}
             target="_blank"
             rel="noreferrer"
           >
-            View storefront <Icon.external size={12} />
+            View <Icon.external size={12} />
           </a>
         )}
+      </div>
+
+      {/* page switcher */}
+      <nav className="pagelist" aria-label="Page-builder pages" style={{ marginBottom: 10 }}>
+        {pages.map((p) => (
+          <button
+            key={p.path}
+            className={p.path === path ? 'active' : ''}
+            aria-current={p.path === path ? 'true' : undefined}
+            onClick={() => selectPage(p.path)}
+          >
+            <span className="mono">{p.path}</span>
+            <Badge>{p.published ? `rev ${p.revision}` : 'draft'}</Badge>
+          </button>
+        ))}
+        {isNewPage && (
+          <button className="active" aria-current="true">
+            <span className="mono">{path}</span>
+            <Badge>new</Badge>
+          </button>
+        )}
+      </nav>
+      <div className="row" style={{ marginBottom: 14, alignItems: 'flex-end', gap: 8 }}>
+        <input
+          className="input mono"
+          placeholder="/new-page"
+          value={newPath}
+          onChange={(e) => setNewPath(e.target.value)}
+          aria-label="New page path"
+        />
+        <button className="btn btn-ghost btn-sm" onClick={createPage} disabled={!newPath.trim()}>
+          <Icon.plus size={14} /> New page
+        </button>
       </div>
 
       {!doc || !catalog ? (
@@ -287,10 +502,11 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
               key={s.id}
               section={s}
               def={defOf(s.type)}
+              defOf={defOf}
               index={i}
               count={doc.sections.length}
-              onChange={(data) => patchSection(i, data)}
-              onMove={(dir) => moveSection(i, dir)}
+              onChange={(ns) => patchSection(i, ns)}
+              onMove={(dir) => setDoc({ ...doc, sections: move(doc.sections, i, dir) })}
               onDelete={() => setDoc({ ...doc, sections: doc.sections.filter((_, j) => j !== i) })}
             />
           ))}
