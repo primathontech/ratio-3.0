@@ -89,9 +89,9 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
   ).catch(() => {});
 }
 
-// Purge a set of surrogate tags at the local dev edge (best-effort, RATIO_LOCAL-gated). Used by
-// page-builder publish AND the commerce webhook. Prod tag-purge (Cloudflare/Akamai) is separate
-// wiring; the publish transaction records a durable outbox intent regardless, so nothing is stranded.
+// Purge a set of surrogate tags at the LOCAL dev edge (best-effort, RATIO_LOCAL-gated). The dev
+// edge-sim indexes by tag; the deployed Cloudflare Worker does not (it 404s /__), so prod purge goes
+// by URL via purgeStoreUrls below. Used by page-builder publish, theme-save, AND the commerce webhook.
 async function purgeEdgeTags(tags: string[]): Promise<void> {
   if (!isLocal || tags.length === 0) return;
   const port = process.env.EDGE_PORT || '8080';
@@ -101,6 +101,19 @@ async function purgeEdgeTags(tags: string[]): Promise<void> {
       headers: { 'x-admin-secret': secret },
     }).catch(() => {});
   }
+}
+
+// Prod edge purge BY URL (Cloudflare, plan-agnostic — Cache-Tag purge is Enterprise-only, so we
+// purge the concrete URLs we know instead). Returns true/false when it ran, or null when there's no
+// CF config (local dev — the dev edge-sim is purged separately via purgeEdgeTags). The caller RETURNS
+// this so a failed purge is VISIBLE to the operator instead of being silently swallowed. Fine-grained
+// product/collection purge (the webhook's prod:*/col:*) needs a tag→URL index and is deferred.
+async function purgeStoreUrls(id: string, paths: string[]): Promise<boolean | null> {
+  const cfg = cfConfig();
+  if (!cfg) return null;
+  const urls = storeCacheUrls(await listDomains(id), paths);
+  if (urls.length === 0) return null;
+  return purgeUrls(cfg, urls).catch(() => false);
 }
 
 // Page-builder authoring (draft -> publish, D4): publish purges by the EXACT surrogate tag the
@@ -611,9 +624,15 @@ export function createApp(
       return c.json({ error: e instanceof Error ? e.message : 'invalid theme' }, 400);
     }
     await forTenant(id).setTheme(theme);
-    await purgeEdgeTags([tenantTag(id)]);
+    await purgeEdgeTags([tenantTag(id)]); // local dev edge-sim (by tag)
+    // Prod: theme is baked into every page's shell, so purge all the store's page URLs.
+    const pages = await pbStore.listPages(id);
+    const edgePurged = await purgeStoreUrls(
+      id,
+      pages.map((p) => p.path)
+    );
     c.set('auditTenant', id);
-    return c.json({ ok: true, theme });
+    return c.json({ ok: true, theme, ...(edgePurged !== null && { edgePurged }) });
   });
 
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
@@ -660,8 +679,10 @@ export function createApp(
     const path = ((await c.req.json().catch(() => ({}))) as { path?: string }).path || '/';
     const res = await pageBuilder.publish(id, path);
     if (!res) return c.json({ error: 'no draft to publish' }, 404);
+    // pageBuilder.publish already purged the local edge by tag; also purge the prod CF edge by URL.
+    const edgePurged = await purgeStoreUrls(id, [path]);
     c.set('auditTenant', id);
-    return c.json({ ok: true, revision: res.revision });
+    return c.json({ ok: true, revision: res.revision, ...(edgePurged !== null && { edgePurged }) });
   });
 
   app.get('/stores/:id/page', requireMembership, async (c) => {

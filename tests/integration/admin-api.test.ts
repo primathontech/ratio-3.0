@@ -130,6 +130,9 @@ test('PUT /stores/:id/theme validates the scales, persists, and is membership-ga
     container: 'wide',
   });
   assert.strictEqual(ok.status, 200);
+  // No CF configured in tests → the response OMITS edgePurged (never a silent false); prod purge is
+  // by URL via purgeStoreUrls, covered at the purgeUrls level in cache-purge.test.ts.
+  assert.ok(!('edgePurged' in (await ok.json())), 'edgePurged absent without CF config');
   const persisted = (await forTenant(ID).getTenant())!.theme;
   assert.strictEqual(persisted.color, '#e11d48');
   assert.strictEqual(persisted.bodyFont, 'serif');

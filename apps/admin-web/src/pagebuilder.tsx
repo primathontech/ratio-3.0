@@ -488,6 +488,8 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
       const res = await api.publishPb(store.id, path);
       setRevision(res.revision);
       toast(`Published ${path} (revision ${res.revision})`, 'ok');
+      if (res.edgePurged === false)
+        toast('Published, but the edge cache purge failed — it may serve stale briefly', 'error');
       loadPages();
     } catch (e) {
       err(e, 'Publish failed');

@@ -89,6 +89,8 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
       const saved = await api.saveTheme(store.id, theme);
       setTheme(saved.theme);
       toast('Theme saved', 'ok');
+      if (saved.edgePurged === false)
+        toast('Saved, but the edge cache purge failed — it may serve stale briefly', 'error');
     } catch (e) {
       err(e, 'Save failed');
     } finally {
