@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
@@ -80,25 +80,58 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
   ).catch(() => {});
 }
 
-// Page-builder authoring (draft -> publish, D4). The publish path purges by the EXACT surrogate
-// tag the origin stamps on a page-builder response, so a publish invalidates precisely that page.
-// Prod tag-purge (Cloudflare/Akamai) is a separate wiring; here it's local-only + the publish
-// transaction records a durable outbox intent regardless, so nothing is stranded.
+// Purge a set of surrogate tags at the local dev edge (best-effort, RATIO_LOCAL-gated). Used by
+// page-builder publish AND the commerce webhook. Prod tag-purge (Cloudflare/Akamai) is separate
+// wiring; the publish transaction records a durable outbox intent regardless, so nothing is stranded.
+async function purgeEdgeTags(tags: string[]): Promise<void> {
+  if (!isLocal || tags.length === 0) return;
+  const port = process.env.EDGE_PORT || '8080';
+  const secret = process.env.EDGE_SECRET || 'private-link-secret';
+  for (const tag of tags) {
+    await fetch(`http://127.0.0.1:${port}/__admin/purge?key=${encodeURIComponent(tag)}`, {
+      headers: { 'x-admin-secret': secret },
+    }).catch(() => {});
+  }
+}
+
+// Page-builder authoring (draft -> publish, D4): publish purges by the EXACT surrogate tag the
+// origin stamps on a page-builder response, so it invalidates precisely that page.
 const pbStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
-const pbPurge: PurgeLike = {
-  async invalidateByTags(tags) {
-    if (!isLocal) return;
-    const port = process.env.EDGE_PORT || '8080';
-    const secret = process.env.EDGE_SECRET || 'private-link-secret';
-    for (const tag of tags) {
-      await fetch(`http://127.0.0.1:${port}/__admin/purge?key=${encodeURIComponent(tag)}`, {
-        headers: { 'x-admin-secret': secret },
-      }).catch(() => {});
-    }
-  },
-};
+const pbPurge: PurgeLike = { invalidateByTags: (tags) => purgeEdgeTags(tags) };
 const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
+
+// Commerce webhook: map a gokwik change event → the surrogate tags the origin stamps on rendered
+// pages (prod:<id> for products, col:<handle> for collections), so a product/price/collection edit
+// purges exactly the cached storefront pages that showed that data.
+function tagsForCommerceEvent(type: string, data: Record<string, unknown>): string[] {
+  const ids = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
+  switch (type) {
+    case 'product.updated':
+    case 'product.created':
+    case 'product.deleted':
+      return data.productId != null ? [`prod:${data.productId}`] : [];
+    case 'products.bulk_updated':
+    case 'inventory.updated':
+    case 'pricing.updated':
+      return ids(data.productIds).map((id) => `prod:${id}`);
+    case 'collection.updated':
+    case 'collection.created':
+    case 'collection.deleted':
+      return data.handle ? [`col:${data.handle}`] : [];
+    default:
+      return [];
+  }
+}
+
+// HMAC-SHA256 over the RAW body (re-serializing would change the bytes the sender signed).
+function verifyWebhookSignature(rawBody: string, signature: string | undefined, secret: string) {
+  if (!signature) return false;
+  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 
 // The section catalog the editor renders forms from. Serializable metadata only (type + kind +
 // typed settings + accepted child block types) — never the render templates.
@@ -235,10 +268,17 @@ export function createApp(
     })
   );
 
-  app.use('*', authMiddleware(verify, ['/health', '/ready', '/', '/openapi.json']));
+  // /webhooks/commerce is public (gokwik calls it) — verified by HMAC signature, not Clerk.
+  app.use(
+    '*',
+    authMiddleware(verify, ['/health', '/ready', '/', '/openapi.json', '/webhooks/commerce'])
+  );
   // Reject cross-site cookie-authenticated mutations (I-1). After auth so a bad session 401s
   // first; before mutations run.
-  app.use('*', csrfGuard(origins));
+  // The commerce webhook is server-to-server (no cookie, no Origin) and HMAC-authenticated, so the
+  // cookie-CSRF guard doesn't apply — exempt it or it 403s on the missing Origin.
+  const csrf = csrfGuard(origins);
+  app.use('*', (c, next) => (c.req.path === '/webhooks/commerce' ? next() : csrf(c, next)));
   // Throttle per authenticated user (after auth so userId is known; public paths have none
   // and pass through). /assistant draws from its own tighter bucket.
   app.use('*', async (c, next) => {
@@ -291,6 +331,27 @@ export function createApp(
   app.get('/me', (c) => {
     const userId = c.get('userId');
     return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId) });
+  });
+
+  // Commerce change webhook (gokwik → cache invalidation). Public + HMAC-verified. Maps the event
+  // to the surrogate tags the origin stamped (prod:<id> / col:<handle>) and purges them, so a
+  // product/price/collection change invalidates exactly the cached storefront pages that showed it.
+  app.post('/webhooks/commerce', async (c) => {
+    const raw = await c.req.text();
+    const secret = process.env.WEBHOOK_SECRET;
+    if (secret && !verifyWebhookSignature(raw, c.req.header('x-webhook-signature'), secret)) {
+      return c.json({ error: 'invalid signature' }, 401);
+    }
+    let body: { type?: string; data?: Record<string, unknown> };
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      return c.json({ error: 'invalid json' }, 400);
+    }
+    if (!body.type) return c.json({ error: 'type is required' }, 400);
+    const tags = tagsForCommerceEvent(body.type, body.data ?? {});
+    await purgeEdgeTags(tags);
+    return c.json({ ok: true, type: body.type, purged: tags });
   });
 
   // The stores the signed-in user may manage (drives the admin portal's home screen).
