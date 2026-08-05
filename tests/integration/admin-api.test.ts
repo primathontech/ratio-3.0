@@ -97,6 +97,22 @@ test('POST /stores creates the store and makes the caller its owner', async () =
   assert.strictEqual((await getMembership(ALICE, ID))!.role, 'owner');
 });
 
+test('GET /page-builder/catalog marks the data-backed section with its binding', async () => {
+  const { sections } = (await (await call('GET', '/page-builder/catalog', alice)).json()) as {
+    sections: { type: string; dataBinding?: string | null }[];
+  };
+  const grid = sections.find((s) => s.type === 'productGrid');
+  assert.strictEqual(grid?.dataBinding, 'grid');
+  assert.strictEqual(sections.find((s) => s.type === 'hero')?.dataBinding, null);
+});
+
+test('GET /stores/:id/collections is membership-gated; empty when no backend configured', async () => {
+  assert.strictEqual((await call('GET', `/stores/${ID}/collections`, bob)).status, 403);
+  const r = await call('GET', `/stores/${ID}/collections`, alice);
+  assert.strictEqual(r.status, 200);
+  assert.deepStrictEqual(await r.json(), { collections: [] });
+});
+
 test('GET /stores lists only the caller’s own stores', async () => {
   const mine = await (await call('GET', '/stores', alice)).json();
   assert.ok((mine as { stores: { id: string }[] }).stores.some((s) => s.id === ID));

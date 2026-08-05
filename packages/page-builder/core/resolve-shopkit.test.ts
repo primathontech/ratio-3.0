@@ -84,13 +84,20 @@ test('ShopkitResolver passes the PRODUCT response through as the canonical produ
   assert.ok(tags.includes('prod:p1'));
 });
 
-test('commerceResolverFromEnv: null without platform URLs, a resolver with them', () => {
+const ALL_URLS = {
+  COMMERCE_PRODUCT_API_URL: 'http://x',
+  COMMERCE_CART_API_URL: 'http://x',
+  COMMERCE_ORDER_API_URL: 'http://x',
+};
+
+test('commerceResolverFromEnv: null without all platform URLs, a resolver with them', () => {
   assert.strictEqual(commerceResolverFromEnv({}), null);
-  assert.ok(commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://x' }));
+  assert.strictEqual(commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://x' }), null);
+  assert.ok(commerceResolverFromEnv(ALL_URLS));
 });
 
 test('per-tenant: a tenant with no commerce config gets no client → empty data (no crash/fetch)', async () => {
-  const resolver = commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://unused' })!;
+  const resolver = commerceResolverFromEnv(ALL_URLS)!;
   const out = await resolver.fetch(
     { type: DATA_SOURCE_TYPES.COLLECTION_BY_HANDLES, params: { handles: ['summer'] } },
     { tenantId: 't', commerce: null } // not connected to the backend
