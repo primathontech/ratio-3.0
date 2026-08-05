@@ -9,9 +9,15 @@ import type { PageDoc, DataSource } from './doc';
 import { DATA_SOURCE_TYPES } from './doc';
 import type { SectionRegistry } from '@ratio/page-builder-registry/registry';
 
+// Per-tenant data-layer config (from the tenant record). storeId defaults to merchantId.
+export interface TenantCommerce {
+  merchantId: string;
+  storeId?: string;
+}
 export interface ResolveContext {
   tenantId: string;
   routeParams?: Record<string, string>; // from the router, e.g. { handle: 'summer' }
+  commerce?: TenantCommerce | null; // the merchant's data-layer identifiers (null = not connected)
 }
 
 export interface ResolvedSource {

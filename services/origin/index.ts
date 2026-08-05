@@ -130,6 +130,7 @@ app.all('*', async (c) => {
       const { doc: resolvedDoc, tags: dataTags } = await resolvePage(doc, pbRegistry, resolver, {
         tenantId: tenantId as string,
         routeParams: matched?.params,
+        commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
       });
       const composed = await composePage(resolvedDoc, pbRegistry, { accent: tenant.theme?.color });
       c.header('x-tenant', tenantId as string);

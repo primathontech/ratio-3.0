@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { ShopkitResolver } from './resolve-shopkit';
+import { ShopkitResolver, commerceResolverFromEnv } from './resolve-shopkit';
 import { DATA_SOURCE_TYPES } from './doc';
 import type { ICommerceClient } from '@shopkit/data-layer';
 
@@ -85,4 +85,18 @@ test('ShopkitResolver maps a PRODUCT response into product + price bindings (pai
   assert.strictEqual(v.product.sku, 'shoe-a');
   assert.strictEqual(v.price.amount, 499); // 49900 paise → 499 rupees
   assert.ok(tags.includes('prod:p1'));
+});
+
+test('commerceResolverFromEnv: null without platform URLs, a resolver with them', () => {
+  assert.strictEqual(commerceResolverFromEnv({}), null);
+  assert.ok(commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://x' }));
+});
+
+test('per-tenant: a tenant with no commerce config gets no client → empty data (no crash/fetch)', async () => {
+  const resolver = commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://unused' })!;
+  const out = await resolver.fetch(
+    { type: DATA_SOURCE_TYPES.COLLECTION_BY_HANDLES, params: { handles: ['summer'] } },
+    { tenantId: 't', commerce: null } // not connected to the backend
+  );
+  assert.deepStrictEqual(out, { value: {}, tags: [] });
 });

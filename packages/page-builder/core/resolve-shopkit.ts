@@ -51,10 +51,11 @@ function productList(data: unknown): ApiProduct[] {
 }
 
 export class ShopkitResolver implements BindingResolver {
-  constructor(private clientFor: (ctx: ResolveContext) => ICommerceClient) {}
+  constructor(private clientFor: (ctx: ResolveContext) => ICommerceClient | null) {}
 
   async fetch(source: DataSource, ctx: ResolveContext): Promise<ResolvedSource> {
     const client = this.clientFor(ctx);
+    if (!client) return { value: {}, tags: [] }; // tenant not connected to the backend → no data
     const params = (source.params ?? {}) as Record<string, unknown>;
     const options = source.options as never;
 
@@ -106,46 +107,46 @@ export class ShopkitResolver implements BindingResolver {
   }
 }
 
-// Build a per-tenant custom CommerceClient. Service base URLs are platform config; merchantId/storeId
-// identify the store. Defaults storeId to our tenant id — CONFIRM this matches the backend's store
-// identifier; if not, resolve it from the tenant record instead.
-export interface CustomBackendConfig {
+// Platform-global service base URLs (one backend for every merchant) — env, not per-tenant.
+export interface CustomBackendUrls {
   productApiBaseUrl: string;
   cartApiBaseUrl?: string;
   orderApiBaseUrl?: string;
-  merchantId: string;
-  storeIdFor?: (ctx: ResolveContext) => string;
-}
-export function customCommerceResolver(cfg: CustomBackendConfig): ShopkitResolver {
-  const storeIdFor = cfg.storeIdFor ?? ((ctx) => ctx.tenantId);
-  return new ShopkitResolver((ctx) =>
-    createCommerceClient({
-      type: 'custom',
-      config: {
-        merchantId: cfg.merchantId,
-        storeId: storeIdFor(ctx),
-        services: {
-          product: { apiBaseUrl: cfg.productApiBaseUrl },
-          cart: { apiBaseUrl: cfg.cartApiBaseUrl ?? cfg.productApiBaseUrl },
-          order: { apiBaseUrl: cfg.orderApiBaseUrl ?? cfg.productApiBaseUrl },
-        },
-      } as ICustomConfig,
-    })
-  );
 }
 
-// Origin factory: use the real resolver when the backend is configured, else null (caller falls
-// back to the stub, so local dev without a backend still renders).
+// Build a resolver whose client is constructed PER-TENANT: platform URLs (arg) + the tenant's own
+// merchantId/storeId (ctx.commerce, from the DB). A tenant with no commerce config → no client →
+// the section renders empty (no crash).
+export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver {
+  return new ShopkitResolver((ctx) => {
+    const merchantId = ctx.commerce?.merchantId;
+    if (!merchantId) return null;
+    const storeId = ctx.commerce?.storeId ?? merchantId; // storeId defaults to merchantId for now
+    return createCommerceClient({
+      type: 'custom',
+      config: {
+        merchantId,
+        storeId,
+        services: {
+          product: { apiBaseUrl: urls.productApiBaseUrl },
+          cart: { apiBaseUrl: urls.cartApiBaseUrl ?? urls.productApiBaseUrl },
+          order: { apiBaseUrl: urls.orderApiBaseUrl ?? urls.productApiBaseUrl },
+        },
+      } as ICustomConfig,
+    });
+  });
+}
+
+// Origin factory: real resolver when the platform URLs are configured, else null (caller falls back
+// to the stub, so local dev without a backend still renders). Per-merchant creds come from the DB.
 export function commerceResolverFromEnv(
   env: NodeJS.ProcessEnv = process.env
 ): ShopkitResolver | null {
   const productApiBaseUrl = env.COMMERCE_PRODUCT_API_URL;
-  const merchantId = env.COMMERCE_MERCHANT_ID;
-  if (!productApiBaseUrl || !merchantId) return null;
+  if (!productApiBaseUrl) return null;
   return customCommerceResolver({
     productApiBaseUrl,
     cartApiBaseUrl: env.COMMERCE_CART_API_URL,
     orderApiBaseUrl: env.COMMERCE_ORDER_API_URL,
-    merchantId,
   });
 }
