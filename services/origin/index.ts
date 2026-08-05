@@ -2,7 +2,6 @@ import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '@ratio/repo';
 import { pool } from '@ratio/shared/db';
-import { isLocal } from '@ratio/shared/env';
 import { normalizePage } from '@ratio/content-model';
 import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
@@ -38,14 +37,11 @@ const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
 
-// Page builder (Slice 1, flag-gated). When PAGE_BUILDER_ENABLED is on, a published PageDoc for
-// this path wins over the legacy routes table; otherwise the origin is unchanged. Always on in
-// local dev (RATIO_LOCAL) so the local loop exercises the real page-builder render path.
+// Page builder — the storefront renderer. A published PageDoc for the URL is served; the legacy
+// content-model route table (below) remains only as a fallback for URLs that have no PageDoc yet,
+// and is slated for removal once every store is on the page builder.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
-function pageBuilderEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.PAGE_BUILDER_ENABLED === 'true' || isLocal;
-}
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;
@@ -106,8 +102,9 @@ app.all('*', async (c) => {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
   }
-  // Page-builder render path (flag-gated). A published PageDoc wins over the legacy route.
-  if (pageBuilderEnabled()) {
+  // Page-builder render path — always the primary renderer. A published PageDoc wins; if the URL
+  // has none (exact or template), fall through to the legacy content-model route table below.
+  {
     const canon = canonicalPath(path);
     // Routing (ADR-013): the router labels the URL (home / page / collection / product) and picks
     // the template. A custom doc AT this exact URL still wins (override); otherwise a shared

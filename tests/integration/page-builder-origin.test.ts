@@ -1,11 +1,9 @@
 // Slice-1 walking skeleton, END TO END: save a Rich Text draft, publish it, and prove the
 // ORIGIN serves the composed HTML for that path (flag-gated), tagged with exactly what publish
 // purges. In-process via app.fetch(), real Postgres. Only the external purge service is faked.
-// Run: PAGE_BUILDER_ENABLED=true node --import tsx --test test/page-builder-origin.test.ts
-
+// The page builder is the origin's storefront renderer (no flag).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-process.env.PAGE_BUILDER_ENABLED = 'true';
 import { app } from '../../services/origin/index';
 import { pool } from '@ratio/shared/db';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
