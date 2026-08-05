@@ -199,8 +199,13 @@ export function createApi(
     me: () => req<{ userId: string; isPlatformAdmin: boolean }>('GET', '/me'),
     listStores: () =>
       req<Record<string, unknown>>('GET', '/stores').then((d) => pickArray<Store>(d, 'stores')),
-    createStore: (s: { id: string; name: string; host: string; color?: string }) =>
-      req<{ id: string; url: string }>('POST', '/stores', s),
+    createStore: (s: {
+      id: string;
+      name: string;
+      host: string;
+      color?: string;
+      merchantId?: string;
+    }) => req<{ id: string; url: string }>('POST', '/stores', s),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
     listPages: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>

@@ -306,14 +306,19 @@ export function createApp(
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
   app.post('/stores', denyNarrowedScope, async (c) => {
-    const { id, name, host, color } = (await c.req.json().catch(() => ({}))) as {
+    const { id, name, host, color, merchantId } = (await c.req.json().catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
+      merchantId?: string;
     };
     if (!id || !name || !host) {
       return c.json({ error: 'id, name and host are required' }, 400);
+    }
+    // The gokwik merchant id (data-layer). Optional at create; identifies the store's catalog.
+    if (merchantId !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(merchantId)) {
+      return c.json({ error: 'merchantId must be 1–64 chars: letters, digits, _ or -' }, 400);
     }
     // The id becomes the tenant_id — it flows into routing, cache-purge URLs, and agent-token
     // scopes (where '*' is the wildcard sentinel). Constrain it to a safe slug at the boundary.
@@ -347,6 +352,7 @@ export function createApp(
       host: lcHost,
       color,
       ownerUserId: c.get('userId'),
+      merchantId,
     });
     if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
