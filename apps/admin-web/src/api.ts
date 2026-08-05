@@ -231,7 +231,11 @@ export function createApi(
     getTheme: (id: string) =>
       req<{ theme: StoreTheme }>('GET', `/stores/${id}/theme`).then((d) => d.theme ?? {}),
     saveTheme: (id: string, theme: StoreTheme) =>
-      req<{ ok: boolean; theme: StoreTheme }>('PUT', `/stores/${id}/theme`, theme),
+      req<{ ok: boolean; theme: StoreTheme; edgePurged?: boolean }>(
+        'PUT',
+        `/stores/${id}/theme`,
+        theme
+      ),
     listPages: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>
         pickArray<PageSummary>(d, 'pages')
@@ -277,9 +281,11 @@ export function createApi(
     savePbDraft: (id: string, doc: PbDoc) =>
       req<{ ok: boolean; draft: PbDoc }>('PUT', `/stores/${id}/page-builder`, { doc }),
     publishPb: (id: string, path: string) =>
-      req<{ ok: boolean; revision: number }>('POST', `/stores/${id}/page-builder/publish`, {
-        path,
-      }),
+      req<{ ok: boolean; revision: number; edgePurged?: boolean }>(
+        'POST',
+        `/stores/${id}/page-builder/publish`,
+        { path }
+      ),
     assistant: (message: string, storeId?: string, idempotencyKey?: string) =>
       req<AssistantReply>(
         'POST',
