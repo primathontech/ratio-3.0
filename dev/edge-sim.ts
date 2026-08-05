@@ -1,6 +1,7 @@
 import http from 'http';
 import type { IncomingMessage, ServerResponse, IncomingHttpHeaders } from 'http';
 import { pool } from '@ratio/shared/db';
+import { storeOverrideAllowed } from '@ratio/edge-core';
 
 // The "edge / CDN" (Cloudflare on the real stack). Resolves host->tenant from the
 // domains table (short TTL cache), injects a trusted header over a private origin,
@@ -83,7 +84,10 @@ export const edge = http.createServer(async (req: IncomingMessage, res: ServerRe
     }
 
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
-    const tenantId = await resolveTenant(host);
+    // Dev-only store override (mirrors the CF worker): on localhost, ?store=<id> picks the tenant
+    // directly, so a store whose real domain doesn't resolve on this machine is still viewable.
+    const override = url.searchParams.get('store');
+    const tenantId = override && storeOverrideAllowed(host) ? override : await resolveTenant(host);
     if (!tenantId) {
       res.writeHead(404, { 'content-type': 'text/html' });
       return res.end('<h1>Store not found</h1><p>No store is configured for this domain.</p>');
