@@ -50,6 +50,25 @@ test('resolvePage injects collection products into the productGrid binding + emi
   assert.ok(tags.includes('col:summer'), 'collection tag from the interpolated handle');
 });
 
+test('resolvePage fills MULTIPLE bindings from one source (product PDP: product + price)', async () => {
+  const doc: PageDoc = {
+    path: '/products/:handle',
+    title: 'PDP',
+    dataSources: { main: { type: 'PRODUCT', params: { handle: '{{params.handle}}' } } },
+    sections: [{ id: 'p', type: 'product', dataSourceKey: 'main', data: {} }],
+  };
+  const { doc: out } = await resolvePage(doc, registry, resolver, {
+    tenantId: 't',
+    routeParams: { handle: 'shoe' },
+  });
+  const data = out.sections[0].data as {
+    product: { title: string };
+    price: { amount: number };
+  };
+  assert.match(data.product.title, /shoe/); // product binding filled
+  assert.strictEqual(data.price.amount, 999); // price binding filled too
+});
+
 test('the saved doc is not mutated — injection is render-only', async () => {
   const doc: PageDoc = {
     path: '/',

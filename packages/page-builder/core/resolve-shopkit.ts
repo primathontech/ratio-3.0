@@ -14,6 +14,7 @@ interface ApiProduct {
   id?: string | number;
   handle?: string;
   title?: string;
+  description?: string;
   price?: unknown; // paise
   image_url?: string;
   images?: { url: string; is_main?: boolean }[];
@@ -84,8 +85,20 @@ export class ShopkitResolver implements BindingResolver {
       }
       case DATA_SOURCE_TYPES.PRODUCT: {
         const res: IResponse = await client.getProduct(params as never, options);
-        const card = toCard((res.data ?? {}) as ApiProduct);
-        return { value: card, tags: [`prod:${card.id ?? params.handle}`] };
+        const p = (res.data ?? {}) as ApiProduct;
+        const price = paiseToRupees(p.variants?.[0]?.price?.amount ?? p.price);
+        // binding-keyed: fills both the product and price bindings of the PDP section
+        return {
+          value: {
+            product: {
+              title: p.title,
+              sku: p.handle ?? String(p.id ?? ''),
+              description: p.description,
+            },
+            price: { amount: price },
+          },
+          tags: [`prod:${p.id ?? params.handle}`],
+        };
       }
       default:
         return { value: {}, tags: [] };

@@ -68,11 +68,22 @@ export async function resolvePage(
   const sections = doc.sections.map((s) => {
     const key = s.dataSourceKey;
     if (!key || !(key in resolved)) return s;
-    // inject into the section's primary data binding (e.g. productGrid → 'grid' → grid.products)
-    const binding = registry.get(s.type, s.version)?.bindings?.[0]?.name;
-    if (!binding) return s;
-    const cur = (s.data[binding] as Record<string, unknown>) ?? {};
-    return { ...s, data: { ...s.data, [binding]: { ...cur, ...resolved[key].value } } };
+    const bindings = registry.get(s.type, s.version)?.bindings?.map((b) => b.name) ?? [];
+    if (bindings.length === 0) return s;
+    // Route each resolved key to a matching binding (e.g. { product, price } → product.*, price.*
+    // for a PDP). Keys that aren't a binding go into the PRIMARY one (e.g. { products } → grid).
+    const declared = new Set(bindings);
+    const data: Record<string, unknown> = { ...s.data };
+    const primaryPayload: Record<string, unknown> = {};
+    const mergeInto = (name: string, val: unknown) => {
+      data[name] = { ...((data[name] as Record<string, unknown>) ?? {}), ...(val as object) };
+    };
+    for (const [k, v] of Object.entries(resolved[key].value)) {
+      if (declared.has(k)) mergeInto(k, v);
+      else primaryPayload[k] = v;
+    }
+    if (Object.keys(primaryPayload).length) mergeInto(bindings[0], primaryPayload);
+    return { ...s, data };
   });
 
   return { doc: { ...doc, sections }, tags: [...new Set(tags)] };
@@ -114,8 +125,12 @@ export class StubResolver implements BindingResolver {
       }
       case DATA_SOURCE_TYPES.PRODUCT: {
         const handle = String(p.handle ?? 'demo');
+        // binding-keyed: fills BOTH the product and price bindings of the PDP section
         return {
-          value: { title: `Sample: ${handle}`, sku: handle, amount: 999, description: 'Stub.' },
+          value: {
+            product: { title: `Sample: ${handle}`, sku: handle, description: 'Stub product.' },
+            price: { amount: 999 },
+          },
           tags: [`prod:${handle}`],
         };
       }

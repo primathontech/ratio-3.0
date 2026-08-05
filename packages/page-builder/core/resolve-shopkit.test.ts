@@ -60,3 +60,29 @@ test('ShopkitResolver maps COLLECTION_BY_HANDLES → grid products (paise→rupe
   assert.ok(tags.includes('col:summer'), 'collection tag');
   assert.ok(tags.includes('prod:p1'), 'per-product tags for purge');
 });
+
+test('ShopkitResolver maps a PRODUCT response into product + price bindings (paise→rupees)', async () => {
+  const client = {
+    getProduct: async () => ({
+      success: true,
+      message: 'ok',
+      data: {
+        id: 'p1',
+        handle: 'shoe-a',
+        title: 'Shoe A',
+        description: 'A shoe.',
+        variants: [{ price: { amount: 49900 } }],
+      },
+    }),
+  } as unknown as ICommerceClient;
+  const resolver = new ShopkitResolver(() => client);
+  const { value, tags } = await resolver.fetch(
+    { type: DATA_SOURCE_TYPES.PRODUCT, params: { handle: 'shoe-a' } },
+    { tenantId: 't' }
+  );
+  const v = value as { product: { title: string; sku: string }; price: { amount: number } };
+  assert.strictEqual(v.product.title, 'Shoe A');
+  assert.strictEqual(v.product.sku, 'shoe-a');
+  assert.strictEqual(v.price.amount, 499); // 49900 paise → 499 rupees
+  assert.ok(tags.includes('prod:p1'));
+});
