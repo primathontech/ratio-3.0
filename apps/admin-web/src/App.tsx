@@ -380,7 +380,7 @@ function CreateStoreDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [f, setF] = useState({ id: '', name: '', host: '', color: '#4f46e5' });
+  const [f, setF] = useState({ name: '', host: '', color: '#4f46e5', merchantId: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
@@ -391,7 +391,7 @@ function CreateStoreDialog({
     setBusy(true);
     setErr(null);
     try {
-      await api.createStore(f);
+      await api.createStore({ ...f, merchantId: f.merchantId.trim() || undefined });
       onCreated();
     } catch (e) {
       setErr((e as Error).message);
@@ -404,26 +404,15 @@ function CreateStoreDialog({
     <Dialog title="Create a store" onClose={onClose}>
       <form onSubmit={submit}>
         <div className="body">
-          <div className="row">
-            <Field label="Store ID">
-              <input
-                className="input mono"
-                placeholder="t_acme"
-                value={f.id}
-                onChange={set('id')}
-                required
-              />
-            </Field>
-            <Field label="Name">
-              <input
-                className="input"
-                placeholder="Acme"
-                value={f.name}
-                onChange={set('name')}
-                required
-              />
-            </Field>
-          </div>
+          <Field label="Name">
+            <input
+              className="input"
+              placeholder="Acme"
+              value={f.name}
+              onChange={set('name')}
+              required
+            />
+          </Field>
           <Field label="Domain">
             <input
               className="input"
@@ -432,6 +421,18 @@ function CreateStoreDialog({
               onChange={set('host')}
               required
             />
+          </Field>
+          <Field label="Merchant ID (gokwik)">
+            <input
+              className="input mono"
+              placeholder="196jdfqy1aot"
+              value={f.merchantId}
+              onChange={set('merchantId')}
+            />
+            <span className="muted" style={{ fontSize: 11 }}>
+              connects live products from the commerce backend. Optional — leave blank for a store
+              with no catalogue yet.
+            </span>
           </Field>
           <Field label="Accent colour">
             <input

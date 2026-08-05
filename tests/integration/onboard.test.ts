@@ -14,6 +14,17 @@ async function cleanup() {
   await pool.query('DELETE FROM routes WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
+  // generated-id stores from the auto-id test (unknown ids). Capture them via their hosts, then
+  // delete children (routes/domains) before the tenant row so the domains FK isn't violated.
+  const { rows } = await pool.query<{ tenant_id: string }>(
+    "SELECT tenant_id FROM domains WHERE host LIKE 'autogen-%'"
+  );
+  const ids = rows.map((r) => r.tenant_id);
+  if (ids.length) {
+    await pool.query('DELETE FROM routes WHERE tenant_id = ANY($1)', [ids]);
+    await pool.query("DELETE FROM domains WHERE host LIKE 'autogen-%'");
+    await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [ids]);
+  }
 }
 before(cleanup);
 after(async () => {
@@ -60,4 +71,14 @@ test('re-onboard without merchantId preserves existing commerce (COALESCE)', asy
   await onboardStore({ id: ID, name: 'Onb', host: HOST, merchantId: 'gk_keep' });
   await onboardStore({ id: ID, name: 'Onb', host: HOST }); // no merchantId
   assert.deepStrictEqual((await forTenant(ID).getTenant())!.commerce, { merchantId: 'gk_keep' });
+});
+
+test('generates a unique t_<slug>_<hex> id when none is supplied, and never collides', async () => {
+  // Same name twice → same slug seed, but the random suffix + PK check keep the ids distinct.
+  const a = await onboardStore({ name: 'Auto Gen Shop', host: 'autogen-a.localhost' });
+  const b = await onboardStore({ name: 'Auto Gen Shop', host: 'autogen-b.localhost' });
+  assert.match(a.id, /^t_auto-gen-shop_[0-9a-f]{8}$/, 'readable slug + 8 hex suffix');
+  assert.notStrictEqual(a.id, b.id, 'two stores never share an id');
+  assert.ok(await forTenant(a.id).getTenant(), 'the generated store exists');
+  assert.ok(await forTenant(b.id).getTenant());
 });

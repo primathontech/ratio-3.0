@@ -97,6 +97,24 @@ test('POST /stores creates the store and makes the caller its owner', async () =
   assert.strictEqual((await getMembership(ALICE, ID))!.role, 'owner');
 });
 
+test('POST /stores with no id generates one server-side and still makes the caller owner', async () => {
+  const r = await call('POST', '/stores', alice, {
+    name: 'Auto',
+    host: 'auto-gen.localhost',
+    merchantId: 'gk_auto',
+  });
+  assert.strictEqual(r.status, 201);
+  const { id } = (await r.json()) as { id: string };
+  assert.match(id, /^t_auto_[0-9a-f]{8}$/, 'server-generated t_<slug>_<hex> id');
+  assert.strictEqual((await getMembership(ALICE, id))!.role, 'owner');
+  assert.deepStrictEqual((await forTenant(id).getTenant())!.commerce, { merchantId: 'gk_auto' });
+  // clean up this generated store (the file's fixed-id cleanup won't know its id)
+  for (const q of ['memberships', 'routes', 'domains']) {
+    await pool.query(`DELETE FROM ${q} WHERE tenant_id=$1`, [id]);
+  }
+  await pool.query('DELETE FROM tenants WHERE id=$1', [id]);
+});
+
 test('GET /page-builder/catalog marks the data-backed section with its binding', async () => {
   const { sections } = (await (await call('GET', '/page-builder/catalog', alice)).json()) as {
     sections: { type: string; dataBinding?: string | null }[];
