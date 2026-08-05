@@ -20,10 +20,18 @@ export interface PurgeLike {
 
 // Persistence seam. Draft/live per D4. `revision` is the live generation — bumped on publish,
 // monotonic, never regresses.
+export interface PageMeta {
+  path: string;
+  revision: number; // live generation; 0 until first publish
+  published: boolean; // has a live_doc
+  hasDraft: boolean; // has an unpublished draft_doc
+}
+
 export interface PageStore {
   saveDraft(tenantId: string, doc: PageDoc): Promise<void>;
   getDraft(tenantId: string, path: string): Promise<PageDoc | null>;
   getLive(tenantId: string, path: string): Promise<PageDoc | null>;
+  listPages(tenantId: string): Promise<PageMeta[]>;
   revision(tenantId: string, path: string): Promise<number>;
   // Atomically promote the draft to live, bump revision, and enqueue the purge intent — ONE
   // transaction. Returns null if there is no draft to publish.

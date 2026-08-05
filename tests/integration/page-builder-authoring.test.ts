@@ -101,3 +101,53 @@ test('save draft -> publish -> live reflects the doc, revision bumps', async () 
   assert.strictEqual(afterPub.live.title, 'PB Home');
   assert.strictEqual(afterPub.live.sections.length, 2);
 });
+
+test('multi-page: a second page is created + listed with its publish state', async () => {
+  await call('PUT', `/stores/${ID}/page-builder`, {
+    doc: { path: '/about', title: 'About', sections: [] },
+  });
+  await call('POST', `/stores/${ID}/page-builder/publish`, { path: '/about' });
+  const r = await call('GET', `/stores/${ID}/page-builder/pages`);
+  assert.strictEqual(r.status, 200);
+  const { pages } = await r.json();
+  const about = pages.find((p: { path: string }) => p.path === '/about');
+  assert.ok(about, '/about should be listed');
+  assert.strictEqual(about.published, true);
+  assert.strictEqual(about.revision, 1);
+});
+
+test('a section with child blocks validates + pins block versions + publishes', async () => {
+  const doc = {
+    path: '/slides',
+    title: 'Slides',
+    sections: [
+      {
+        id: 'ss',
+        type: 'slideshow',
+        data: {},
+        blocks: [
+          { id: 's1', type: 'slide', data: { slide: { heading: 'One' } } },
+          { id: 's2', type: 'slide', data: { slide: { heading: 'Two' } } },
+        ],
+      },
+    ],
+  };
+  assert.strictEqual((await call('PUT', `/stores/${ID}/page-builder`, { doc })).status, 200);
+  await call('POST', `/stores/${ID}/page-builder/publish`, { path: '/slides' });
+  const state = await (await call('GET', `/stores/${ID}/page-builder?path=/slides`)).json();
+  assert.strictEqual(state.live.sections[0].blocks.length, 2);
+  assert.strictEqual(state.live.sections[0].blocks[0].version, 1);
+});
+
+test('a block type the section does not accept is rejected (422)', async () => {
+  const r = await call('PUT', `/stores/${ID}/page-builder`, {
+    doc: {
+      path: '/bad',
+      title: 'x',
+      sections: [
+        { id: 'ss', type: 'slideshow', data: {}, blocks: [{ id: 'h', type: 'hero', data: {} }] },
+      ],
+    },
+  });
+  assert.strictEqual(r.status, 422);
+});

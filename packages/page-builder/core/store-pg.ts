@@ -2,7 +2,7 @@
 // with draft_doc / live_doc JSONB and a monotonic revision; a page_purge_outbox for durable
 // purge intents. publish() promotes + enqueues in a single transaction.
 import type { PageDoc } from './doc';
-import type { PageStore } from './store';
+import type { PageStore, PageMeta } from './store';
 import { pool } from '@ratio/shared/db';
 
 export class PgPageStore implements PageStore {
@@ -30,6 +30,27 @@ export class PgPageStore implements PageStore {
       [tenantId, path]
     );
     return rows[0]?.live_doc ?? null;
+  }
+
+  async listPages(tenantId: string): Promise<PageMeta[]> {
+    const { rows } = await pool.query<{
+      path: string;
+      revision: string;
+      published: boolean;
+      has_draft: boolean;
+    }>(
+      `SELECT path, revision,
+              (live_doc IS NOT NULL)  AS published,
+              (draft_doc IS NOT NULL) AS has_draft
+         FROM pages WHERE tenant_id = $1 ORDER BY path`,
+      [tenantId]
+    );
+    return rows.map((r) => ({
+      path: r.path,
+      revision: Number(r.revision),
+      published: r.published,
+      hasDraft: r.has_draft,
+    }));
   }
 
   async revision(tenantId: string, path: string): Promise<number> {

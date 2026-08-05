@@ -479,6 +479,11 @@ export function createApp(
   // Global section catalog (any authenticated user) — the editor renders inputs from it.
   app.get('/page-builder/catalog', (c) => c.json({ sections: sectionCatalog() }));
 
+  // Every page-builder page for a store (path + publish state) — the editor's page switcher.
+  app.get('/stores/:id/page-builder/pages', requireMembership, async (c) => {
+    return c.json({ pages: await pbStore.listPages(c.req.param('id')) });
+  });
+
   app.get('/stores/:id/page-builder', requireMembership, async (c) => {
     const id = c.req.param('id');
     const path = c.req.query('path') || '/';

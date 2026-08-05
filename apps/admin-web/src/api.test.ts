@@ -172,6 +172,18 @@ describe('admin api client', () => {
     expect(JSON.parse(bodyText)).toEqual({ doc });
   });
 
+  test('listPbPages unwraps the pages array', async () => {
+    const pages = [{ path: '/', revision: 2, published: true, hasDraft: false }];
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { pages }, (r) => (seen = r))
+    );
+    expect(await api.listPbPages('t_x')).toEqual(pages);
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x/page-builder/pages');
+  });
+
   test('publishPb POSTs the path to the publish endpoint', async () => {
     let seen: Request | undefined;
     const api = createApi(
