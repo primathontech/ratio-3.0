@@ -618,7 +618,7 @@ export function createApp(
 
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
   // (validated + version-pinned, live page untouched), then publish to promote draft->live and
-  // purge. A published PageDoc wins over the legacy content-model route at the origin. ---
+  // purge. The origin serves the published PageDoc (the sole renderer). ---
 
   // Global section catalog (any authenticated user) — the editor renders inputs from it.
   app.get('/page-builder/catalog', (c) => c.json({ sections: sectionCatalog() }));

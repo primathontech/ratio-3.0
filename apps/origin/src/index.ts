@@ -99,8 +99,8 @@ app.all('*', async (c) => {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
   }
-  // Page-builder render path — always the primary renderer. A published PageDoc wins; if the URL
-  // has none (exact or template), fall through to the legacy content-model route table below.
+  // Page-builder render path — the sole renderer. A published PageDoc for the URL (exact or a
+  // shared template) is served; a URL with none is a 404 (there is no legacy fallback).
   {
     const canon = canonicalPath(path);
     // Routing (ADR-013): the router labels the URL (home / page / collection / product) and picks
