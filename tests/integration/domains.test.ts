@@ -2,7 +2,7 @@
 // at the boundary; we assert the DNS records we hand the merchant, not Cloudflare itself.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { connectCustomHostname, customHostnameStatus } from '../../services/admin-api/domains';
+import { connectCustomHostname, customHostnameStatus } from '../../apps/admin-api/domains';
 
 const cfg = { token: 't', zone: 'ratiodev.in', fallback: 'service.ratiodev.in' };
 const json = (body: unknown) =>

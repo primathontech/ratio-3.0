@@ -4,7 +4,7 @@
 import openapiTS, { astToString } from 'openapi-typescript';
 import fs from 'fs';
 import path from 'path';
-import { openApiDocument } from '../services/admin-api/openapi';
+import { openApiDocument } from '../apps/admin-api/openapi';
 
 (async () => {
   const ast = await openapiTS(openApiDocument as unknown as Parameters<typeof openapiTS>[0]);

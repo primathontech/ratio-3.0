@@ -9,20 +9,20 @@ process.env.AGENT_TOKEN_SECRET = 'test-scope-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
 import type AnthropicSdk from '@anthropic-ai/sdk';
-import { createApp } from '../../services/admin-api/app';
+import { createApp } from '../../apps/admin-api/app';
 import {
   composeVerifiers,
   agentVerifier,
   mintAgentToken,
   type Verifier,
-} from '../../services/admin-api/auth';
+} from '../../apps/admin-api/auth';
 import {
   runAssistant,
   scopeForAssistant,
   type AnthropicLike,
-} from '../../services/admin-api/assistant';
+} from '../../apps/admin-api/assistant';
 import { RatioControlPlane } from '@ratio/control-plane-client';
-import { pool } from '@ratio/shared/db';
+import { pool } from '@ratio/data-db';
 
 const OWNER = 'user_owner_scope';
 const TS = 't_scope'; // the store the assistant is opened on

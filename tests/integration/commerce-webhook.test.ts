@@ -4,8 +4,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { createHmac } from 'node:crypto';
-import { createApp } from '../../services/admin-api/app';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { pool } from '@ratio/data-db';
 
 const app = createApp(async () => null);
 function post(body: unknown, headers: Record<string, string> = {}) {

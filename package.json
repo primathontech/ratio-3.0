@@ -4,11 +4,8 @@
   "version": "0.0.1",
   "description": "Ratio 3.0 — multi-tenant storefront platform (S2 vertical slice: Cloudflare edge + Hono origin + Postgres)",
   "workspaces": [
-    "packages/control-plane-client",
-    "packages/theme",
-    "packages/data/*",
-    "packages/edge/*",
-    "packages/page-builder/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "db:up": "docker compose up -d",
@@ -16,8 +13,8 @@
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "db:init": "bun run migrate && bun run seed",
-    "start": "node --env-file-if-exists=services/origin/.env --import tsx dev/server.ts",
-    "admin-api": "node --env-file-if-exists=services/admin-api/.env --import tsx services/admin-api/server.ts",
+    "start": "node --env-file-if-exists=apps/origin/.env --import tsx dev/server.ts",
+    "admin-api": "node --env-file-if-exists=apps/admin-api/.env --import tsx apps/admin-api/server.ts",
     "gen:client": "tsx scripts/gen-client.ts",
     "prove": "tsx tests/prove.ts",
     "prove:s1": "tsx tests/prove-s1.ts",

@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/builder-render",
+  "version": "0.1.0",
+  "description": "liquid render engine + isolate + tier infer",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

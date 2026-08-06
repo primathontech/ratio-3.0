@@ -8,15 +8,15 @@ import assert from 'node:assert';
 process.env.AGENT_TOKEN_SECRET = 'test-audit-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
-import { createApp } from '../../services/admin-api/app';
+import { createApp } from '../../apps/admin-api/app';
 import {
   mintAgentToken,
   composeVerifiers,
   agentVerifier,
   type Verifier,
-} from '../../services/admin-api/auth';
-import { scopeFor, SCOPES } from '../../services/admin-api/scopes';
-import { pool } from '@ratio/shared/db';
+} from '../../apps/admin-api/auth';
+import { scopeFor, SCOPES } from '../../apps/admin-api/scopes';
+import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_audit';
 const ID = 't_audit';

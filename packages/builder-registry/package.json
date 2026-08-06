@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/builder-registry",
+  "version": "0.1.0",
+  "description": "section registry + settings + islands",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

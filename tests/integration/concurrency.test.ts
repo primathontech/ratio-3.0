@@ -7,9 +7,9 @@ import assert from 'node:assert';
 process.env.AGENT_TOKEN_SECRET = 'test-concurrency-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
-import { createApp } from '../../services/admin-api/app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../../services/admin-api/auth';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { composeVerifiers, agentVerifier, type Verifier } from '../../apps/admin-api/auth';
+import { pool } from '@ratio/data-db';
 
 const OWNER = 'user_conc_owner';
 const ID = 't_conc';

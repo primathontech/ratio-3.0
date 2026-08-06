@@ -7,10 +7,10 @@ import assert from 'node:assert';
 process.env.AGENT_TOKEN_SECRET = 'test-sdk-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
-import { createApp } from '../../services/admin-api/app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../../services/admin-api/auth';
+import { createApp } from '../../apps/admin-api/app';
+import { composeVerifiers, agentVerifier, type Verifier } from '../../apps/admin-api/auth';
 import { RatioControlPlane, ControlPlaneError } from '@ratio/control-plane-client';
-import { pool } from '@ratio/shared/db';
+import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_sdk';
 const ID = 't_sdk';

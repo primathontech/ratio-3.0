@@ -1,4 +1,4 @@
-// Typed client for services/admin-api. Attaches the Clerk session JWT as a bearer on
+// Typed client for apps/admin-api. Attaches the Clerk session JWT as a bearer on
 // every call. getToken + fetch are injected so this is unit-testable with no browser.
 
 export type GetToken = () => Promise<string | null>;

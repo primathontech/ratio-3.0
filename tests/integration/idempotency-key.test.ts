@@ -3,7 +3,7 @@
 // still dedupes instead of re-running the assistant and duplicating stores/pages.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createIdempotencyStore, idempotencyKeyFor } from '../../services/admin-api/idempotency';
+import { createIdempotencyStore, idempotencyKeyFor } from '../../apps/admin-api/idempotency';
 
 test('a client-supplied key takes precedence and is namespaced per user', () => {
   assert.strictEqual(

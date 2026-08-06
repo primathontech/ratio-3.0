@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { renderPage } from '@ratio/theme';
-import { normalizePage } from '@ratio/content-model';
+import { normalizePage } from '@ratio/data-content-model';
 
 const tenant = { name: 'Acme', theme: { color: '#c0392b' } };
 

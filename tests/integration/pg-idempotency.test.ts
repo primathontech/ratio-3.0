@@ -7,8 +7,8 @@ import assert from 'node:assert';
 import {
   createPgIdempotencyStore,
   IdempotencyInProgressError,
-} from '../../services/admin-api/idempotency';
-import { pool } from '@ratio/shared/db';
+} from '../../apps/admin-api/idempotency';
+import { pool } from '@ratio/data-db';
 
 const KEYS = ['idem:one', 'idem:concurrent', 'idem:fail', 'idem:expired'];
 async function clean() {

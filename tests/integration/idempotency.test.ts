@@ -2,7 +2,7 @@
 // and never caches failures (so a failed attempt can be retried).
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createIdempotencyStore } from '../../services/admin-api/idempotency';
+import { createIdempotencyStore } from '../../apps/admin-api/idempotency';
 
 test('same key runs the work once and returns the same result', async () => {
   const store = createIdempotencyStore();
