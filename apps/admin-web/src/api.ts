@@ -18,17 +18,6 @@ export interface StoreTheme {
   radius?: string;
   container?: string;
 }
-export interface PageSummary {
-  path: string;
-  page_type: string;
-}
-export interface Page {
-  path: string;
-  pageType: string;
-  pageConfig: unknown;
-  version?: number;
-}
-
 // --- Page builder (section/block PageDoc) ---
 export interface PbSettingDef {
   key: string; // dotted path into section data, e.g. 'hero.heading'
@@ -231,16 +220,6 @@ export function createApi(
         `/stores/${id}/theme`,
         theme
       ),
-    listPages: (id: string) =>
-      req<Record<string, unknown>>('GET', `/stores/${id}/pages`).then((d) =>
-        pickArray<PageSummary>(d, 'pages')
-      ),
-    getPage: (id: string, path: string) =>
-      req<Page>('GET', `/stores/${id}/page?path=${encodeURIComponent(path)}`),
-    savePage: (
-      id: string,
-      page: { path: string; pageType?: string; pageConfig: unknown; version?: number }
-    ) => req<Page>('PUT', `/stores/${id}/page`, page),
     listDomains: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
         pickArray<DomainInfo>(d, 'domains')
