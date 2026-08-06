@@ -40,6 +40,8 @@ async function cleanup() {
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]); // scaffolded templates
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [ID]);
 }
 before(cleanup);
@@ -108,8 +110,15 @@ test('POST /stores with no id generates one server-side and still makes the call
   assert.match(id, /^t_auto_[0-9a-f]{8}$/, 'server-generated t_<slug>_<hex> id');
   assert.strictEqual((await getMembership(ALICE, id))!.role, 'owner');
   assert.deepStrictEqual((await forTenant(id).getTenant())!.commerce, { merchantId: 'gk_auto' });
+  // the default product + collection templates are scaffolded so the store navigates out of the box
+  const { pages } = (await (
+    await call('GET', `/stores/${id}/page-builder/pages`, alice)
+  ).json()) as { pages: { path: string; published: boolean }[] };
+  const scaffolded = pages.filter((p) => p.published).map((p) => p.path);
+  assert.ok(scaffolded.includes('/products/:handle'), 'product template published');
+  assert.ok(scaffolded.includes('/collections/:handle'), 'collection template published');
   // clean up this generated store (the file's fixed-id cleanup won't know its id)
-  for (const q of ['memberships', 'routes', 'domains']) {
+  for (const q of ['memberships', 'routes', 'domains', 'pages', 'page_purge_outbox']) {
     await pool.query(`DELETE FROM ${q} WHERE tenant_id=$1`, [id]);
   }
   await pool.query('DELETE FROM tenants WHERE id=$1', [id]);

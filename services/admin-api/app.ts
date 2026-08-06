@@ -18,6 +18,7 @@ import { isLocal } from '@ratio/shared/env';
 import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
 import type { PageDoc } from '@ratio/page-builder-core/doc';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { scaffoldStorefront } from '@ratio/page-builder-core/scaffold';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
 import { tenantTag } from '@ratio/page-builder-core/tags';
 import {
@@ -471,6 +472,10 @@ export function createApp(
       merchantId,
     });
     c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
+    // Scaffold the default product + collection templates so the store navigates out of the box
+    // (product/collection URLs 404 until these exist). Best-effort — a scaffold hiccup must not
+    // fail an otherwise-successful onboarding; the merchant can re-add templates in the editor.
+    await scaffoldStorefront(pageBuilder, tenantId).catch(() => {});
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
