@@ -18,6 +18,7 @@ import { isLocal } from '@ratio/shared/env';
 import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
 import type { PageDoc } from '@ratio/page-builder-core/doc';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
+import { scaffoldStorefront } from '@ratio/page-builder-core/scaffold';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
 import { tenantTag } from '@ratio/page-builder-core/tags';
 import {
@@ -382,7 +383,9 @@ export function createApp(
   // Who am I — also surfaces the caller's Clerk id (for PLATFORM_ADMIN_IDS setup).
   app.get('/me', (c) => {
     const userId = c.get('userId');
-    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId) });
+    // isLocal (RATIO_LOCAL) lets the SPA show dev-only affordances — e.g. a local storefront link
+    // via the edge's ?store=<id> override — driven by the one run-environment flag, not a guess.
+    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId), isLocal });
   });
 
   // Commerce change webhook (gokwik → cache invalidation). Public + HMAC-verified. Maps the event
@@ -426,16 +429,17 @@ export function createApp(
       color?: string;
       merchantId?: string;
     };
-    if (!id || !name || !host) {
-      return c.json({ error: 'id, name and host are required' }, 400);
+    if (!name || !host) {
+      return c.json({ error: 'name and host are required' }, 400);
     }
     // The gokwik merchant id (data-layer). Optional at create; identifies the store's catalog.
     if (merchantId !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(merchantId)) {
       return c.json({ error: 'merchantId must be 1–64 chars: letters, digits, _ or -' }, 400);
     }
-    // The id becomes the tenant_id — it flows into routing, cache-purge URLs, and agent-token
-    // scopes (where '*' is the wildcard sentinel). Constrain it to a safe slug at the boundary.
-    if (!/^[a-z][a-z0-9_-]{1,62}$/.test(id)) {
+    // The store id is GENERATED server-side (merchants never supply one). An explicit id is only
+    // accepted from internal callers (CLI/scripts) — validate its slug shape when present, since it
+    // flows into routing, cache-purge URLs, and agent-token scopes (where '*' is the wildcard).
+    if (id !== undefined && !/^[a-z][a-z0-9_-]{1,62}$/.test(id)) {
       return c.json(
         { error: 'id must be 2–63 chars: a lowercase letter, then letters, digits, _ or -' },
         400
@@ -459,7 +463,7 @@ export function createApp(
     if (!platformSubdomainAllowed(lcHost, isPlatformAdmin(c.get('userId')))) {
       return c.json({ error: 'that subdomain is reserved — choose another' }, 403);
     }
-    const { hostReclaimedFrom } = await onboardStore({
+    const { id: tenantId, hostReclaimedFrom } = await onboardStore({
       id,
       name,
       host: lcHost,
@@ -467,11 +471,15 @@ export function createApp(
       ownerUserId: c.get('userId'),
       merchantId,
     });
-    if (id) c.set('auditTenant', id); // onboarding: the store id is in the body, not the path
+    c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
+    // Scaffold the default product + collection templates so the store navigates out of the box
+    // (product/collection URLs 404 until these exist). Best-effort — a scaffold hiccup must not
+    // fail an otherwise-successful onboarding; the merchant can re-add templates in the editor.
+    await scaffoldStorefront(pageBuilder, tenantId).catch(() => {});
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
-    return c.json({ id, url: `https://${lcHost}/` }, 201);
+    return c.json({ id: tenantId, url: `https://${lcHost}/` }, 201);
   });
 
   // Read a store — caller must have a membership on it.

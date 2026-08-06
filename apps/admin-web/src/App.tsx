@@ -215,7 +215,11 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   const [stores, setStores] = useState<Store[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [me, setMe] = useState<{ userId: string; isPlatformAdmin: boolean } | null>(null);
+  const [me, setMe] = useState<{
+    userId: string;
+    isPlatformAdmin: boolean;
+    isLocal?: boolean;
+  } | null>(null);
 
   // Focus the heading when the list view (re)opens — e.g. returning via "All stores" — so
   // focus isn't dropped to <body> on the transition (M5 / WCAG 2.4.3).
@@ -305,7 +309,7 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
       {stores && stores.length > 0 && (
         <div className="grid">
           {stores.map((s) => (
-            <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} />
+            <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} local={!!me?.isLocal} />
           ))}
         </div>
       )}
@@ -336,8 +340,11 @@ function hostsOf(store: Store): string[] {
   return store.hosts ?? (store.host ? [store.host] : []);
 }
 
-function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
+function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
   const hosts = hostsOf(store);
+  // *.localhost is the dev alias (added at onboard when RATIO_LOCAL); the real domains are the rest.
+  const prodHosts = hosts.filter((h) => !h.endsWith('.localhost'));
+  const localHost = hosts.find((h) => h.endsWith('.localhost'));
   return (
     <div className="card store-card">
       <div className="top">
@@ -347,9 +354,9 @@ function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
           <button type="button" className="name store-open" onClick={onOpen}>
             {store.name}
           </button>
-          {hosts.length > 0 ? (
+          {prodHosts.length > 0 ? (
             <div className="hosts">
-              {hosts.map((h) => (
+              {prodHosts.map((h) => (
                 <a key={h} className="host" href={`https://${h}`} target="_blank" rel="noreferrer">
                   {h} <Icon.external size={11} />
                   <NewTabHint />
@@ -358,6 +365,21 @@ function StoreCard({ store, onOpen }: { store: Store; onOpen: () => void }) {
             </div>
           ) : (
             <span className="host muted">no domain</span>
+          )}
+          {/* Dev-only (RATIO_LOCAL, from /me): link to the storefront at its *.localhost host, which
+              resolves to 127.0.0.1 and — being a host, not a query param — survives navigation. */}
+          {local && localHost && (
+            <div className="hosts">
+              <a
+                className="host"
+                href={`http://${localHost}:8080/`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {localHost}:8080 <Icon.external size={11} />
+                <NewTabHint />
+              </a>
+            </div>
           )}
         </div>
       </div>
@@ -380,7 +402,7 @@ function CreateStoreDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [f, setF] = useState({ id: '', name: '', host: '', color: '#4f46e5' });
+  const [f, setF] = useState({ name: '', host: '', color: '#4f46e5', merchantId: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
@@ -391,7 +413,7 @@ function CreateStoreDialog({
     setBusy(true);
     setErr(null);
     try {
-      await api.createStore(f);
+      await api.createStore({ ...f, merchantId: f.merchantId.trim() || undefined });
       onCreated();
     } catch (e) {
       setErr((e as Error).message);
@@ -404,26 +426,15 @@ function CreateStoreDialog({
     <Dialog title="Create a store" onClose={onClose}>
       <form onSubmit={submit}>
         <div className="body">
-          <div className="row">
-            <Field label="Store ID">
-              <input
-                className="input mono"
-                placeholder="t_acme"
-                value={f.id}
-                onChange={set('id')}
-                required
-              />
-            </Field>
-            <Field label="Name">
-              <input
-                className="input"
-                placeholder="Acme"
-                value={f.name}
-                onChange={set('name')}
-                required
-              />
-            </Field>
-          </div>
+          <Field label="Name">
+            <input
+              className="input"
+              placeholder="Acme"
+              value={f.name}
+              onChange={set('name')}
+              required
+            />
+          </Field>
           <Field label="Domain">
             <input
               className="input"
@@ -431,6 +442,17 @@ function CreateStoreDialog({
               value={f.host}
               onChange={set('host')}
               required
+            />
+          </Field>
+          <Field
+            label="Merchant ID (gokwik)"
+            info="Connects live products from the commerce backend. Optional — leave blank for a store with no catalogue yet."
+          >
+            <input
+              className="input mono"
+              placeholder="196jdfqy1aot"
+              value={f.merchantId}
+              onChange={set('merchantId')}
             />
           </Field>
           <Field label="Accent colour">

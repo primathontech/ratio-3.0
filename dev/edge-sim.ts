@@ -83,6 +83,9 @@ export const edge = http.createServer(async (req: IncomingMessage, res: ServerRe
     }
 
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0];
+    // Stores are reached by host (mirrors prod). Locally that's the <label>.localhost alias
+    // onboardStore adds — a real host that survives navigation (a ?store= query override would be
+    // lost on the first internal link).
     const tenantId = await resolveTenant(host);
     if (!tenantId) {
       res.writeHead(404, { 'content-type': 'text/html' });

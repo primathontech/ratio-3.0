@@ -61,12 +61,16 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     // layer's fields as-is; the add-to-cart + live stock are an island (per-user), hydrated
     // client-side — NOT rendered into the cached shell here.
     bindings: [{ name: 'product', tier: 'shared-volatile' }],
+    // image: getProduct returns no top-level image_url — the image lives in images[] (main first),
+    // same fallback the grid uses. description is the backend's HTML, rendered as-is (the storefront
+    // CSP script-src 'none' is the XSS backstop) rather than escaped into visible tags.
     template: `<section class="pdp">
-  <div class="ph">{% if product.image_url %}<img src="{{ product.image_url | escape }}" alt="{{ product.title | escape }}">{% endif %}</div>
+  {% assign img = product.image_url | default: product.images.first.url %}
+  <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ product.title | escape }}">{% endif %}</div>
   <div>
     <h1>{{ product.title | escape }}</h1>
     <div class="price">{{ product.price | money }}{% if product.compare_at_price and product.compare_at_price > product.price %} <s class="was">{{ product.compare_at_price | money }}</s>{% endif %}</div>
-    {% if product.description %}<p>{{ product.description | escape }}</p>{% endif %}
+    {% if product.description %}<div class="rte">{{ product.description }}</div>{% endif %}
     <div data-island="add-to-cart" data-sku="{{ product.handle | escape }}"></div>
   </div>
 </section>`,

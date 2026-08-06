@@ -95,10 +95,32 @@ export function Badge({ children, accent }: { children: ReactNode; accent?: bool
 }
 
 /* Field ------------------------------------------------------------------ */
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  info,
+  children,
+}: {
+  label: string;
+  info?: string; // shown as an ⓘ tooltip next to the label
+  children: ReactNode;
+}) {
   return (
     <label className="field">
-      <span>{label}</span>
+      <span>
+        {label}
+        {info && (
+          <span
+            className="field-info"
+            title={info}
+            aria-label={info}
+            role="img"
+            tabIndex={0}
+            style={{ marginLeft: 6, cursor: 'help', opacity: 0.55 }}
+          >
+            ⓘ
+          </span>
+        )}
+      </span>
       {children}
     </label>
   );

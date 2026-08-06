@@ -501,6 +501,14 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
   const knownPaths = pages.map((p) => p.path);
   const isNewPage = !knownPaths.includes(path);
 
+  // Prefer the *.localhost dev alias (resolves to 127.0.0.1 on :8080); else the real domain.
+  const localHost = store.hosts?.find((h) => h.endsWith('.localhost'));
+  const viewUrl = localHost
+    ? `http://${localHost}:8080${path}`
+    : store.host
+      ? `https://${store.host}${path}`
+      : null;
+
   return (
     <div className="card pane" style={{ marginBottom: 18 }}>
       <div className="pane-head">
@@ -510,13 +518,8 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
             {path} · rev {revision}
           </Badge>
         </h2>
-        {store.host && (
-          <a
-            className="btn btn-ghost btn-sm"
-            href={`http://${store.host}:8080${path}`}
-            target="_blank"
-            rel="noreferrer"
-          >
+        {viewUrl && (
+          <a className="btn btn-ghost btn-sm" href={viewUrl} target="_blank" rel="noreferrer">
             View <Icon.external size={12} />
           </a>
         )}
