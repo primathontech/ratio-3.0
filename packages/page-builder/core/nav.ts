@@ -15,30 +15,45 @@ export interface NavItem {
   relative_path: string | null;
   url: string; // COLLECTION → collection handle; HTTP → external url
   items?: NavItem[];
+  image?: string | null;
+  show_image?: boolean;
+  mega_menu_enabled?: boolean;
 }
 export interface NavMenu {
   handle: string;
   title: string;
   items: NavItem[];
   version?: number;
+  is_default?: boolean;
+  items_count?: number;
 }
 
-// Fetch the merchant's main menu. Null on any non-200 / error (e.g. a merchant with no menu 404s) —
-// the caller renders the fallback header. Returns the backend shape UNCHANGED (mapping is at render).
+// Returned when the live nav API can't be reached (down, unconfigured, or a merchant with no menu),
+// so the header still renders a full menu instead of falling back to brand-only. Stored as JSON.
+import fallbackMenu from './nav-fallback.json';
+export const FALLBACK_MENU = fallbackMenu as NavMenu;
+
+// Fetch the merchant's main menu. On any failure (no base url, non-200 like a merchant with no
+// menu, or a network error) it returns FALLBACK_MENU so the header always has a menu. Returns the
+// backend shape UNCHANGED (link mapping happens at render).
 export async function fetchMainMenu(
   merchantId: string,
   navApiBaseUrl: string,
   fetchImpl: typeof fetch = fetch
-): Promise<NavMenu | null> {
+): Promise<NavMenu> {
+  if (!navApiBaseUrl || !merchantId) return FALLBACK_MENU;
   try {
-    const res = await fetchImpl(`${navApiBaseUrl.replace(/\/+$/, '')}/nav-menus/main-menu`, {
-      headers: { 'gk-merchant-id': merchantId },
-    });
-    if (!res.ok) return null;
+    const res = await fetchImpl(
+      `${navApiBaseUrl.replace(/\/+$/, '')}/api/v1/storefront/nav-menus/main-menu`,
+      {
+        headers: { 'gk-merchant-id': merchantId },
+      }
+    );
+    if (!res.ok) return FALLBACK_MENU;
     const data = (await res.json()) as NavMenu;
-    return data && Array.isArray(data.items) ? data : null;
+    return data && Array.isArray(data.items) ? data : FALLBACK_MENU;
   } catch {
-    return null;
+    return FALLBACK_MENU;
   }
 }
 

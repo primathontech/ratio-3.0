@@ -2,7 +2,7 @@
 // rendered header — including the brand-only fallback and href/text safety.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchMainMenu, renderHeader, navHref, type NavMenu } from './nav';
+import { fetchMainMenu, renderHeader, navHref, FALLBACK_MENU, type NavMenu } from './nav';
 
 const item = (o: Partial<NavMenu['items'][number]> & { title: string }) => ({
   id: o.id ?? o.title,
@@ -74,16 +74,32 @@ test('renderHeader with no menu → brand-only fallback (still a real header, no
   assert.ok(!html.includes('hdr-nav'), 'no nav element when there is no menu');
 });
 
-test('fetchMainMenu: menu on 200, null on 404 and on network error', async () => {
+test('fetchMainMenu: live menu on 200; the JSON fallback on 404, error, or no config', async () => {
   const ok = (async () =>
     new Response(JSON.stringify(sample), { status: 200 })) as unknown as typeof fetch;
-  assert.equal((await fetchMainMenu('m', 'http://x/', ok))?.handle, 'main-menu');
+  assert.equal((await fetchMainMenu('m', 'http://x/', ok)).items[0].title, 'Hair Care');
 
+  // any failure → the fallback menu (never null/blank), so the header always renders a full nav
   const notFound = (async () => new Response('nope', { status: 404 })) as unknown as typeof fetch;
-  assert.equal(await fetchMainMenu('m', 'http://x', notFound), null);
+  assert.equal(await fetchMainMenu('m', 'http://x', notFound), FALLBACK_MENU);
 
   const boom = (async () => {
     throw new Error('net');
   }) as unknown as typeof fetch;
-  assert.equal(await fetchMainMenu('m', 'http://x', boom), null);
+  assert.equal(await fetchMainMenu('m', 'http://x', boom), FALLBACK_MENU);
+
+  // unconfigured (no base url or no merchant) → fallback, without attempting a fetch
+  const explode = (() => {
+    throw new Error('should not fetch');
+  }) as unknown as typeof fetch;
+  assert.equal(await fetchMainMenu('m', '', explode), FALLBACK_MENU);
+  assert.equal(await fetchMainMenu('', 'http://x', explode), FALLBACK_MENU);
+});
+
+test('FALLBACK_MENU renders a full nav (Product / Hair Care / external Salon)', () => {
+  const html = renderHeader({ menu: FALLBACK_MENU, siteName: 'Demo' });
+  assert.match(html, /href="\/collections\/all">Product</);
+  assert.match(html, /href="\/collections\/hair-care">Hair Care</);
+  assert.match(html, /href="https:\/\/bbluntsalons\.co\.in\/salon-locator"[^>]*target="_blank"/);
+  assert.match(html, /class="hdr-mega"/);
 });
