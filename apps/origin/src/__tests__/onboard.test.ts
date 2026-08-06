@@ -6,12 +6,15 @@ import { forTenant } from '@ratio/data-repo';
 import { app } from '../index';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
+import { PageBuilder, PgPageStore, scaffoldStorefront } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
 
 const SECRET = resolveEdgeSecret(process.env);
 const ID = 't_onb';
 const HOST = 'onb.localhost';
 
 async function cleanup() {
+  await pool.query('DELETE FROM pages WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM routes WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
@@ -43,8 +46,14 @@ test('onboardStore creates tenant + domain + home route', async () => {
   assert.strictEqual(home!.page_type, 'home');
 });
 
-test('the onboarded store renders its home via the origin', async () => {
+test('the onboarded + scaffolded store renders its home via the origin (page-builder)', async () => {
   await onboardStore({ id: ID, name: 'Onb', host: HOST });
+  // The page builder is the sole renderer, so onboarding scaffolds a home page (as the admin-api
+  // and CLI onboarding flows do); without it the store's / would 404.
+  const pb = new PageBuilder(new PgPageStore(), defaultRegistry(), {
+    invalidateByTags: () => Promise.resolve(),
+  });
+  await scaffoldStorefront(pb, ID, { name: 'Onb' });
   const res = await app.fetch(
     new Request('http://origin/', { headers: { 'x-edge-auth': SECRET, 'x-ratio-tenant': ID } })
   );

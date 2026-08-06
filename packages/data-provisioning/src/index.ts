@@ -192,7 +192,14 @@ export async function onboardStore({
 
 export interface DeleteProof {
   deleted: boolean;
-  removed: { routes: number; domains: number; tenants: number; memberships: number };
+  removed: {
+    routes: number;
+    domains: number;
+    tenants: number;
+    memberships: number;
+    pages: number;
+    pagePurgeOutbox: number;
+  };
   residual: number;
 }
 
@@ -209,11 +216,20 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
     const memberships = await client.query('DELETE FROM memberships WHERE tenant_id = $1', [id]);
     const routes = await client.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
     const domains = await client.query('DELETE FROM domains WHERE tenant_id = $1', [id]);
+    // Page-builder rows are tenant-scoped with no FK cascade, so purge them explicitly (every store
+    // is scaffolded with pages at onboarding) — else a deleted store leaks orphan pages + outbox rows.
+    const pages = await client.query('DELETE FROM pages WHERE tenant_id = $1', [id]);
+    const pagePurgeOutbox = await client.query(
+      'DELETE FROM page_purge_outbox WHERE tenant_id = $1',
+      [id]
+    );
     const tenants = await client.query('DELETE FROM tenants WHERE id = $1', [id]);
     const { rows } = await client.query<{ residual: string }>(
       `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
             + (SELECT count(*) FROM domains WHERE tenant_id=$1)
             + (SELECT count(*) FROM routes WHERE tenant_id=$1)
+            + (SELECT count(*) FROM pages WHERE tenant_id=$1)
+            + (SELECT count(*) FROM page_purge_outbox WHERE tenant_id=$1)
             + (SELECT count(*) FROM memberships WHERE tenant_id=$1) AS residual`,
       [id]
     );
@@ -227,6 +243,8 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
         domains: domains.rowCount ?? 0,
         tenants: tenants.rowCount ?? 0,
         memberships: memberships.rowCount ?? 0,
+        pages: pages.rowCount ?? 0,
+        pagePurgeOutbox: pagePurgeOutbox.rowCount ?? 0,
       },
       residual,
     };

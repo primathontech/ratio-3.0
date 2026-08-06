@@ -29,7 +29,8 @@ test('renders a tenant home with tenant + cache + surrogate headers', async () =
   assert.strictEqual(res.status, 200);
   assert.strictEqual(res.headers.get('x-tenant'), 't_acme');
   assert.strictEqual(res.headers.get('x-cache'), 'long');
-  assert.match(res.headers.get('x-surrogate-keys') || '', /(^| )t:t_acme( |$)/);
+  // page-builder surrogate keys: tenantTag is `t.<id>` (a page tag `p.<id>.<hash>` also rides along).
+  assert.match(res.headers.get('x-surrogate-keys') || '', /(^| )t\.t_acme( |$)/);
   assert.match(await res.text(), /Acme/);
 });
 

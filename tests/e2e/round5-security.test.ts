@@ -10,7 +10,6 @@ process.env.AGENT_TOKEN_SECRET = 'test-round5-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
-import { renderPage } from '@ratio/theme';
 import { app as origin } from '../../apps/origin/src/index';
 import { createApp } from '../../apps/admin-api/src/app';
 import { composeVerifiers, agentVerifier, type Verifier } from '../../apps/admin-api/src/auth';
@@ -67,13 +66,8 @@ after(async () => {
   await pool.end();
 });
 
-test('C-2: renderPage neutralises a malicious theme color (no <style> breakout)', () => {
-  const evil = '#000}</style><script>alert(document.cookie)</script>';
-  const html = renderPage({ sections: [] }, { tenant: { name: 'Shop', theme: { color: evil } } });
-  assert.ok(!html.includes('</style><script>'), 'must not break out of the style block');
-  assert.ok(!html.includes('<script>alert'), 'injected script must not appear');
-  assert.ok(html.includes('--accent:#111111'), 'invalid color falls back to the safe default');
-});
+// (The render-level C-2 defence — a non-hex theme colour can't break out of the <style> block —
+// now lives on the page-builder renderer and is covered by builder-core's page-builder-engine test.)
 
 test('C-2: POST /stores rejects a non-hex color with 400', async () => {
   const res = await call('POST', '/stores', 'tok-attacker', {

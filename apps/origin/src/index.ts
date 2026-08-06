@@ -2,8 +2,7 @@ import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
-import { normalizePage } from '@ratio/data-content-model';
-import { renderPage, esc } from '@ratio/theme';
+import { esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
 import { resolvePage, StubResolver } from '@ratio/builder-core';
@@ -28,13 +27,12 @@ export function edgeAuthOk(provided: string | undefined, secret: string): boolea
 }
 
 const RESERVED = ['/cart', '/checkout', '/account'];
-const CACHEABLE_TYPES = new Set(['home', 'product', 'page', 'landing', 'blog']);
 
 let renders = 0;
 
-// Page builder — the storefront renderer. A published PageDoc for the URL is served; the legacy
-// content-model route table (below) remains only as a fallback for URLs that have no PageDoc yet,
-// and is slated for removal once every store is on the page builder.
+// Page builder — the sole storefront renderer. A published PageDoc for the URL is served; a URL
+// with no PageDoc (exact or template) is a 404. Every store is scaffolded with a home + product +
+// collection page at onboarding (scaffoldStorefront), so a fresh store renders out of the box.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
 // Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
@@ -153,33 +151,11 @@ app.all('*', async (c) => {
       setStorefrontSecurity(c);
       return c.html(composed.html);
     }
-    // no page for this URL (exact or template) → fall through to the legacy route table
-  }
-  const route = await repo.getRoute(path);
-  if (!route) {
+    // No published page for this URL (exact or template) → 404. The page builder is the sole
+    // renderer; there is no legacy content-model fallback.
     c.header('x-tenant', tenantId as string);
     c.header('x-cache', 'no-store');
     setStorefrontSecurity(c);
-    return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no route for ${esc(path)}</p>`, 404);
+    return c.html(`<h1>404 — ${esc(tenant.name)}</h1><p>no page for ${esc(path)}</p>`, 404);
   }
-
-  renders++; // the expensive path — a cache HIT must not reach here
-  const cacheable = CACHEABLE_TYPES.has(route.page_type);
-  const surrogateKeys = [
-    `t:${tenantId}`,
-    `t:${tenantId}:type:${route.page_type}`,
-    `t:${tenantId}:route:${path}`,
-  ];
-  c.header('x-tenant', tenantId as string);
-  c.header('x-page-type', route.page_type);
-  c.header('x-cache', cacheable ? 'long' : 'no-store');
-  // Real Cache-Control so the edge actually caches this (path B was previously uncached),
-  // with a short TTL + stale-while-revalidate so edits surface within minutes even if the
-  // on-write purge (OFCE-411) isn't configured; a configured purge makes it instant.
-  if (cacheable) c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-  c.header('x-surrogate-keys', surrogateKeys.join(' '));
-  c.header('x-render-count', String(renders));
-  setStorefrontSecurity(c);
-  const page = normalizePage(route.page_config);
-  return c.html(renderPage(page, { tenant: { name: tenant.name, theme: tenant.theme } }));
 });
