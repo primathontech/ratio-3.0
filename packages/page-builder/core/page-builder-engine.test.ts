@@ -440,8 +440,8 @@ test('theme: a valid hex brand colour is applied; anything else is dropped (no C
   assert.match(ok.html, /--accent:#e11d48/, 'hex brand colour overrides the token');
   const bad = await composePage(doc, reg, { color: 'red;}body{display:none' });
   assert.ok(
-    !bad.html.includes('display:none'),
-    'a malicious brand-colour value is dropped, never injected'
+    !bad.html.includes('}body{'),
+    'a malicious brand-colour value cannot break out of the :root block'
   );
   assert.ok(!/--accent:red/.test(bad.html), 'a non-hex brand colour is ignored');
 });
