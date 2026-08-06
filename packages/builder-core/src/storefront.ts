@@ -128,6 +128,16 @@ a{color:inherit;text-decoration:none}
 .pdp h1{font-size:2rem;letter-spacing:-.02em;margin:0 0 6px}
 .pdp .price{color:var(--accent);font-size:1.4rem;font-weight:700;margin:0 0 14px}
 @media (max-width:640px){.pdp{grid-template-columns:1fr}.hero{padding:56px 0 44px}}
+.ftr{border-top:1px solid var(--border);background:var(--surface);margin-top:56px}
+.ftr-in{padding:40px 20px 32px;display:flex;flex-direction:column;gap:26px}
+.ftr-cols{display:flex;flex-wrap:wrap;gap:40px}
+.ftr-col{min-width:150px}
+.ftr-col-h{display:block;font-weight:700;font-size:.9rem;margin-bottom:10px}
+.ftr-col ul{list-style:none;margin:0;padding:0}
+.ftr-col li{margin:7px 0}
+.ftr-col a{font-size:.9rem;color:var(--muted)}
+.ftr-col a:hover{color:var(--accent)}
+.ftr-legal{color:var(--muted);font-size:.85rem}
 `;
 
 // The full <style> block to drop into <head>: safe token overrides first, then the base rules.
