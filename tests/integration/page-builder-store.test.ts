@@ -6,12 +6,12 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { pool } from '@ratio/shared/db';
-import { PgPageStore } from '@ratio/page-builder-core/store-pg';
-import { PageBuilder, PurgeFailed, type PurgeLike } from '@ratio/page-builder-core/store';
-import { defaultRegistry } from '@ratio/page-builder-registry/registry';
-import { pageTag } from '@ratio/page-builder-core/tags';
-import type { PageDoc } from '@ratio/page-builder-core/doc';
+import { pool } from '@ratio/data-db';
+import { PgPageStore } from '@ratio/builder-core';
+import { PageBuilder, PurgeFailed, type PurgeLike } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
+import { pageTag } from '@ratio/builder-core';
+import type { PageDoc } from '@ratio/builder-core';
 
 class CountingPurge implements PurgeLike {
   calls: string[][] = [];

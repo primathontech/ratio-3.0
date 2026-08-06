@@ -9,7 +9,7 @@ import {
   unpublishTenantMapping,
   kvConfig,
   type KvConfig,
-} from '../../services/admin-api/domains';
+} from '../../apps/admin-api/domains';
 
 const cfg: KvConfig = { token: 'tok', accountId: 'acct1', namespaceId: 'ns1' };
 

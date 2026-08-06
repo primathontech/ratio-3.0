@@ -9,17 +9,17 @@ process.env.AGENT_TOKEN_SECRET = 'test-assistant-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
 import type AnthropicSdk from '@anthropic-ai/sdk';
-import { createApp } from '../../services/admin-api/app';
+import { createApp } from '../../apps/admin-api/app';
 import {
   composeVerifiers,
   agentVerifier,
   mintAgentToken,
   type Verifier,
-} from '../../services/admin-api/auth';
-import { runAssistant, type AnthropicLike } from '../../services/admin-api/assistant';
+} from '../../apps/admin-api/auth';
+import { runAssistant, type AnthropicLike } from '../../apps/admin-api/assistant';
 import { RatioControlPlane } from '@ratio/control-plane-client';
-import { recentAudit } from '../../services/admin-api/audit';
-import { pool } from '@ratio/shared/db';
+import { recentAudit } from '../../apps/admin-api/audit';
+import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_assistant';
 const ID = 't_ai';

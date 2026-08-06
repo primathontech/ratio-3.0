@@ -1,9 +1,9 @@
 // Tenant hard-delete (ADR-010 D-SEC4): provably complete. Real test DB.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { onboardStore, deleteStore } from '@ratio/provisioning';
-import { app } from '../../services/origin/index';
-import { pool } from '@ratio/shared/db';
+import { onboardStore, deleteStore } from '@ratio/data-provisioning';
+import { app } from '../../apps/origin/index';
+import { pool } from '@ratio/data-db';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const ID = 't_del';

@@ -1,4 +1,4 @@
-import type { PageConfig, Section, ProductCard } from '@ratio/content-model';
+import type { PageConfig, Section, ProductCard } from '@ratio/data-content-model';
 
 // Ratio default theme: turns a PageConfig into a full, styled HTML document, themed by
 // the tenant's accent colour. Pure + isomorphic (runs on the Worker and the container).

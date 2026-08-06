@@ -3,9 +3,9 @@
 // mocks; the storefront path is exercised in-process via the origin app.fetch().
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createApp } from '../../services/admin-api/app';
-import { app as origin } from '../../services/origin/index';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { app as origin } from '../../apps/origin/index';
+import { pool } from '@ratio/data-db';
 
 const OWNER = 'user_owner';
 const OTHER = 'user_other';

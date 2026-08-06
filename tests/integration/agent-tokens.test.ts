@@ -9,16 +9,16 @@ import assert from 'node:assert';
 process.env.AGENT_TOKEN_SECRET = 'test-agent-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
-import { createApp } from '../../services/admin-api/app';
+import { createApp } from '../../apps/admin-api/app';
 import {
   mintAgentToken,
   verifyAgentToken,
   agentVerifier,
   composeVerifiers,
   type Verifier,
-} from '../../services/admin-api/auth';
-import { forTenant } from '@ratio/repo';
-import { pool } from '@ratio/shared/db';
+} from '../../apps/admin-api/auth';
+import { forTenant } from '@ratio/data-repo';
+import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_agent';
 const BOB = 'user_bob_agent';

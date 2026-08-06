@@ -3,8 +3,8 @@
 // Written test-first.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { app } from '../../services/origin/index';
-import { pool } from '@ratio/shared/db';
+import { app } from '../../apps/origin/index';
+import { pool } from '@ratio/data-db';
 
 const call = (path: string) => app.fetch(new Request('http://origin' + path));
 

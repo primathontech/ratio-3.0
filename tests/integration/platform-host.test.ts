@@ -7,9 +7,9 @@ import assert from 'node:assert';
 process.env.AGENT_TOKEN_SECRET = 'test-platform-host-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
-import { createApp, platformSubdomainAllowed } from '../../services/admin-api/app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../../services/admin-api/auth';
-import { pool } from '@ratio/shared/db';
+import { createApp, platformSubdomainAllowed } from '../../apps/admin-api/app';
+import { composeVerifiers, agentVerifier, type Verifier } from '../../apps/admin-api/auth';
+import { pool } from '@ratio/data-db';
 
 test('platformSubdomainAllowed: reserved/apex/multi-label blocked, normal + custom allowed', () => {
   // Non-admin

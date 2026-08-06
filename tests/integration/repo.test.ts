@@ -1,8 +1,8 @@
 // The one-gate tests (ADR-001 D-MT3) — real test DB, no mocks.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { forTenant } from '@ratio/repo';
-import { pool } from '@ratio/shared/db';
+import { forTenant } from '@ratio/data-repo';
+import { pool } from '@ratio/data-db';
 
 after(() => pool.end());
 

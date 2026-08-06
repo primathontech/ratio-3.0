@@ -4,12 +4,12 @@
 // The page builder is the origin's storefront renderer (no flag).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { app } from '../../services/origin/index';
-import { pool } from '@ratio/shared/db';
-import { PgPageStore } from '@ratio/page-builder-core/store-pg';
-import { PageBuilder, type PurgeLike } from '@ratio/page-builder-core/store';
-import { defaultRegistry } from '@ratio/page-builder-registry/registry';
-import { pageTag } from '@ratio/page-builder-core/tags';
+import { app } from '../../apps/origin/index';
+import { pool } from '@ratio/data-db';
+import { PgPageStore } from '@ratio/builder-core';
+import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
+import { pageTag } from '@ratio/builder-core';
 
 const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
 const T = 'pbtest_o1';

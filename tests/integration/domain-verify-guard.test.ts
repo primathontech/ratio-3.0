@@ -5,8 +5,8 @@
 // would route the host to a tenant Postgres never verified (cross-tenant domain hijack).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { markDomainVerified } from '@ratio/provisioning';
-import { pool } from '@ratio/shared/db';
+import { markDomainVerified } from '@ratio/data-provisioning';
+import { pool } from '@ratio/data-db';
 
 const TA = 't_dvg_a';
 const TB = 't_dvg_b';

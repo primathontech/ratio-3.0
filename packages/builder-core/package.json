@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/builder-core",
+  "version": "0.1.0",
+  "description": "page builder core: doc · compose · store",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "license": "UNLICENSED"
+}

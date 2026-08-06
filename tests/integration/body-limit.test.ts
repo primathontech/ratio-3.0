@@ -2,8 +2,8 @@
 // middleware caps request size before the handler runs.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
-import { createApp } from '../../services/admin-api/app';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { pool } from '@ratio/data-db';
 
 after(() => pool.end());
 

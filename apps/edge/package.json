@@ -1,0 +1,8 @@
+{
+  "name": "@ratio/edge",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker edge adapter (host→tenant, cache, proxy to origin)",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED"
+}

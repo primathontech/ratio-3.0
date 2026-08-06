@@ -3,9 +3,9 @@
 // real. A published PageDoc is what the origin serves — see page-builder-origin.test.ts.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createApp } from '../../services/admin-api/app';
-import { onboardStore } from '@ratio/provisioning';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { onboardStore } from '@ratio/data-provisioning';
+import { pool } from '@ratio/data-db';
 
 const OWNER = 'user_pb_owner';
 const verify = async (token: string) => (token === 'tok-owner' ? { userId: OWNER } : null);

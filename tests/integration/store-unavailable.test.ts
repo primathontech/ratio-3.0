@@ -4,7 +4,7 @@
 // forced deterministically (no network). See apps/edge/worker.ts::storeUnavailable + app.onError.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import app from '../../services/edge-cloudflare/worker';
+import app from '../../apps/edge/worker';
 import { storeUnavailable } from '@ratio/edge-core';
 
 test('storeUnavailable is a 503 with Retry-After, no-store, and storefront security headers', async () => {

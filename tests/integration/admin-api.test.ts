@@ -3,10 +3,10 @@
 // injected (Clerk is an external service — mock the boundary, never the DB).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
-import { createApp } from '../../services/admin-api/app';
-import { getMembership } from '../../services/admin-api/auth';
-import { forTenant } from '@ratio/repo';
-import { pool } from '@ratio/shared/db';
+import { createApp } from '../../apps/admin-api/app';
+import { getMembership } from '../../apps/admin-api/auth';
+import { forTenant } from '@ratio/data-repo';
+import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice';
 const BOB = 'user_bob';

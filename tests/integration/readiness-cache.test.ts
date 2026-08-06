@@ -2,7 +2,7 @@
 // query per request.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { createReadiness } from '../../services/admin-api/readiness';
+import { createReadiness } from '../../apps/admin-api/readiness';
 
 test('caches the probe within the TTL (one probe per window)', async () => {
   let calls = 0;

@@ -1,0 +1,8 @@
+{
+  "name": "@ratio/origin",
+  "version": "0.1.0",
+  "description": "storefront data-plane origin (Hono): router + page-builder render",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED"
+}
