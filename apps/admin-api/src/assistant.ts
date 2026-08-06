@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { RatioControlPlane } from '@ratio/control-plane-client';
+import { ControlPlaneError } from '@ratio/control-plane-client';
 
 // OFCE-400 Model A: an in-dashboard AI assistant. It does NOT re-implement onboarding or
 // editing (ADR-014 D-STR7) — it drives the SAME control-plane the dashboard uses, via the
@@ -68,16 +69,21 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: 'add_or_edit_page',
     description:
-      'Create or replace a page on a store. The storefront renders pageConfig, so this changes the live store. pageConfig is an object with an optional title and a sections array.',
+      'Author a page with the page builder and publish it. Provide a PageDoc (see the system prompt for its shape and the valid section types). The draft is saved, validated, then published — the change goes live on the storefront immediately. If the PageDoc is invalid you get the validation error back so you can correct it and retry.',
     input_schema: {
       type: 'object',
       properties: {
         storeId: { type: 'string' },
-        path: { type: 'string', description: 'Must start with /, e.g. /about' },
-        pageType: { type: 'string', description: 'Optional, defaults to page' },
-        pageConfig: { type: 'object', description: 'The page content object' },
+        path: {
+          type: 'string',
+          description: 'Must start with /, e.g. /about. Must match doc.path.',
+        },
+        doc: {
+          type: 'object',
+          description: 'A PageDoc: { path, title?, dataSources?, sections: [...] }',
+        },
       },
-      required: ['storeId', 'path', 'pageConfig'],
+      required: ['storeId', 'path', 'doc'],
     },
   },
   {
@@ -98,8 +104,27 @@ dashboard uses, so your edits take effect immediately.
 
 Conventions:
 - Store ids are short slugs like t_acme. Hosts look like acme.ratiodev.in.
-- A page has a path starting with / and a pageConfig object: { title?, sections: [] }.
 - Prefer list_stores to discover an id before editing an existing store.
+
+Pages are authored with the page builder as a PageDoc and published immediately, so every
+edit to a page goes live on the storefront at once. A PageDoc is:
+  { path: "/about", title?: "About", dataSources?: {...}, sections: [ ... ] }
+Each section is { id, type, dataSourceKey?, data }. Put a section's settings under
+data.<binding>. Valid section types and their data shape:
+- hero        -> data: { hero: { heading, sub?, cta?: { label, href } } }
+- richText    -> data: { rich: { html } }
+- heading     -> data: { heading: { text } }
+- image       -> data: { image: { src, alt? } }
+- button      -> data: { button: { label, href } }
+- spacer      -> data: { spacer: { size } }   // height in px
+- productGrid -> data: { grid: { heading? } }, with dataSourceKey pointing at a COLLECTION data source
+- product     -> data: {}, with dataSourceKey pointing at a PRODUCT data source
+Unknown section types are rejected — if add_or_edit_page returns an error, read the detail,
+fix the PageDoc, and retry. Example doc for an About page:
+  { path: "/about", title: "About us", sections: [
+    { id: "h", type: "hero", data: { hero: { heading: "About us", sub: "Our story" } } },
+    { id: "body", type: "richText", data: { rich: { html: "<p>We started in 2020.</p>" } } }
+  ] }
 
 Be concise. When you finish, tell the merchant plainly what you changed and the store URL.`;
 
@@ -124,15 +149,14 @@ async function runTool(
         };
       case 'get_store':
         return { ok: true, result: await client.getStore(input.id as string) };
-      case 'add_or_edit_page':
-        return {
-          ok: true,
-          result: await client.putPage(input.storeId as string, {
-            path: input.path as string,
-            pageType: input.pageType as string | undefined,
-            pageConfig: input.pageConfig as Record<string, unknown>,
-          }),
-        };
+      case 'add_or_edit_page': {
+        const storeId = input.storeId as string;
+        const path = input.path as string;
+        const doc = input.doc as Parameters<RatioControlPlane['savePageDraft']>[1];
+        const saved = await client.savePageDraft(storeId, doc);
+        const published = await client.publishPage(storeId, path);
+        return { ok: true, result: { saved, published } };
+      }
       case 'connect_domain':
         return {
           ok: true,
@@ -142,7 +166,11 @@ async function runTool(
         return { ok: false, result: { error: `unknown tool: ${name}` } };
     }
   } catch (e) {
-    return { ok: false, result: { error: (e as Error).message } };
+    const detail = (e as ControlPlaneError).body as { detail?: string } | undefined;
+    return {
+      ok: false,
+      result: { error: (e as Error).message, ...(detail?.detail && { detail: detail.detail }) },
+    };
   }
 }
 

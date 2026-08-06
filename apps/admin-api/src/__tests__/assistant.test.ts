@@ -14,6 +14,7 @@ import { composeVerifiers, agentVerifier, mintAgentToken, type Verifier } from '
 import { runAssistant, type AnthropicLike } from '../assistant';
 import { RatioControlPlane } from '@ratio/control-plane-client';
 import { recentAudit } from '../audit';
+import { PgPageStore } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_assistant';
@@ -53,6 +54,8 @@ async function cleanup() {
   await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [ID]);
 }
@@ -81,7 +84,15 @@ test('the assistant onboards a store and adds a page via the real control plane'
           type: 'tool_use',
           id: 'tu_2',
           name: 'add_or_edit_page',
-          input: { storeId: ID, path: '/about', pageConfig: { title: 'About', sections: [] } },
+          input: {
+            storeId: ID,
+            path: '/about',
+            doc: {
+              path: '/about',
+              title: 'About',
+              sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'About us' } } }],
+            },
+          },
         },
       ],
       'tool_use'
@@ -103,11 +114,13 @@ test('the assistant onboards a store and adds a page via the real control plane'
     ['create_store', 'add_or_edit_page']
   );
 
-  // The edits are real: the store and page exist in the database.
+  // The edits are real: the store exists and the page-builder page is PUBLISHED (live), not
+  // just drafted — proving the assistant's publish-immediately contract.
   const { rows: tenants } = await pool.query('SELECT id, name FROM tenants WHERE id=$1', [ID]);
   assert.strictEqual(tenants[0]?.name, 'AI Shop');
-  const { rows: routes } = await pool.query('SELECT path FROM routes WHERE tenant_id=$1', [ID]);
-  assert.ok(routes.some((r) => r.path === '/about'));
+  const live = await new PgPageStore().getLive(ID, '/about');
+  assert.strictEqual(live?.title, 'About');
+  assert.strictEqual(live?.sections[0]?.type, 'hero');
 
   // And they are attributed to an agent actor in the audit trail (ADR-016).
   const audit = await recentAudit(ID);
@@ -123,7 +136,7 @@ test('a failed tool call is reported back and does not abort the loop', async ()
           type: 'tool_use',
           id: 'tu_1',
           name: 'add_or_edit_page',
-          input: { storeId: 't_not_mine', path: '/x', pageConfig: { sections: [] } },
+          input: { storeId: 't_not_mine', path: '/x', doc: { path: '/x', sections: [] } },
         },
       ],
       'tool_use'

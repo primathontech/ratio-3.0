@@ -38,6 +38,8 @@ async function cleanup() {
     await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM routes WHERE tenant_id=$1', [id]);
+    await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id=$1', [id]);
+    await pool.query('DELETE FROM pages WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM domains WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM tenants WHERE id=$1', [id]);
   }
@@ -92,7 +94,14 @@ test('a store-scoped assistant can edit its store but cannot create/reach anothe
           type: 'tool_use',
           id: 'tu_2',
           name: 'add_or_edit_page',
-          input: { storeId: TS, path: '/promo', pageConfig: { sections: [] } },
+          input: {
+            storeId: TS,
+            path: '/promo',
+            doc: {
+              path: '/promo',
+              sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Promo' } } }],
+            },
+          },
         },
       ],
       'tool_use'

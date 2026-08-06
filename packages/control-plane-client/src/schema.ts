@@ -77,6 +77,47 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/stores/{id}/page-builder': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    /** Read a page-builder page (draft + live) by path */
+    get: operations['getPageBuilder'];
+    /** Save a page-builder draft (validates the PageDoc; live page untouched) */
+    put: operations['savePageDraft'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/stores/{id}/page-builder/publish': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Promote a page-builder draft to live (edits go live immediately) */
+    post: operations['publishPage'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/stores/{id}/domains': {
     parameters: {
       query?: never;
@@ -184,6 +225,24 @@ export interface components {
       pageConfig: {
         [key: string]: unknown;
       };
+    };
+    PageDoc: {
+      /** @description must start with / */
+      path: string;
+      title?: string;
+      dataSources?: {
+        [key: string]: unknown;
+      };
+      sections: ({
+        id: string;
+        type: string;
+        dataSourceKey?: string;
+        data?: {
+          [key: string]: unknown;
+        };
+      } & {
+        [key: string]: unknown;
+      })[];
     };
     DomainStatus: {
       host: string;
@@ -420,6 +479,122 @@ export interface operations {
       };
       /** @description invalid */
       400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  getPageBuilder: {
+    parameters: {
+      query?: {
+        path?: string;
+      };
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description ok */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            path: string;
+            draft?: components['schemas']['PageDoc'] | null;
+            live?: components['schemas']['PageDoc'] | null;
+            revision?: number | null;
+            hasDraft: boolean;
+          };
+        };
+      };
+    };
+  };
+  savePageDraft: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          doc: components['schemas']['PageDoc'];
+        };
+      };
+    };
+    responses: {
+      /** @description saved */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            ok: boolean;
+            draft?: components['schemas']['PageDoc'];
+          };
+        };
+      };
+      /** @description invalid */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description invalid page doc */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  publishPage: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Tenant (store) id */
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': {
+          path: string;
+        };
+      };
+    };
+    responses: {
+      /** @description published */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': {
+            ok: boolean;
+            revision?: number;
+          };
+        };
+      };
+      /** @description no draft to publish */
+      404: {
         headers: {
           [name: string]: unknown;
         };
