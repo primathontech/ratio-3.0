@@ -1,7 +1,7 @@
-// Shared, dependency-free HTML helpers used by the page-builder render path (esc for escaping,
-// safeRichText for sanitising authored richText). Pure + isomorphic (runs on the Worker and the
-// container). The legacy content-model renderer (renderPage) lived here too; it was removed when
-// the page builder became the sole storefront renderer.
+// Shared, dependency-free HTML helpers for the page-builder render path: esc (HTML escaping) and
+// safeRichText (sanitises authored richText). Pure + isomorphic (runs on the Worker and the
+// container). Formerly the standalone @ratio/theme package; folded in here once it was down to
+// these two helpers.
 
 export const esc = (s: unknown): string =>
   String(s ?? '')

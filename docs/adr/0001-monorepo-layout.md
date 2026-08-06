@@ -26,7 +26,6 @@ packages/   libraries                 apps/   deployables (each a workspace pack
   builder-core
   builder-registry
   builder-render
-  theme
   control-plane-client
 ```
 
