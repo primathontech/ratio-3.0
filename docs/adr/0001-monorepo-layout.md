@@ -22,8 +22,7 @@ packages/   libraries                 apps/   deployables (each a workspace pack
   data-db                               origin        @ratio/origin
   data-repo                             admin-api     @ratio/admin-api
   data-provisioning                     edge          @ratio/edge
-  data-content-model                    admin-web     @ratio/admin-web
-  edge-core
+  edge-core                             admin-web     @ratio/admin-web
   builder-core
   builder-registry
   builder-render
