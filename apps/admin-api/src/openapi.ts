@@ -98,6 +98,80 @@ export const openApiDocument = {
         },
       },
     },
+    '/stores/{id}/page-builder': {
+      parameters: [idParam],
+      get: {
+        operationId: 'getPageBuilder',
+        summary: 'Read a page-builder page (draft + live) by path',
+        parameters: [{ name: 'path', in: 'query', required: false, schema: { type: 'string' } }],
+        responses: {
+          '200': {
+            description: 'ok',
+            content: json({
+              type: 'object',
+              properties: {
+                path: { type: 'string' },
+                draft: { oneOf: [ref('PageDoc'), { type: 'null' }] },
+                live: { oneOf: [ref('PageDoc'), { type: 'null' }] },
+                revision: { type: ['integer', 'null'] },
+                hasDraft: { type: 'boolean' },
+              },
+              required: ['path', 'hasDraft'],
+            }),
+          },
+        },
+      },
+      put: {
+        operationId: 'savePageDraft',
+        summary: 'Save a page-builder draft (validates the PageDoc; live page untouched)',
+        requestBody: {
+          required: true,
+          content: json({
+            type: 'object',
+            properties: { doc: ref('PageDoc') },
+            required: ['doc'],
+          }),
+        },
+        responses: {
+          '200': {
+            description: 'saved',
+            content: json({
+              type: 'object',
+              properties: { ok: { type: 'boolean' }, draft: ref('PageDoc') },
+              required: ['ok'],
+            }),
+          },
+          '400': { description: 'invalid' },
+          '422': { description: 'invalid page doc' },
+        },
+      },
+    },
+    '/stores/{id}/page-builder/publish': {
+      parameters: [idParam],
+      post: {
+        operationId: 'publishPage',
+        summary: 'Promote a page-builder draft to live (edits go live immediately)',
+        requestBody: {
+          required: true,
+          content: json({
+            type: 'object',
+            properties: { path: { type: 'string' } },
+            required: ['path'],
+          }),
+        },
+        responses: {
+          '200': {
+            description: 'published',
+            content: json({
+              type: 'object',
+              properties: { ok: { type: 'boolean' }, revision: { type: 'integer' } },
+              required: ['ok'],
+            }),
+          },
+          '404': { description: 'no draft to publish' },
+        },
+      },
+    },
     '/stores/{id}/domains': {
       parameters: [idParam],
       get: {
@@ -223,6 +297,29 @@ export const openApiDocument = {
           pageConfig: { type: 'object', additionalProperties: true },
         },
         required: ['path', 'pageConfig'],
+      },
+      PageDoc: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'must start with /' },
+          title: { type: 'string' },
+          dataSources: { type: 'object', additionalProperties: true },
+          sections: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                type: { type: 'string' },
+                dataSourceKey: { type: 'string' },
+                data: { type: 'object', additionalProperties: true },
+              },
+              required: ['id', 'type'],
+              additionalProperties: true,
+            },
+          },
+        },
+        required: ['path', 'sections'],
       },
       DomainStatus: {
         type: 'object',

@@ -76,6 +76,29 @@ export class RatioControlPlane {
   putPage(id: string, input: Schemas['PageInput']) {
     return this.req<Schemas['Page']>('PUT', `/stores/${enc(id)}/page`, input);
   }
+  getPageBuilder(id: string, path: string) {
+    return this.req<{
+      path: string;
+      draft: Schemas['PageDoc'] | null;
+      live: Schemas['PageDoc'] | null;
+      revision: number | null;
+      hasDraft: boolean;
+    }>('GET', `/stores/${enc(id)}/page-builder?path=${enc(path)}`);
+  }
+  savePageDraft(id: string, doc: Schemas['PageDoc']) {
+    return this.req<{ ok: boolean; draft?: Schemas['PageDoc'] }>(
+      'PUT',
+      `/stores/${enc(id)}/page-builder`,
+      { doc }
+    );
+  }
+  publishPage(id: string, path: string) {
+    return this.req<{ ok: boolean; revision?: number }>(
+      'POST',
+      `/stores/${enc(id)}/page-builder/publish`,
+      { path }
+    );
+  }
   listDomains(id: string) {
     return this.req<{ domains: Schemas['DomainStatus'][] }>('GET', `/stores/${enc(id)}/domains`);
   }
