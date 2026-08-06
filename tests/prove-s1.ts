@@ -2,13 +2,14 @@
 import http from 'http';
 import { pool } from '@ratio/data-db';
 import { forTenant } from '@ratio/data-repo';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 import { configureDbFromEnv } from '../scripts/db';
 
 configureDbFromEnv();
 
 const EDGE = Number(process.env.EDGE_PORT || 8080);
 const ORIGIN = Number(process.env.ORIGIN_PORT || 9090);
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const SECRET = resolveEdgeSecret(process.env);
 
 function get(port: number, path: string, headers: Record<string, string> = {}) {
   return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: string }>(

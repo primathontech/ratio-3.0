@@ -6,6 +6,7 @@ import assert from 'node:assert';
 import { createApp } from '../../apps/admin-api/src/app';
 import { app as origin } from '../../apps/origin/src/index';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
 const OWNER = 'user_owner';
 const OTHER = 'user_other';
@@ -30,7 +31,7 @@ function call(method: string, path: string, headers: Record<string, string> = {}
 function render(path: string) {
   return origin.fetch(
     new Request('http://o' + path, {
-      headers: { 'x-edge-auth': 'private-link-secret', 'x-ratio-tenant': ID },
+      headers: { 'x-edge-auth': resolveEdgeSecret(process.env), 'x-ratio-tenant': ID },
     })
   );
 }

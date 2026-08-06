@@ -2,8 +2,9 @@
 // pages must carry a real, short-TTL Cache-Control so "changes go live" is actually true.
 import { test, after } from 'node:test';
 import assert from 'node:assert';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
-process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
 import { purgeUrls, storeCacheUrls, deleteCustomHostname } from '../../apps/admin-api/src/domains';
 import { app as origin } from '../../apps/origin/src/index';

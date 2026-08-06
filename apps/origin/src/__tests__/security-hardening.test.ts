@@ -4,11 +4,11 @@
 //   H3 — ?store= selector bypassing host->tenant isolation (dev/staging only)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
+import { resolveEdgeSecret, storeOverrideAllowed } from '@ratio/edge-core';
 
-process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
-import { app as origin, resolveEdgeSecret } from '../index';
-import { storeOverrideAllowed } from '@ratio/edge-core';
+import { app as origin } from '../index';
 import { pool } from '@ratio/data-db';
 
 const SECRET = process.env.EDGE_SECRET as string;

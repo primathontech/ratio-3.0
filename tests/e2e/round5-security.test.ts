@@ -4,10 +4,11 @@
 //   M-7 — storefront ships no security headers (CSP / nosniff)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
 process.env.AGENT_TOKEN_SECRET = 'test-round5-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
-process.env.EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
 import { renderPage } from '@ratio/theme';
 import { app as origin } from '../../apps/origin/src/index';

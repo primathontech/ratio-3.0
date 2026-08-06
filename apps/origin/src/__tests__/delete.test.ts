@@ -4,8 +4,9 @@ import assert from 'node:assert';
 import { onboardStore, deleteStore } from '@ratio/data-provisioning';
 import { app } from '../index';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const SECRET = resolveEdgeSecret(process.env);
 const ID = 't_del';
 const HOST = 'del.localhost';
 
