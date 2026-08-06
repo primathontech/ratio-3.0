@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { timingSafeEqual } from 'node:crypto';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
-import { esc } from '@ratio/theme';
+import { esc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
 import { resolvePage, StubResolver } from '@ratio/builder-core';
