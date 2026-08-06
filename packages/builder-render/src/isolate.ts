@@ -34,6 +34,10 @@ export function renderUntrusted(
   return new Promise<string>((resolve, reject) => {
     const worker = new Worker(WORKER, {
       workerData: { source, data, limits: UNTRUSTED_LIMITS, allowlist: FILTER_ALLOWLIST },
+      // The worker is a self-contained .mjs — it needs no loader. Start it with a clean execArgv so
+      // it never inherits the parent's --import preloads (the tsx loader, a test bootstrap): this is
+      // an isolation boundary, and those preloads only add attack surface + startup cost here.
+      execArgv: [],
     });
     let settled = false;
     const done = (fn: () => void) => {

@@ -103,9 +103,7 @@ export function buildCustomClient(
 }
 
 // Platform service URLs from env, or null if not configured.
-export function commerceUrlsFromEnv(
-  env: NodeJS.ProcessEnv = process.env
-): CustomBackendUrls | null {
+export function commerceUrlsFromEnv(env: NodeJS.ProcessEnv): CustomBackendUrls | null {
   const productApiBaseUrl = env.COMMERCE_PRODUCT_API_URL;
   const cartApiBaseUrl = env.COMMERCE_CART_API_URL;
   const orderApiBaseUrl = env.COMMERCE_ORDER_API_URL;
@@ -125,9 +123,7 @@ export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver
 
 // Origin factory: real resolver when the platform URLs are configured, else null (caller falls back
 // to the stub, so local dev without a backend still renders). Per-merchant creds come from the DB.
-export function commerceResolverFromEnv(
-  env: NodeJS.ProcessEnv = process.env
-): ShopkitResolver | null {
+export function commerceResolverFromEnv(env: NodeJS.ProcessEnv): ShopkitResolver | null {
   const urls = commerceUrlsFromEnv(env);
   return urls ? customCommerceResolver(urls) : null;
 }

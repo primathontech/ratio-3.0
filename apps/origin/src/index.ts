@@ -48,7 +48,7 @@ const pbRegistry = defaultRegistry();
 // Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
 // resolver when COMMERCE_* env is configured; otherwise the StubResolver (deterministic samples) so
 // local dev renders without a backend.
-const resolver = commerceResolverFromEnv() ?? new StubResolver();
+const resolver = commerceResolverFromEnv(process.env) ?? new StubResolver();
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
 // backstop that contains any HTML/color injection that slips through content validation;

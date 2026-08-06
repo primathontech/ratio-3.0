@@ -73,27 +73,23 @@ test('re-onboard without merchantId preserves existing commerce (COALESCE)', asy
   assert.deepStrictEqual((await forTenant(ID).getTenant())!.commerce, { merchantId: 'gk_keep' });
 });
 
-test('local onboarding adds a <label>.localhost alias (RATIO_LOCAL); non-local does not', async () => {
-  const prev = process.env.RATIO_LOCAL;
-  try {
-    process.env.RATIO_LOCAL = 'true';
-    const local = await onboardStore({ name: 'Autogen Kicks', host: 'autogen-kicks.ratiodev.in' });
-    const lh = (
-      await pool.query<{ host: string }>('SELECT host FROM domains WHERE tenant_id=$1', [local.id])
-    ).rows.map((r) => r.host);
-    assert.ok(lh.includes('autogen-kicks.ratiodev.in'), 'the entered domain');
-    assert.ok(lh.includes('autogen-kicks.localhost'), 'the browser-resolvable local alias');
+test('local onboarding adds a <label>.localhost alias (local:true); non-local does not', async () => {
+  const local = await onboardStore({
+    name: 'Autogen Kicks',
+    host: 'autogen-kicks.ratiodev.in',
+    local: true,
+  });
+  const lh = (
+    await pool.query<{ host: string }>('SELECT host FROM domains WHERE tenant_id=$1', [local.id])
+  ).rows.map((r) => r.host);
+  assert.ok(lh.includes('autogen-kicks.ratiodev.in'), 'the entered domain');
+  assert.ok(lh.includes('autogen-kicks.localhost'), 'the browser-resolvable local alias');
 
-    delete process.env.RATIO_LOCAL;
-    const plain = await onboardStore({ name: 'Autogen Plain', host: 'autogen-plain.ratiodev.in' });
-    const ph = (
-      await pool.query<{ host: string }>('SELECT host FROM domains WHERE tenant_id=$1', [plain.id])
-    ).rows.map((r) => r.host);
-    assert.ok(!ph.some((h) => h.endsWith('.localhost')), 'no alias when not local');
-  } finally {
-    if (prev === undefined) delete process.env.RATIO_LOCAL;
-    else process.env.RATIO_LOCAL = prev;
-  }
+  const plain = await onboardStore({ name: 'Autogen Plain', host: 'autogen-plain.ratiodev.in' });
+  const ph = (
+    await pool.query<{ host: string }>('SELECT host FROM domains WHERE tenant_id=$1', [plain.id])
+  ).rows.map((r) => r.host);
+  assert.ok(!ph.some((h) => h.endsWith('.localhost')), 'no alias when not local');
 });
 
 test('generates a unique t_<slug>_<hex> id when none is supplied, and never collides', async () => {

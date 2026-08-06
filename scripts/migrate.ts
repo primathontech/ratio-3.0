@@ -3,6 +3,9 @@
 import fs from 'fs';
 import path from 'path';
 import { pool } from '@ratio/data-db';
+import { configureDbFromEnv } from './db';
+
+configureDbFromEnv();
 
 (async () => {
   await pool.query(

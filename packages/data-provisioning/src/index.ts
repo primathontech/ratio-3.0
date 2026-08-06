@@ -47,11 +47,15 @@ export async function onboardStore({
   color = '#333333',
   ownerUserId,
   merchantId,
+  local = false,
 }: {
   id?: string;
   name?: string;
   host?: string;
   color?: string;
+  // When true, also register a *.localhost alias so the store is browser-resolvable on this
+  // machine (local dev only). The caller (an app) decides this — the library reads no env.
+  local?: boolean;
   ownerUserId?: string;
   merchantId?: string; // gokwik merchant id → tenants.commerce (data-layer). Synced at onboarding.
 }): Promise<{ id: string; hostReclaimedFrom: string | null }> {
@@ -146,12 +150,12 @@ export async function onboardStore({
       [host, tenantId, isPlatformHost(host), isPlatformHost(host) ? tenantId : null]
     );
     if (!dom.rowCount) throw new ConflictError('that domain is already connected to another store');
-    // Local dev only (RATIO_LOCAL): also expose the store at <label>.localhost so it has a
+    // Local dev only (caller passes local:true): also expose the store at <label>.localhost so it has a
     // browser-resolvable host on this machine. A store's real domain (*.ratiodev.in / custom)
     // doesn't resolve to localhost, and a ?store= query override is lost on navigation — but
     // *.localhost always resolves to 127.0.0.1, and host routing survives navigation. Best-effort
-    // (DO NOTHING on a taken alias); never runs on a deployed plane (RATIO_LOCAL unset there).
-    if (process.env.RATIO_LOCAL === 'true' && !host.endsWith('.localhost')) {
+    // (DO NOTHING on a taken alias); never runs on a deployed plane (the app passes local:false).
+    if (local && !host.endsWith('.localhost')) {
       await client.query(
         `INSERT INTO domains (host, tenant_id, verified) VALUES ($1,$2,true)
          ON CONFLICT (host) DO NOTHING`,
