@@ -77,27 +77,6 @@ export const openApiDocument = {
         responses: { '200': { description: 'delete proof', content: json(ref('DeleteProof')) } },
       },
     },
-    '/stores/{id}/page': {
-      parameters: [idParam],
-      get: {
-        operationId: 'getPage',
-        summary: 'Read one page by path',
-        parameters: [{ name: 'path', in: 'query', required: true, schema: { type: 'string' } }],
-        responses: {
-          '200': { description: 'ok', content: json(ref('Page')) },
-          '404': { description: 'not found' },
-        },
-      },
-      put: {
-        operationId: 'putPage',
-        summary: 'Create or replace a page (edits the live store)',
-        requestBody: { required: true, content: json(ref('PageInput')) },
-        responses: {
-          '200': { description: 'ok', content: json(ref('Page')) },
-          '400': { description: 'invalid' },
-        },
-      },
-    },
     '/stores/{id}/page-builder': {
       parameters: [idParam],
       get: {
@@ -279,24 +258,6 @@ export const openApiDocument = {
           theme: { type: 'object', additionalProperties: true },
         },
         required: ['id', 'name'],
-      },
-      PageInput: {
-        type: 'object',
-        properties: {
-          path: { type: 'string', description: 'must start with /' },
-          pageType: { type: 'string' },
-          pageConfig: { type: 'object', additionalProperties: true },
-        },
-        required: ['path', 'pageConfig'],
-      },
-      Page: {
-        type: 'object',
-        properties: {
-          path: { type: 'string' },
-          pageType: { type: 'string' },
-          pageConfig: { type: 'object', additionalProperties: true },
-        },
-        required: ['path', 'pageConfig'],
       },
       PageDoc: {
         type: 'object',

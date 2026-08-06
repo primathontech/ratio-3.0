@@ -46,7 +46,6 @@ async function cleanup() {
   for (const id of [TV, TA]) {
     await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [id]);
-    await pool.query('DELETE FROM routes WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM domains WHERE tenant_id=$1', [id]);
     await pool.query('DELETE FROM tenants WHERE id=$1', [id]);
   }

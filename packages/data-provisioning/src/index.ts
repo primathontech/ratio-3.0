@@ -36,7 +36,7 @@ export class ConflictError extends Error {
   }
 }
 
-// Provisioning (crosses tenant boundaries): create a tenant + host mapping + home route
+// Provisioning (crosses tenant boundaries): create a tenant + host mapping
 // atomically. A merchant is data: no fork, no server, no deploy. Idempotent FOR THE OWNER
 // only — an authenticated create must never overwrite another merchant's store or steal a
 // host (the upserts below are guarded by the ownership/claim checks up front).
@@ -162,17 +162,6 @@ export async function onboardStore({
         [`${host.split('.')[0]}.localhost`, tenantId]
       );
     }
-    await client.query(
-      `INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES ($1,'/','home',$2)
-       ON CONFLICT (tenant_id, path) DO UPDATE SET page_config=EXCLUDED.page_config`,
-      [
-        tenantId,
-        JSON.stringify({
-          title: name + ' Home',
-          body: 'Welcome to ' + name + ' — onboarded as data.',
-        }),
-      ]
-    );
     if (ownerUserId) {
       await client.query(
         `INSERT INTO memberships (clerk_user_id, tenant_id, role) VALUES ($1,$2,'owner')
@@ -193,7 +182,6 @@ export async function onboardStore({
 export interface DeleteProof {
   deleted: boolean;
   removed: {
-    routes: number;
     domains: number;
     tenants: number;
     memberships: number;
@@ -214,7 +202,6 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
     await client.query('BEGIN');
     // memberships first: it FK-references tenants(id), so it must go before the tenant.
     const memberships = await client.query('DELETE FROM memberships WHERE tenant_id = $1', [id]);
-    const routes = await client.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
     const domains = await client.query('DELETE FROM domains WHERE tenant_id = $1', [id]);
     // Page-builder rows are tenant-scoped with no FK cascade, so purge them explicitly (every store
     // is scaffolded with pages at onboarding) — else a deleted store leaks orphan pages + outbox rows.
@@ -227,7 +214,6 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
     const { rows } = await client.query<{ residual: string }>(
       `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
             + (SELECT count(*) FROM domains WHERE tenant_id=$1)
-            + (SELECT count(*) FROM routes WHERE tenant_id=$1)
             + (SELECT count(*) FROM pages WHERE tenant_id=$1)
             + (SELECT count(*) FROM page_purge_outbox WHERE tenant_id=$1)
             + (SELECT count(*) FROM memberships WHERE tenant_id=$1) AS residual`,
@@ -239,7 +225,6 @@ export async function deleteStore(id?: string): Promise<DeleteProof> {
     return {
       deleted: (tenants.rowCount ?? 0) > 0,
       removed: {
-        routes: routes.rowCount ?? 0,
         domains: domains.rowCount ?? 0,
         tenants: tenants.rowCount ?? 0,
         memberships: memberships.rowCount ?? 0,

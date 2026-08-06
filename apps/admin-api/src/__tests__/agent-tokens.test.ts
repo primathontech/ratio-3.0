@@ -17,7 +17,6 @@ import {
   composeVerifiers,
   type Verifier,
 } from '../auth';
-import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_agent';
@@ -47,7 +46,7 @@ function call(method: string, path: string, token?: string, body?: unknown) {
 async function cleanup() {
   for (const t of [ID, OTHER]) {
     await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [t]);
-    await pool.query('DELETE FROM routes WHERE tenant_id=$1', [t]);
+    await pool.query('DELETE FROM pages WHERE tenant_id=$1', [t]);
     await pool.query('DELETE FROM domains WHERE tenant_id=$1', [t]);
     await pool.query('DELETE FROM tenants WHERE id=$1', [t]);
   }
@@ -100,12 +99,10 @@ test('an agent token scoped to the store drives the same read API as its princip
 
 test('an agent token can edit content through the same endpoint (onboard/edit surface)', async () => {
   const tok = mintAgentToken({ sub: ALICE, scope: [ID], exp: sec() + 3600 });
-  const r = await call('PUT', `/stores/${ID}/page`, tok, {
-    path: '/',
-    pageConfig: { type: 'root', children: [] },
+  const r = await call('PUT', `/stores/${ID}/page-builder`, tok, {
+    doc: { path: '/', title: 'Home', sections: [] },
   });
   assert.strictEqual(r.status, 200);
-  assert.ok(await forTenant(ID).getRoute('/'));
 });
 
 test('an agent token is confined to its scope — a different tenant is 403', async () => {

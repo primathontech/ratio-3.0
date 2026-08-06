@@ -41,7 +41,6 @@ before(() => pool.query("DELETE FROM tenants WHERE id IN ('t_ph_squat','t_ph_ok'
 after(async () => {
   await pool.query('DELETE FROM memberships WHERE tenant_id IN ($1,$2)', ['t_ph_squat', 't_ph_ok']);
   await pool.query('DELETE FROM domains WHERE tenant_id IN ($1,$2)', ['t_ph_squat', 't_ph_ok']);
-  await pool.query('DELETE FROM routes WHERE tenant_id IN ($1,$2)', ['t_ph_squat', 't_ph_ok']);
   await pool.query("DELETE FROM tenants WHERE id IN ('t_ph_squat','t_ph_ok')");
   await pool.end();
 });

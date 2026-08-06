@@ -17,11 +17,3 @@ INSERT INTO pages (tenant_id, path, live_doc, revision) VALUES
   ('t_acme', '/', '{"path":"/","title":"Home","sections":[{"id":"hero","type":"hero","data":{"hero":{"heading":"Acme","sub":"Welcome to Acme"}}}]}', 1),
   ('t_beta', '/', '{"path":"/","title":"Home","sections":[{"id":"hero","type":"hero","data":{"hero":{"heading":"Beta","sub":"Welcome to Beta"}}}]}', 1)
 ON CONFLICT (tenant_id, path) DO NOTHING;
-
--- Legacy content-model routes (retained until the routes-table teardown; no longer rendered).
-INSERT INTO routes (tenant_id, path, page_type, page_config) VALUES
-  ('t_acme', '/',                  'home',    '{"title":"Acme Home","body":"Welcome to Acme"}'),
-  ('t_acme', '/products/red-shoe', 'product', '{"title":"Red Shoe","price":"Rs 1999"}'),
-  ('t_beta', '/',                  'home',    '{"title":"Beta Home","body":"Welcome to Beta"}'),
-  ('t_beta', '/about',             'page',    '{"title":"About Beta","body":"We are Beta"}')
-ON CONFLICT (tenant_id, path) DO NOTHING;

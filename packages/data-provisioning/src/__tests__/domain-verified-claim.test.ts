@@ -22,7 +22,6 @@ async function cleanup() {
   await pool.query('DELETE FROM domains WHERE host = ANY($1)', [[CUSTOM, HIJACK]]);
   for (const id of [A, B]) {
     await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [id]);
-    await pool.query('DELETE FROM routes WHERE tenant_id = $1', [id]);
     await pool.query('DELETE FROM domains WHERE tenant_id = $1', [id]);
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
   }

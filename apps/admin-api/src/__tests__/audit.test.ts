@@ -52,7 +52,7 @@ async function auditRows(): Promise<Row[]> {
 async function cleanup() {
   await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [ID]);
 }
@@ -64,7 +64,7 @@ after(async () => {
 
 test('scope catalog maps control-plane routes; non-mapped paths are null', () => {
   assert.strictEqual(scopeFor('POST', '/stores'), SCOPES.STORES_ONBOARD);
-  assert.strictEqual(scopeFor('PUT', '/stores/:id/page'), SCOPES.PAGES_WRITE);
+  assert.strictEqual(scopeFor('PUT', '/stores/:id/page-builder'), SCOPES.PAGES_WRITE);
   assert.strictEqual(scopeFor('POST', '/stores/:id/domains'), SCOPES.DOMAINS_WRITE);
   assert.strictEqual(scopeFor('GET', '/stores/:id'), SCOPES.STORES_READ);
   assert.strictEqual(scopeFor('GET', '/health'), null);
@@ -86,9 +86,8 @@ test('creating a store writes a stores:onboard row attributed to the caller (use
 });
 
 test('editing a page writes a pages:write row', async () => {
-  const r = await call('PUT', `/stores/${ID}/page`, 'tok-alice', {
-    path: '/',
-    pageConfig: { type: 'root', children: [] },
+  const r = await call('PUT', `/stores/${ID}/page-builder`, 'tok-alice', {
+    doc: { path: '/', title: 'Home', sections: [] },
   });
   assert.strictEqual(r.status, 200);
   assert.ok((await auditRows()).some((x) => x.action === SCOPES.PAGES_WRITE && x.method === 'PUT'));
@@ -97,15 +96,14 @@ test('editing a page writes a pages:write row', async () => {
 test('reads are NOT audited', async () => {
   const before = (await auditRows()).length;
   await call('GET', `/stores/${ID}`, 'tok-alice');
-  await call('GET', `/stores/${ID}/pages`, 'tok-alice');
+  await call('GET', `/stores/${ID}/page-builder/pages`, 'tok-alice');
   assert.strictEqual((await auditRows()).length, before);
 });
 
 test('an agent-token mutation is attributed as kind=agent', async () => {
   const tok = mintAgentToken({ sub: ALICE, scope: [ID], exp: sec() + 3600 });
-  const r = await call('PUT', `/stores/${ID}/page`, tok, {
-    path: '/promo',
-    pageConfig: { type: 'root', children: [] },
+  const r = await call('PUT', `/stores/${ID}/page-builder`, tok, {
+    doc: { path: '/promo', title: 'Promo', sections: [] },
   });
   assert.strictEqual(r.status, 200);
   assert.ok(
@@ -115,7 +113,9 @@ test('an agent-token mutation is attributed as kind=agent', async () => {
 
 test('an unauthenticated (401) attempt writes no audit row', async () => {
   const before = (await auditRows()).length;
-  const r = await call('PUT', `/stores/${ID}/page`, undefined, { path: '/x', pageConfig: {} });
+  const r = await call('PUT', `/stores/${ID}/page-builder`, undefined, {
+    doc: { path: '/x', sections: [] },
+  });
   assert.strictEqual(r.status, 401);
   assert.strictEqual((await auditRows()).length, before);
 });

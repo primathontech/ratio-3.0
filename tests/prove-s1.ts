@@ -1,7 +1,6 @@
 // Full-stack E2E proof of S1 cacheability. Run: tsx test/prove-s1.ts (servers up).
 import http from 'http';
 import { pool } from '@ratio/data-db';
-import { forTenant } from '@ratio/data-repo';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { configureDbFromEnv } from '../scripts/db';
 
@@ -28,11 +27,6 @@ const originRenders = async (): Promise<number> =>
   JSON.parse((await get(ORIGIN, '/__stats', { 'x-edge-auth': SECRET })).body).renders;
 const edgeStats = async (): Promise<{ hit: number; miss: number; bypass: number }> =>
   JSON.parse((await get(EDGE, '/__admin/stats', { 'x-admin-secret': SECRET })).body);
-const doPurge = async (key: string) =>
-  JSON.parse(
-    (await get(EDGE, '/__admin/purge?key=' + encodeURIComponent(key), { 'x-admin-secret': SECRET }))
-      .body
-  );
 
 (async () => {
   const results: { n: string; ok: boolean; d: string }[] = [];
@@ -60,26 +54,6 @@ const doPurge = async (key: string) =>
     '2. Non-cacheable (cart) always BYPASS',
     carts.every((e) => e === 'BYPASS'),
     `edge=${carts.join(',')}`
-  );
-
-  await get(EDGE, '/', { host: 'acme.localhost' });
-  const homePre = await get(EDGE, '/', { host: 'acme.localhost' });
-  await forTenant('t_acme').addRoute('/products/red-shoe', 'product', {
-    title: 'Red Shoe v2',
-    price: 'Rs 1799',
-  });
-  const purged = await doPurge('t:t_acme:route:/products/red-shoe');
-  const prodAfter = await get(EDGE, '/products/red-shoe', { host: 'acme.localhost' });
-  const homeAfter = await get(EDGE, '/', { host: 'acme.localhost' });
-  check(
-    '3a. Publish purges exactly that page',
-    prodAfter.headers['x-edge'] === 'MISS' && prodAfter.body.includes('Red Shoe v2'),
-    `edge=${prodAfter.headers['x-edge']}, purged=${purged.purged}`
-  );
-  check(
-    '3b. Purge is EXACT — home still cached',
-    homePre.headers['x-edge'] === 'HIT' && homeAfter.headers['x-edge'] === 'HIT',
-    `home=${homeAfter.headers['x-edge']}`
   );
 
   const betaHome = await get(EDGE, '/', { host: 'beta.localhost' });

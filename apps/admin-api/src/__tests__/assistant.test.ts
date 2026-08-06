@@ -53,7 +53,6 @@ function scriptedAnthropic(turns: AnthropicSdk.Message[]): AnthropicLike {
 async function cleanup() {
   await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);

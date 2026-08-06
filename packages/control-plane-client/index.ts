@@ -70,12 +70,6 @@ export class RatioControlPlane {
   deleteStore(id: string) {
     return this.req<Schemas['DeleteProof']>('DELETE', `/stores/${enc(id)}`);
   }
-  getPage(id: string, path: string) {
-    return this.req<Schemas['Page']>('GET', `/stores/${enc(id)}/page?path=${enc(path)}`);
-  }
-  putPage(id: string, input: Schemas['PageInput']) {
-    return this.req<Schemas['Page']>('PUT', `/stores/${enc(id)}/page`, input);
-  }
   getPageBuilder(id: string, path: string) {
     return this.req<{
       path: string;

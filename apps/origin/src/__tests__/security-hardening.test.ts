@@ -15,7 +15,6 @@ const SECRET = process.env.EDGE_SECRET as string;
 const TX = 't_sec_xss';
 
 before(async () => {
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [TX]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [TX]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [TX]);
   await pool.query('INSERT INTO tenants (id, name, theme) VALUES ($1,$2,$3)', [
