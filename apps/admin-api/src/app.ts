@@ -14,7 +14,7 @@ import {
 } from '@ratio/data-provisioning';
 import { forTenant, StaleWriteError } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
-import { isLocal } from '@ratio/data-db';
+import { config } from './config';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
@@ -75,7 +75,7 @@ type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: strin
 // save shows on the next reload — the same purge-on-publish contract, pointed at the local edge.
 // Gated by RATIO_LOCAL and best-effort, so it never runs (and never throws) on a deployed plane.
 async function purgeLocalEdge(tenant: string): Promise<void> {
-  if (!isLocal) return;
+  if (!config.local) return;
   const port = process.env.EDGE_PORT || '8080';
   const secret = process.env.EDGE_SECRET || 'private-link-secret';
   await fetch(
@@ -88,7 +88,7 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
 // edge-sim indexes by tag; the deployed Cloudflare Worker does not (it 404s /__), so prod purge goes
 // by URL via purgeStoreUrls below. Used by page-builder publish, theme-save, AND the commerce webhook.
 async function purgeEdgeTags(tags: string[]): Promise<void> {
-  if (!isLocal || tags.length === 0) return;
+  if (!config.local || tags.length === 0) return;
   const port = process.env.EDGE_PORT || '8080';
   const secret = process.env.EDGE_SECRET || 'private-link-secret';
   for (const tag of tags) {
@@ -379,7 +379,7 @@ export function createApp(
     const userId = c.get('userId');
     // isLocal (RATIO_LOCAL) lets the SPA show dev-only affordances — e.g. a local storefront link
     // via the edge's ?store=<id> override — driven by the one run-environment flag, not a guess.
-    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId), isLocal });
+    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId), isLocal: config.local });
   });
 
   // Commerce change webhook (gokwik → cache invalidation). Public + HMAC-verified. Maps the event
@@ -464,6 +464,7 @@ export function createApp(
       color,
       ownerUserId: c.get('userId'),
       merchantId,
+      local: config.local,
     });
     c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
     // Scaffold the default product + collection templates so the store navigates out of the box
@@ -597,7 +598,7 @@ export function createApp(
   // (env service URLs + the tenant's own merchantId) and returns the CANONICAL collections envelope-
   // navigated only — no shaping here (the SPA maps to {handle,title}). Empty when not connected.
   app.get('/stores/:id/collections', requireMembership, async (c) => {
-    const urls = commerceUrlsFromEnv();
+    const urls = commerceUrlsFromEnv(process.env);
     if (!urls) return c.json({ collections: [] });
     const tenant = await forTenant(c.req.param('id')).getTenant();
     const client = buildCustomClient(tenant?.commerce, urls);

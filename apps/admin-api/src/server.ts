@@ -1,5 +1,10 @@
 import { serve } from '@hono/node-server';
+import { configureDb } from '@ratio/data-db';
 import { app } from './app';
+import { config } from './config';
+
+// Inject DB config before serving; the pool opens lazily on the first query.
+configureDb({ connectionString: config.databaseUrl, insecureTls: config.insecureTls });
 
 // Control-plane API entrypoint (its own deploy — separate from the data plane).
 // Fail fast: agent tokens (ADR-007) can't be minted or verified without this, and the

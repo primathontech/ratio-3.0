@@ -2,6 +2,9 @@
 // usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]
 import { onboardStore } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
+import { configureDbFromEnv } from './db';
+
+configureDbFromEnv();
 
 const [, , id, name, host, color = '#333333'] = process.argv;
 if (!id || !name || !host) {
@@ -11,7 +14,7 @@ if (!id || !name || !host) {
 }
 
 (async () => {
-  await onboardStore({ id, name, host, color });
+  await onboardStore({ id, name, host, color, local: process.env.RATIO_LOCAL === 'true' });
   console.log(`onboarded "${name}" (${id}) → http://${host}:8080/`);
   console.log('(no restart needed; the edge host-cache TTL is ~5s, so give it a moment)');
   await pool.end();

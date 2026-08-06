@@ -2,6 +2,9 @@
 import fs from 'fs';
 import path from 'path';
 import { pool } from '@ratio/data-db';
+import { configureDbFromEnv } from './db';
+
+configureDbFromEnv();
 
 (async () => {
   const sql = fs.readFileSync(path.join(__dirname, '..', 'db', 'seed.sql'), 'utf8');

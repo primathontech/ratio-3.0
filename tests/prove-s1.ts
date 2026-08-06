@@ -2,6 +2,9 @@
 import http from 'http';
 import { pool } from '@ratio/data-db';
 import { forTenant } from '@ratio/data-repo';
+import { configureDbFromEnv } from '../scripts/db';
+
+configureDbFromEnv();
 
 const EDGE = Number(process.env.EDGE_PORT || 8080);
 const ORIGIN = Number(process.env.ORIGIN_PORT || 9090);

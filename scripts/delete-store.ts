@@ -2,6 +2,9 @@
 // Usage: DATABASE_URL=... npx tsx scripts/delete-store.ts <id> [<id> ...]
 import { deleteStore } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
+import { configureDbFromEnv } from './db';
+
+configureDbFromEnv();
 
 const ids = process.argv.slice(2);
 if (ids.length === 0) {

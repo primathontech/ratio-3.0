@@ -2,7 +2,7 @@ import type { Context, MiddlewareHandler } from 'hono';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { verifyToken } from '@clerk/backend';
 import { pool } from '@ratio/data-db';
-import { devInsecureClerk } from '@ratio/data-db';
+import { config } from './config';
 
 // ADR-010 admin auth. Split by design:
 //  - authN (who is this user) is Clerk's job — we verify its session JWT offline.
@@ -41,7 +41,7 @@ export const clerkVerifier: Verifier = async (token) => {
 // on when RATIO_LOCAL=true or DEV_INSECURE_CLERK=true, but HARD-blocked whenever NODE_ENV=production
 // — so it can never authenticate on a deployed container. authZ (memberships) still runs normally.
 export const insecureDevClerkVerifier: Verifier = async (token) => {
-  if (!devInsecureClerk) return null;
+  if (!config.devInsecureClerk) return null;
   try {
     const payloadB64 = token.split('.')[1];
     const payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
