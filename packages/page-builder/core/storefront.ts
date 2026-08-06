@@ -103,6 +103,9 @@ a{color:inherit;text-decoration:none}
 .button{margin:6px 0 34px}
 .rich{max-width:68ch;margin:22px auto;color:var(--ink)}
 .rich p{margin:0 0 1em}
+.rte{color:var(--ink);line-height:1.6}
+.rte p{margin:0 0 1em}
+.rte a{color:var(--accent);text-decoration:underline}
 .pdp{display:grid;grid-template-columns:1fr 1fr;gap:34px;padding:34px 0;align-items:start}
 .pdp .ph{aspect-ratio:1;background:var(--surface);border-radius:var(--radius)}
 .pdp h1{font-size:2rem;letter-spacing:-.02em;margin:0 0 6px}

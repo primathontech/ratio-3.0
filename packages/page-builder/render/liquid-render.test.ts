@@ -58,6 +58,32 @@ test('engine: productGrid strikes the compare-at price only when it beats the pr
   assert.ok(!full.includes('class="was"'), 'no strike when compare-at does not beat price/absent');
 });
 
+test('engine: product PDP uses images[] for the image and renders the HTML description raw', async () => {
+  const html = await render(
+    FIRST_PARTY_SECTIONS.product.template,
+    {
+      product: {
+        title: 'Hair Mask',
+        handle: 'hair-mask',
+        price: 41900,
+        compare_at_price: 59900,
+        // getProduct has no top-level image_url — image is in images[] (main first)
+        images: [{ url: 'https://cdn/img.jpg', is_main: true }],
+        description: '<p>Repairs <b>90%</b> of damage</p>',
+      },
+    },
+    trusted
+  );
+  assert.match(html, /src="https:\/\/cdn\/img\.jpg"/, 'image comes from images[0].url');
+  assert.match(
+    html,
+    /<p>Repairs <b>90%<\/b> of damage<\/p>/,
+    'description rendered as HTML, not escaped'
+  );
+  assert.match(html, /₹419\.00/);
+  assert.match(html, /<s class="was">₹599\.00<\/s>/, 'compare-at struck through');
+});
+
 // ─── Sandbox: hostile templates are contained ────────────────────────────────
 test('sandbox: no JS constructor/prototype escape', async () => {
   const html = await render('{{ x.constructor }}{{ x.__proto__ }}', { x: {} }, untrusted);
