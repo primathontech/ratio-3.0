@@ -110,7 +110,7 @@ test('origin serves the published PageDoc — composed HTML, page-builder handle
   assert.ok(!body.includes('<script>alert'), 'script vector sanitized at save, never served');
 });
 
-test('unpublished path falls through to the legacy route table (404 here)', async () => {
+test('a path with no published PageDoc is a 404 (page builder is the sole renderer)', async () => {
   const res = await call('/pb-missing', edge({ 'x-ratio-tenant': T }));
   assert.equal(res.status, 404);
   assert.equal(res.headers.get('x-handler'), null, 'page-builder did not handle it');

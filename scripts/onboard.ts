@@ -2,6 +2,8 @@
 // usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]
 import { onboardStore } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
+import { PageBuilder, PgPageStore, scaffoldStorefront } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
 import { configureDbFromEnv } from './db';
 
 configureDbFromEnv();
@@ -15,6 +17,12 @@ if (!id || !name || !host) {
 
 (async () => {
   await onboardStore({ id, name, host, color, local: process.env.RATIO_LOCAL === 'true' });
+  // The page builder is the sole renderer — scaffold the default home + templates so the store
+  // renders immediately (mirrors the admin-api onboarding flow).
+  const pb = new PageBuilder(new PgPageStore(), defaultRegistry(), {
+    invalidateByTags: () => Promise.resolve(),
+  });
+  await scaffoldStorefront(pb, id, { name });
   console.log(`onboarded "${name}" (${id}) → http://${host}:8080/`);
   console.log('(no restart needed; the edge host-cache TTL is ~5s, so give it a moment)');
   await pool.end();

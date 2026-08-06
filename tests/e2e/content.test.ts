@@ -1,12 +1,10 @@
-// Content CRUD (OFCE-362 slice 2): the owner edits page_config through the authed
-// admin API, and the edit shows up on the live storefront render. Real test DB, no
-// mocks; the storefront path is exercised in-process via the origin app.fetch().
+// Content CRUD (OFCE-362 slice 2): the owner edits page_config through the authed admin API
+// (the legacy content-model editor, retained until the routes-table teardown). Real test DB, no
+// mocks. Storefront rendering is the page builder's job now — covered by the page-builder tests.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../../apps/admin-api/src/app';
-import { app as origin } from '../../apps/origin/src/index';
 import { pool } from '@ratio/data-db';
-import { resolveEdgeSecret } from '@ratio/edge-core';
 
 const OWNER = 'user_owner';
 const OTHER = 'user_other';
@@ -23,15 +21,6 @@ function call(method: string, path: string, headers: Record<string, string> = {}
       method,
       headers: { 'content-type': 'application/json', ...headers },
       body: body ? JSON.stringify(body) : undefined,
-    })
-  );
-}
-
-// Fetch a page from the private origin the way the edge does (trusted header + tenant).
-function render(path: string) {
-  return origin.fetch(
-    new Request('http://o' + path, {
-      headers: { 'x-edge-auth': resolveEdgeSecret(process.env), 'x-ratio-tenant': ID },
     })
   );
 }
@@ -93,20 +82,6 @@ test('owner writes a page and can read it back', async () => {
   assert.strictEqual(body.pageConfig.sections[0].heading, 'Freshly Edited');
 });
 
-test('the edit is live on the storefront render', async () => {
-  const res = await render('/promo');
-  assert.strictEqual(res.status, 200);
-  const html = await res.text();
-  assert.match(html, /Freshly Edited/);
-  assert.match(html, /<style/); // real theme, not a stub
-});
-
-test('editing the home page changes what the store serves at /', async () => {
-  await call('PUT', `/stores/${ID}/page`, owner, {
-    path: '/',
-    pageType: 'home',
-    pageConfig: { sections: [{ kind: 'hero', heading: 'New Homepage' }] },
-  });
-  const html = await (await render('/')).text();
-  assert.match(html, /New Homepage/);
-});
+// The legacy content-model edit→render tests were removed with the legacy renderer. The
+// page-builder authoring→storefront-render invariant is covered by page-builder-authoring.test.ts
+// (admin publish) + page-builder-origin.test.ts (origin serves the published PageDoc).

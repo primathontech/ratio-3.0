@@ -468,10 +468,11 @@ export function createApp(
       local: config.local,
     });
     c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
-    // Scaffold the default product + collection templates so the store navigates out of the box
-    // (product/collection URLs 404 until these exist). Best-effort — a scaffold hiccup must not
-    // fail an otherwise-successful onboarding; the merchant can re-add templates in the editor.
-    await scaffoldStorefront(pageBuilder, tenantId).catch(() => {});
+    // Scaffold the default home + product + collection pages so the store renders out of the box
+    // (the page builder is the sole renderer, so these URLs 404 until the pages exist). Best-effort
+    // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
+    // pages in the editor.
+    await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});

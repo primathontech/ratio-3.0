@@ -7,6 +7,17 @@ import { app } from '../index';
 import { edge } from '../../../../dev/edge-sim';
 import { onboardStore, deleteStore } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
+import { PageBuilder, PgPageStore, scaffoldStorefront } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
+
+const scaffold = (id: string, name: string) =>
+  scaffoldStorefront(
+    new PageBuilder(new PgPageStore(), defaultRegistry(), {
+      invalidateByTags: () => Promise.resolve(),
+    }),
+    id,
+    { name }
+  );
 
 const ORIGIN_PORT = 19090;
 process.env.ORIGIN_PORT = String(ORIGIN_PORT); // edge reads the origin port lazily (per request)
@@ -69,6 +80,7 @@ test('origin is private: a direct hit (bypassing the edge) is 403', async () => 
 
 test('cacheable page: MISS then HIT (origin not re-hit)', async () => {
   await onboardStore({ id: 't_edge', name: 'EdgeCo', host: 'edgeco.localhost' });
+  await scaffold('t_edge', 'EdgeCo'); // page-builder home so / renders (and is cacheable)
   const first = await get(edgePort, '/', { host: 'edgeco.localhost' });
   const second = await get(edgePort, '/', { host: 'edgeco.localhost' });
   assert.strictEqual(first.headers['x-edge'], 'MISS');

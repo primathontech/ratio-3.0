@@ -2,6 +2,8 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { onboardStore, deleteStore } from '@ratio/data-provisioning';
+import { PageBuilder, PgPageStore, scaffoldStorefront } from '@ratio/builder-core';
+import { defaultRegistry } from '@ratio/builder-registry';
 import { app } from '../index';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
@@ -10,11 +12,22 @@ const SECRET = resolveEdgeSecret(process.env);
 const ID = 't_del';
 const HOST = 'del.localhost';
 
+const scaffold = (id: string, name: string) =>
+  scaffoldStorefront(
+    new PageBuilder(new PgPageStore(), defaultRegistry(), {
+      invalidateByTags: () => Promise.resolve(),
+    }),
+    id,
+    { name }
+  );
+
 async function residualCount(id: string): Promise<number> {
   const { rows } = await pool.query<{ n: string }>(
     `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
           + (SELECT count(*) FROM domains WHERE tenant_id=$1)
-          + (SELECT count(*) FROM routes WHERE tenant_id=$1) AS n`,
+          + (SELECT count(*) FROM routes WHERE tenant_id=$1)
+          + (SELECT count(*) FROM pages WHERE tenant_id=$1)
+          + (SELECT count(*) FROM page_purge_outbox WHERE tenant_id=$1) AS n`,
     [id]
   );
   return Number(rows[0].n);
@@ -31,6 +44,21 @@ test('deleteStore removes tenant + domain + routes, provably (zero residual)', a
   assert.strictEqual(proof.deleted, true);
   assert.strictEqual(proof.residual, 0);
   assert.strictEqual(await residualCount(ID), 0);
+});
+
+test('deleteStore purges page-builder pages + purge-outbox (no orphans)', async () => {
+  await onboardStore({ id: ID, name: 'Del', host: HOST });
+  await scaffold(ID, 'Del'); // home + product + collection pages, each publishing an outbox row
+  const before = await pool.query<{ n: string }>(
+    'SELECT count(*) n FROM pages WHERE tenant_id=$1',
+    [ID]
+  );
+  assert.ok(Number(before.rows[0].n) > 0, 'the store has scaffolded pages to delete');
+
+  const proof = await deleteStore(ID);
+  assert.ok(proof.removed.pages > 0, 'pages were removed');
+  assert.strictEqual(proof.residual, 0);
+  assert.strictEqual(await residualCount(ID), 0, 'no orphan pages / outbox rows remain');
 });
 
 test('after delete the store no longer renders (404)', async () => {
