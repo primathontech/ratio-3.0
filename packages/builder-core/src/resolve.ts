@@ -107,7 +107,7 @@ function sampleProducts(seed: string, n: number) {
   }));
 }
 
-// Local stand-in for @ratio/data-layer: deterministic sample data so the whole render+cache+purge
+// Local stand-in for @shopkit/data-layer: deterministic sample data so the whole render+cache+purge
 // path runs with no external dependency. The REAL resolver dispatches the same DATA_SOURCE_TYPES to
 // the data-layer CommerceClient — COLLECTION_BY_HANDLES→getCollectionsByHandles, PRODUCT→getProduct,
 // COLLECTIONS→getCollections — and maps the response into the section's binding shape. Swapping the

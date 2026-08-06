@@ -31,7 +31,7 @@ export interface SectionInstance {
 // never persisted here (config-not-data). params may hold {{params.x}} placeholders interpolated
 // from the route (e.g. a PDP's { handle: "{{params.handle}}" }).
 //
-// A source is a serialized @ratio/data-layer call: `type` picks the method, `params` is its first
+// A source is a serialized @shopkit/data-layer call: `type` picks the method, `params` is its first
 // arg, `options` its second. Vocabulary mirrors the 2.0 DATA_SOURCE_TYPES so themes migrate as-is.
 export const DATA_SOURCE_TYPES = {
   PRODUCT: 'PRODUCT',
