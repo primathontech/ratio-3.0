@@ -7,6 +7,7 @@ import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
 import { resolvePage, StubResolver } from '@ratio/builder-core';
 import { fetchMainMenu } from '@ratio/builder-core';
+import { fetchFooter } from '@ratio/builder-core';
 import { commerceResolverFromEnv } from '@ratio/builder-core';
 import { defaultRegistry } from '@ratio/builder-registry';
 import { canonicalPath } from '@ratio/builder-core';
@@ -130,8 +131,15 @@ app.all('*', async (c) => {
         tenant.commerce?.merchantId ?? '',
         process.env.COMMERCE_NAV_API_URL ?? ''
       );
+      // Footer is chrome too (ours), its menu is DATA (per-tenant). fetchFooter returns the live
+      // footer menu, or the JSON fallback on any failure (unconfigured / no menu / error).
+      const footer = await fetchFooter(
+        tenant.commerce?.merchantId ?? '',
+        process.env.COMMERCE_FOOTER_API_URL ?? ''
+      );
       const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
         menu,
+        footer,
         siteName: tenant.name,
       });
       c.header('x-tenant', tenantId as string);
