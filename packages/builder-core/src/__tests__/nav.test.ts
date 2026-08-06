@@ -56,22 +56,32 @@ test('navHref maps resource types to storefront links; neutralises unsafe urls',
   assert.equal(navHref(sample.items[2]), '#'); // javascript: url never reaches an href
 });
 
-test('renderHeader builds the nav with mega columns, escapes titles, opens externals in a new tab', () => {
+test('renderHeader: grouped kids → accordion (<details>), escapes titles, opens externals in a new tab', () => {
   const html = renderHeader({ menu: sample, siteName: 'Acme' });
   assert.match(html, /<a class="hdr-brand" href="\/">Acme<\/a>/);
   assert.match(html, /href="\/collections\/hair-care"/);
-  assert.match(html, /class="hdr-mega"/); // Hair Care has children → mega menu
-  assert.match(html, /href="\/collections\/shampoo"/); // nested depth-2 link
+  assert.match(html, /class="hdr-drop hdr-drop-acc"/); // Hair Care's kids are groups → accordion
+  assert.match(html, /<summary class="hdr-acc-h">Product Type<\/summary>/); // group = native <details>
+  assert.match(html, /class="hdr-link hdr-caret"[^>]*>Hair Care</); // submenu item gets a caret
+  assert.match(html, /class="hdr-link" href="https:\/\/ex\.com\/s"/); // leaf top item has no caret
+  assert.match(html, /href="\/collections\/shampoo"/); // nested link inside the accordion
   assert.match(html, /href="https:\/\/ex\.com\/s"[^>]*target="_blank"/); // external → new tab
   assert.match(html, /&lt;Evil&gt;/, 'title escaped');
   assert.ok(!html.includes('javascript:'), 'no javascript: href in output');
 });
 
-test('renderHeader with no menu → brand-only fallback (still a real header, no nav)', () => {
+test('renderHeader with no menu → brand + actions, still a real header (no nav)', () => {
   const html = renderHeader({ menu: null, siteName: 'Acme' });
   assert.match(html, /class="hdr"/);
   assert.match(html, />Acme</);
   assert.ok(!html.includes('hdr-nav'), 'no nav element when there is no menu');
+});
+
+test('the header always renders the search + cart + account actions', () => {
+  const html = renderHeader({ menu: null, siteName: 'Acme' });
+  assert.match(html, /class="hdr-search"[^>]*action="\/search"/); // search form
+  assert.match(html, /class="hdr-action[^"]*" href="\/cart"/); // cart link
+  assert.match(html, /href="\/account"/); // account link
 });
 
 test('fetchMainMenu: live menu on 200; the JSON fallback on 404, error, or no config', async () => {
@@ -101,5 +111,6 @@ test('FALLBACK_MENU renders a full nav (Product / Hair Care / external Salon)', 
   assert.match(html, /href="\/collections\/all">Product</);
   assert.match(html, /href="\/collections\/hair-care">Hair Care</);
   assert.match(html, /href="https:\/\/bbluntsalons\.co\.in\/salon-locator"[^>]*target="_blank"/);
-  assert.match(html, /class="hdr-mega"/);
+  assert.match(html, /hdr-drop-list/); // Product's kids are leaves → simple list dropdown
+  assert.match(html, /hdr-drop-acc/); // Hair Care's kids are groups → accordion dropdown
 });
