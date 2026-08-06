@@ -496,7 +496,9 @@ export function createApp(
     const urls = cfg
       ? storeCacheUrls(
           hosts,
-          (await forTenant(id).listRoutes()).map((r) => r.path)
+          (await pbStore.listPages(id))
+            .filter((p) => p.published && !p.path.includes(':'))
+            .map((p) => p.path)
         )
       : [];
     const proof = await deleteStore(id);
@@ -854,7 +856,9 @@ export function createApp(
     // Purge the removed host's cached pages so it stops serving after unmapping (M-1).
     const cfg = cfConfig();
     if (removed && cfg && !host.toLowerCase().endsWith('.localhost')) {
-      const paths = (await forTenant(id).listRoutes()).map((r) => r.path);
+      const paths = (await pbStore.listPages(id))
+        .filter((p) => p.published && !p.path.includes(':'))
+        .map((p) => p.path);
       void purgeUrls(cfg, storeCacheUrls([host.toLowerCase()], paths)).catch(() => {});
     }
     return c.json({ removed });
