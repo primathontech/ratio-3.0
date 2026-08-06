@@ -38,9 +38,11 @@ packages/   libraries                 apps/   deployables (each a workspace pack
    packages. The local run harness stays at root `dev/`.
 3. **`page-builder-*` → `builder-*`.** `builder-render` stays its own package — it is the
    sandboxed untrusted-template engine and that boundary is deliberate.
-4. **Every package + app contains:** `README.md`, `ARCHITECTURE.md`, `CHANGELOG.md`,
-   `.env.example`. For a library (no env of its own) the `.env.example` is a one-line stub
-   noting it is configured by the consuming app.
+4. **Docs are earned, not mandated.** A package/app gets a `README.md` + `ARCHITECTURE.md`
+   only where it is non-obvious; an app that reads env ships a `.env.example`. (We dropped the
+   original "every package has README+ARCHITECTURE+CHANGELOG+.env.example" rule — the CHANGELOGs
+   were never maintained and some READMEs went stale enough to misdescribe their package. Git
+   history + these ADRs are the record of record.)
 5. **No `process.env` inside `packages/`.** Configuration is the app's job: each app reads
    the environment once at its composition root (`config.ts`) and injects typed config into
    libraries (e.g. `createDb(connectionString)`). Libraries never touch `process.env`.
@@ -56,8 +58,7 @@ packages/   libraries                 apps/   deployables (each a workspace pack
 ## Rollout
 
 - **PR 1 (structure):** deletions above; flatten + rename; move services→apps; rewrite
-  every `@ratio/*` import, tsconfig paths, and workspace globs; scaffold the four required
-  files per package. Behaviour-preserving; tests stay green.
+  every `@ratio/*` import, tsconfig paths, and workspace globs. Behaviour-preserving; tests stay green.
 - **PR 2 (config injection):** apps get `config.ts`; `@ratio/data-db` exposes
   `createDb(url)`; delete the library env reader; inject config everywhere so no package
   reads `process.env`.
