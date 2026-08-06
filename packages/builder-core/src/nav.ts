@@ -97,26 +97,58 @@ function link(item: NavItem, cls: string): string {
 }
 
 // A depth-1 entry in a mega menu: either a column header with its depth-2 links, or a plain link.
-function column(item: NavItem): string {
-  const kids = item.items ?? [];
-  if (!kids.length) return `<div class="hdr-col">${link(item, 'hdr-col-h')}</div>`;
-  const links = kids.map((k) => `<li>${link(k, '')}</li>`).join('');
-  return `<div class="hdr-col">${link(item, 'hdr-col-h')}<ul>${links}</ul></div>`;
+// A leaf entry in a simple dropdown list (Product, Salon, Hair Styling, Hair Colour).
+function listItem(item: NavItem): string {
+  return `<li>${link(item, 'hdr-drop-link')}</li>`;
 }
 
+// An accordion group in a grouped dropdown (Hair Care): a native <details> (no JS — the storefront
+// ships none) whose summary is the group title and whose body is the child links. A group with no
+// children of its own collapses to a plain link.
+function accordionGroup(item: NavItem): string {
+  const kids = item.items ?? [];
+  if (!kids.length)
+    return `<a class="hdr-acc-h hdr-acc-solo" href="${esc(navHref(item))}">${esc(item.title)}</a>`;
+  const links = kids.map((k) => `<li>${link(k, 'hdr-drop-link')}</li>`).join('');
+  return `<details class="hdr-acc"><summary class="hdr-acc-h">${esc(item.title)}</summary><ul class="hdr-acc-list">${links}</ul></details>`;
+}
+
+// A top-level nav entry. No children → a plain link. Leaf children → a simple list dropdown.
+// Grouped children (children that themselves have children) → an accordion dropdown.
 function topItem(item: NavItem): string {
-  const kids = item.items ?? [];
+  const kids = (item.items ?? []).slice().sort((a, b) => a.position - b.position);
   if (!kids.length) return link(item, 'hdr-link');
-  return (
-    `<div class="hdr-item">${link(item, 'hdr-link')}` +
-    `<div class="hdr-mega"><div class="hdr-cols">${kids.map(column).join('')}</div></div></div>`
-  );
+  const grouped = kids.some((k) => (k.items ?? []).length);
+  const body = grouped
+    ? `<div class="hdr-drop hdr-drop-acc">${kids.map(accordionGroup).join('')}</div>`
+    : `<div class="hdr-drop hdr-drop-list"><ul>${kids.map(listItem).join('')}</ul></div>`;
+  return `<div class="hdr-item">${link(item, 'hdr-link hdr-caret')}${body}</div>`;
 }
 
-// The header chrome: brand + nav. No menu → brand only (still a real header, never blank/broken).
+// Storefront chrome to the right of the nav: search + cart + account. Presentational — search
+// submits to /search, cart/account link to the reserved paths; the badge is a static 0. Wiring
+// those to real data is the app's job; this is the chrome the header always shows.
+const ICON_SEARCH =
+  '<svg class="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>';
+const ICON_CART =
+  '<svg class="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.4 12.2a1.6 1.6 0 0 0 1.6 1.3h8.2a1.6 1.6 0 0 0 1.6-1.3L22 7H6"/></svg>';
+const ICON_USER =
+  '<svg class="hdr-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
+
+const HEADER_ACTIONS =
+  '<div class="hdr-actions">' +
+  '<form class="hdr-search" role="search" action="/search" method="get">' +
+  ICON_SEARCH +
+  '<input name="q" placeholder="Search products" aria-label="Search products">' +
+  '</form>' +
+  `<a class="hdr-action hdr-cart" href="/cart" aria-label="Cart">${ICON_CART}<span class="hdr-badge">0</span><span class="hdr-action-t">Cart</span></a>` +
+  `<a class="hdr-action" href="/account" aria-label="Account">${ICON_USER}<span class="hdr-action-t">Account</span></a>` +
+  '</div>';
+
+// The header chrome: brand + nav + actions. No menu → brand + actions (still a real header).
 export function renderHeader(opts: { menu: NavMenu | null; siteName: string }): string {
   const brand = `<a class="hdr-brand" href="/">${esc(opts.siteName || 'Store')}</a>`;
   const items = (opts.menu?.items ?? []).slice().sort((a, b) => a.position - b.position);
   const nav = items.length ? `<nav class="hdr-nav">${items.map(topItem).join('')}</nav>` : '';
-  return `<header class="hdr"><div class="rt hdr-in">${brand}${nav}</div></header>`;
+  return `<header class="hdr"><div class="rt hdr-in">${brand}${nav}${HEADER_ACTIONS}</div></header>`;
 }
