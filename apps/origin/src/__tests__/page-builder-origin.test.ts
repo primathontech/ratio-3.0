@@ -6,12 +6,13 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { app } from '../index';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import { defaultRegistry } from '@ratio/builder-registry';
 import { pageTag } from '@ratio/builder-core';
 
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const SECRET = resolveEdgeSecret(process.env);
 const T = 'pbtest_o1';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>

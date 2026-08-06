@@ -14,6 +14,7 @@ import {
 } from '@ratio/data-provisioning';
 import { forTenant, StaleWriteError } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 import { config } from './config';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
@@ -77,7 +78,7 @@ type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: strin
 async function purgeLocalEdge(tenant: string): Promise<void> {
   if (!config.local) return;
   const port = process.env.EDGE_PORT || '8080';
-  const secret = process.env.EDGE_SECRET || 'private-link-secret';
+  const secret = resolveEdgeSecret(process.env);
   await fetch(
     `http://127.0.0.1:${port}/__admin/purge-tenant?tenant=${encodeURIComponent(tenant)}`,
     { headers: { 'x-admin-secret': secret } }
@@ -90,7 +91,7 @@ async function purgeLocalEdge(tenant: string): Promise<void> {
 async function purgeEdgeTags(tags: string[]): Promise<void> {
   if (!config.local || tags.length === 0) return;
   const port = process.env.EDGE_PORT || '8080';
-  const secret = process.env.EDGE_SECRET || 'private-link-secret';
+  const secret = resolveEdgeSecret(process.env);
   for (const tag of tags) {
     await fetch(`http://127.0.0.1:${port}/__admin/purge?key=${encodeURIComponent(tag)}`, {
       headers: { 'x-admin-secret': secret },

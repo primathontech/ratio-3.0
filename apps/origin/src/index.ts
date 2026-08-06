@@ -13,19 +13,11 @@ import { defaultRegistry } from '@ratio/builder-registry';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
 
-// The edge<->origin shared secret. Fails closed: in production it MUST be set — we never
-// fall back to a known default, or the private origin would accept a secret that's in the
-// source tree. The dev default keeps local runs frictionless. Reads env at call time (and
-// takes an env for testability).
-export function resolveEdgeSecret(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.EDGE_SECRET) return env.EDGE_SECRET;
-  if (env.NODE_ENV === 'production') throw new Error('EDGE_SECRET must be set in production');
-  return 'private-link-secret';
-}
 // Constant-time compare of the edge secret (L-1) — a plain !== is a timing oracle if the
 // private origin is ever reachable directly. Equal-length guard because timingSafeEqual
 // throws on length mismatch.
@@ -83,7 +75,7 @@ app.all('*', async (c) => {
     }
   }
 
-  if (!edgeAuthOk(c.req.header('x-edge-auth'), resolveEdgeSecret())) {
+  if (!edgeAuthOk(c.req.header('x-edge-auth'), resolveEdgeSecret(process.env))) {
     return c.text('403 — origin is private (no valid edge auth)', 403);
   }
 

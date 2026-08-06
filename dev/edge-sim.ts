@@ -1,11 +1,12 @@
 import http from 'http';
 import type { IncomingMessage, ServerResponse, IncomingHttpHeaders } from 'http';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
 // The "edge / CDN" (Cloudflare on the real stack). Resolves host->tenant from the
 // domains table (short TTL cache), injects a trusted header over a private origin,
 // and holds a per-(tenant,path) cache with exact surrogate-key purge.
-const EDGE_SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const EDGE_SECRET = resolveEdgeSecret(process.env);
 const ORIGIN_HOST = '127.0.0.1';
 const originPort = () => Number(process.env.ORIGIN_PORT || 9090); // read lazily (test-friendly)
 const HOST_TTL_MS = 5000;

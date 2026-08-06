@@ -5,8 +5,9 @@ import { onboardStore } from '@ratio/data-provisioning';
 import { forTenant } from '@ratio/data-repo';
 import { app } from '../index';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const SECRET = resolveEdgeSecret(process.env);
 const ID = 't_onb';
 const HOST = 'onb.localhost';
 

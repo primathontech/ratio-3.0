@@ -13,6 +13,16 @@ export interface CfConfig {
   fallback: string; // CNAME target merchants point at (service.ratiodev.in)
 }
 
+// Fail closed in production: silently defaulting the SaaS zone/fallback to the real
+// ratiodev.in values would let a misconfigured deploy create custom hostnames on the wrong
+// zone. In prod the value MUST be provided; the dev default keeps local runs frictionless.
+function requiredInProd(name: string, devDefault: string): string {
+  const v = process.env[name];
+  if (v) return v;
+  if (process.env.NODE_ENV === 'production') throw new Error(`${name} must be set in production`);
+  return devDefault;
+}
+
 // Null when the admin-api hasn't been given a Cloudflare token — endpoints degrade to a
 // clear "custom domains not configured" instead of crashing.
 export function cfConfig(): CfConfig | null {
@@ -20,8 +30,8 @@ export function cfConfig(): CfConfig | null {
   if (!token) return null;
   return {
     token,
-    zone: process.env.CF_SAAS_ZONE || 'ratiodev.in',
-    fallback: process.env.CF_SAAS_FALLBACK || 'service.ratiodev.in',
+    zone: requiredInProd('CF_SAAS_ZONE', 'ratiodev.in'),
+    fallback: requiredInProd('CF_SAAS_FALLBACK', 'service.ratiodev.in'),
   };
 }
 

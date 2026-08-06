@@ -3,8 +3,9 @@ import { test, after } from 'node:test';
 import assert from 'node:assert';
 import { app, edgeAuthOk } from '../index';
 import { pool } from '@ratio/data-db';
+import { resolveEdgeSecret } from '@ratio/edge-core';
 
-const SECRET = process.env.EDGE_SECRET || 'private-link-secret';
+const SECRET = resolveEdgeSecret(process.env);
 const call = (path: string, headers: Record<string, string> = {}) =>
   app.fetch(new Request('http://origin' + path, { headers }));
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
