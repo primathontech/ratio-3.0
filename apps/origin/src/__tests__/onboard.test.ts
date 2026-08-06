@@ -15,17 +15,15 @@ const HOST = 'onb.localhost';
 
 async function cleanup() {
   await pool.query('DELETE FROM pages WHERE tenant_id = $1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
   // generated-id stores from the auto-id test (unknown ids). Capture them via their hosts, then
-  // delete children (routes/domains) before the tenant row so the domains FK isn't violated.
+  // delete children (domains) before the tenant row so the domains FK isn't violated.
   const { rows } = await pool.query<{ tenant_id: string }>(
     "SELECT tenant_id FROM domains WHERE host LIKE 'autogen-%'"
   );
   const ids = rows.map((r) => r.tenant_id);
   if (ids.length) {
-    await pool.query('DELETE FROM routes WHERE tenant_id = ANY($1)', [ids]);
     await pool.query("DELETE FROM domains WHERE host LIKE 'autogen-%'");
     await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [ids]);
   }
@@ -36,14 +34,12 @@ after(async () => {
   await pool.end();
 });
 
-test('onboardStore creates tenant + domain + home route', async () => {
+test('onboardStore creates tenant + domain', async () => {
   await onboardStore({ id: ID, name: 'Onb', host: HOST, color: '#123456' });
   const tenant = await forTenant(ID).getTenant();
   assert.strictEqual(tenant!.name, 'Onb');
   const { rows } = await pool.query('SELECT tenant_id FROM domains WHERE host = $1', [HOST]);
   assert.strictEqual(rows[0].tenant_id, ID);
-  const home = await forTenant(ID).getRoute('/');
-  assert.strictEqual(home!.page_type, 'home');
 });
 
 test('the onboarded + scaffolded store renders its home via the origin (page-builder)', async () => {

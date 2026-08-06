@@ -56,27 +56,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/stores/{id}/page': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Tenant (store) id */
-        id: string;
-      };
-      cookie?: never;
-    };
-    /** Read one page by path */
-    get: operations['getPage'];
-    /** Create or replace a page (edits the live store) */
-    put: operations['putPage'];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/stores/{id}/page-builder': {
     parameters: {
       query?: never;
@@ -208,21 +187,6 @@ export interface components {
       id: string;
       name: string;
       theme?: {
-        [key: string]: unknown;
-      };
-    };
-    PageInput: {
-      /** @description must start with / */
-      path: string;
-      pageType?: string;
-      pageConfig: {
-        [key: string]: unknown;
-      };
-    };
-    Page: {
-      path: string;
-      pageType?: string;
-      pageConfig: {
         [key: string]: unknown;
       };
     };
@@ -417,72 +381,6 @@ export interface operations {
         content: {
           'application/json': components['schemas']['DeleteProof'];
         };
-      };
-    };
-  };
-  getPage: {
-    parameters: {
-      query: {
-        path: string;
-      };
-      header?: never;
-      path: {
-        /** @description Tenant (store) id */
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description ok */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Page'];
-        };
-      };
-      /** @description not found */
-      404: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  putPage: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Tenant (store) id */
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['PageInput'];
-      };
-    };
-    responses: {
-      /** @description ok */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Page'];
-        };
-      };
-      /** @description invalid */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
       };
     };
   };

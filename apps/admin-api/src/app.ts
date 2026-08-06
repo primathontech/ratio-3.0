@@ -12,7 +12,7 @@ import {
   markDomainConnected,
   ConflictError,
 } from '@ratio/data-provisioning';
-import { forTenant, StaleWriteError } from '@ratio/data-repo';
+import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { config } from './config';
@@ -70,20 +70,6 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // createApp takes the verifier so tests can inject identity without calling Clerk. The
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
 type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
-
-// Local dev only: *.localhost storefronts are served by the in-memory dev edge (dev/edge-sim.ts),
-// which the Cloudflare purge can't reach (no zone). Clear the local edge's per-tenant cache so a
-// save shows on the next reload — the same purge-on-publish contract, pointed at the local edge.
-// Gated by RATIO_LOCAL and best-effort, so it never runs (and never throws) on a deployed plane.
-async function purgeLocalEdge(tenant: string): Promise<void> {
-  if (!config.local) return;
-  const port = process.env.EDGE_PORT || '8080';
-  const secret = resolveEdgeSecret(process.env);
-  await fetch(
-    `http://127.0.0.1:${port}/__admin/purge-tenant?tenant=${encodeURIComponent(tenant)}`,
-    { headers: { 'x-admin-secret': secret } }
-  ).catch(() => {});
-}
 
 // Purge a set of surrogate tags at the LOCAL dev edge (best-effort, RATIO_LOCAL-gated). The dev
 // edge-sim indexes by tag; the deployed Cloudflare Worker does not (it 404s /__), so prod purge goes
@@ -350,11 +336,7 @@ export function createApp(
   // in production we return a generic message so DB/vendor error strings don't leak to the
   // browser. Detail stays server-side (dev keeps it for debuggability).
   app.onError((e, c) => {
-    if (
-      e instanceof ConflictError ||
-      e instanceof StaleWriteError ||
-      e instanceof IdempotencyInProgressError
-    ) {
+    if (e instanceof ConflictError || e instanceof IdempotencyInProgressError) {
       return c.json({ error: e.message }, 409);
     }
     const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
@@ -590,14 +572,6 @@ export function createApp(
     return c.json({ entries });
   });
 
-  // --- Content CRUD (OFCE-362 slice 2). All membership-gated. The storefront renders
-  // whatever page_config lives here, so editing a page changes the live store. ---
-
-  app.get('/stores/:id/pages', requireMembership, async (c) => {
-    const pages = await forTenant(c.req.param('id')).listRoutes();
-    return c.json({ pages });
-  });
-
   // The store's collections, for the editor's collection picker. Builds the tenant's commerce client
   // (env service URLs + the tenant's own merchantId) and returns the CANONICAL collections envelope-
   // navigated only — no shaping here (the SPA maps to {handle,title}). Empty when not connected.
@@ -690,58 +664,6 @@ export function createApp(
     const edgePurged = await purgeStoreUrls(id, [path]);
     c.set('auditTenant', id);
     return c.json({ ok: true, revision: res.revision, ...(edgePurged !== null && { edgePurged }) });
-  });
-
-  app.get('/stores/:id/page', requireMembership, async (c) => {
-    const path = c.req.query('path');
-    if (!path) return c.json({ error: 'path query param required' }, 400);
-    const route = await forTenant(c.req.param('id')).getRoute(path);
-    if (!route) return c.json({ error: 'not found' }, 404);
-    return c.json({
-      path: route.path,
-      pageType: route.page_type,
-      pageConfig: route.page_config,
-      version: route.version,
-    });
-  });
-
-  app.put('/stores/:id/page', requireMembership, async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as {
-      path?: string;
-      pageType?: string;
-      pageConfig?: unknown;
-      version?: number;
-    };
-    if (!body.path || !body.path.startsWith('/')) {
-      return c.json({ error: 'path is required and must start with /' }, 400);
-    }
-    if (typeof body.pageConfig !== 'object' || body.pageConfig === null) {
-      return c.json({ error: 'pageConfig must be an object' }, 400);
-    }
-    const pageType = body.pageType || 'page';
-    const id = c.req.param('id');
-    // Optimistic concurrency (OFCE-409): if the client sent the version it loaded, a stale
-    // write (someone saved in between) → StaleWriteError → 409 via onError.
-    const version = await forTenant(id).addRoute(
-      body.path,
-      pageType,
-      body.pageConfig,
-      body.version
-    );
-    // Make the edit go live: purge the edge cache for this route on every real domain
-    // (OFCE-411). Best-effort and non-blocking — a purge failure must not fail the save.
-    const cfg = cfConfig();
-    if (cfg) {
-      const urls = (await listDomains(id))
-        .filter((h) => !h.endsWith('.localhost'))
-        .map((h) => `https://${h}${body.path}`);
-      void purgeUrls(cfg, urls).catch(() => {});
-    }
-    // The Cloudflare purge above skips *.localhost (no zone). In local dev the storefront is served
-    // by the in-memory dev edge, so clear its cache directly — same purge-on-publish contract,
-    // pointed at the local edge. No-op unless RATIO_LOCAL=true.
-    await purgeLocalEdge(id);
-    return c.json({ path: body.path, pageType, pageConfig: body.pageConfig, version });
   });
 
   // --- Custom domains (OFCE-398 / ADR-013). Membership-gated. Cloudflare-for-SaaS

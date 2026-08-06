@@ -25,7 +25,6 @@ async function residualCount(id: string): Promise<number> {
   const { rows } = await pool.query<{ n: string }>(
     `SELECT (SELECT count(*) FROM tenants WHERE id=$1)
           + (SELECT count(*) FROM domains WHERE tenant_id=$1)
-          + (SELECT count(*) FROM routes WHERE tenant_id=$1)
           + (SELECT count(*) FROM pages WHERE tenant_id=$1)
           + (SELECT count(*) FROM page_purge_outbox WHERE tenant_id=$1) AS n`,
     [id]
@@ -38,7 +37,7 @@ after(async () => {
   await pool.end();
 });
 
-test('deleteStore removes tenant + domain + routes, provably (zero residual)', async () => {
+test('deleteStore removes tenant + domain, provably (zero residual)', async () => {
   await onboardStore({ id: ID, name: 'Del', host: HOST });
   const proof = await deleteStore(ID);
   assert.strictEqual(proof.deleted, true);

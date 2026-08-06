@@ -12,16 +12,16 @@ test('deny-by-default: forTenant without a tenantId throws', () => {
   assert.throws(() => forTenant(123 as unknown as string));
 });
 
-test('tenant A cannot read tenant B row (repo is scoped)', async () => {
-  const acmeSeesBeta = await forTenant('t_acme').getRoute('/about'); // /about belongs to t_beta
-  assert.strictEqual(acmeSeesBeta, null);
+test('the gate injects tenant_id: A and B resolve to their own rows only', async () => {
+  const acme = await forTenant('t_acme').getTenant();
+  const beta = await forTenant('t_beta').getTenant();
+  assert.strictEqual(acme!.id, 't_acme');
+  assert.strictEqual(beta!.id, 't_beta');
+  assert.notStrictEqual(acme!.id, beta!.id);
 });
 
-test('a tenant reads its own route', async () => {
-  const betaAbout = await forTenant('t_beta').getRoute('/about');
-  assert.ok(betaAbout);
-  assert.strictEqual(betaAbout!.tenant_id, 't_beta');
-  assert.strictEqual(betaAbout!.page_type, 'page');
+test('a scoped read for an unknown tenant yields nothing (deny-by-default)', async () => {
+  assert.strictEqual(await forTenant('t_not_a_tenant').getTenant(), null);
 });
 
 test('getTenant returns the scoped tenant only', async () => {

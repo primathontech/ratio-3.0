@@ -38,7 +38,6 @@ function call(method: string, path: string, headers: Record<string, string> = {}
 
 async function cleanup() {
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]); // scaffolded templates
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id=$1', [ID]);
@@ -118,7 +117,7 @@ test('POST /stores with no id generates one server-side and still makes the call
   assert.ok(scaffolded.includes('/products/:handle'), 'product template published');
   assert.ok(scaffolded.includes('/collections/:handle'), 'collection template published');
   // clean up this generated store (the file's fixed-id cleanup won't know its id)
-  for (const q of ['memberships', 'routes', 'domains', 'pages', 'page_purge_outbox']) {
+  for (const q of ['memberships', 'domains', 'pages', 'page_purge_outbox']) {
     await pool.query(`DELETE FROM ${q} WHERE tenant_id=$1`, [id]);
   }
   await pool.query('DELETE FROM tenants WHERE id=$1', [id]);

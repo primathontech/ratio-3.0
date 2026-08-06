@@ -30,7 +30,7 @@ const call = (method: string, path: string, token: string, body?: unknown) =>
 async function cleanup() {
   await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [ID]);
 }
@@ -54,9 +54,8 @@ after(async () => {
 
 test('an editor can read and edit pages (any member)', async () => {
   assert.strictEqual((await call('GET', `/stores/${ID}`, 'tok-editor')).status, 200);
-  const put = await call('PUT', `/stores/${ID}/page`, 'tok-editor', {
-    path: '/p',
-    pageConfig: { sections: [] },
+  const put = await call('PUT', `/stores/${ID}/page-builder`, 'tok-editor', {
+    doc: { path: '/p', title: 'P', sections: [] },
   });
   assert.strictEqual(put.status, 200);
 });

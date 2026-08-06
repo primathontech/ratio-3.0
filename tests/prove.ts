@@ -53,31 +53,18 @@ function get(port: number, path: string, headers: Record<string, string> = {}) {
     `status=${direct.status}`
   );
 
-  const acmeSeesBeta = await forTenant('t_acme').getRoute('/about');
-  check('4a. Tenant A cannot read tenant B row (repo scoped)', acmeSeesBeta === null);
   let denied = false;
   try {
     forTenant(undefined as unknown as string);
   } catch {
     denied = true;
   }
-  check('4b. Deny-by-default (repo without tenantId throws)', denied);
+  check('4a. Deny-by-default (repo without tenantId throws)', denied);
   const acmeAbout = await get(EDGE, '/about', { host: 'acme.localhost' });
   check(
-    '4c. Cross-tenant path blocked over HTTP (acme /about -> 404)',
+    '4b. Cross-tenant path blocked over HTTP (acme /about -> 404)',
     acmeAbout.status === 404,
     `status=${acmeAbout.status}`
-  );
-
-  await forTenant('t_acme').addRoute('/diwali-sale', 'landing', {
-    title: 'Diwali Sale',
-    body: '50% off',
-  });
-  const newRoute = await get(EDGE, '/diwali-sale', { host: 'acme.localhost' });
-  check(
-    '5. New route via DB row renders with NO rebuild',
-    newRoute.status === 200 && newRoute.body.includes('Diwali Sale'),
-    `status=${newRoute.status}`
   );
 
   const cart = await get(EDGE, '/cart', { host: 'acme.localhost' });

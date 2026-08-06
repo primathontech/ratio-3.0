@@ -26,7 +26,7 @@ const client = new RatioControlPlane({ baseUrl: 'http://cp', token: 'tok-alice',
 async function cleanup() {
   await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM memberships WHERE tenant_id=$1', [ID]);
-  await pool.query('DELETE FROM routes WHERE tenant_id=$1', [ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM domains WHERE tenant_id=$1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id=$1', [ID]);
 }
@@ -46,7 +46,7 @@ test('GET /openapi.json is public and describes the API', async () => {
   };
   assert.strictEqual(doc.openapi, '3.1.0');
   assert.strictEqual(doc.info.version, '1.0.0');
-  assert.ok(doc.paths['/stores'] && doc.paths['/stores/{id}/page']);
+  assert.ok(doc.paths['/stores'] && doc.paths['/stores/{id}/page-builder']);
 });
 
 test('the SDK onboards, reads, and edits a store (real caller, in-process)', async () => {
@@ -57,8 +57,12 @@ test('the SDK onboards, reads, and edits a store (real caller, in-process)', asy
   assert.strictEqual(store.id, ID);
   assert.strictEqual(store.name, 'SDK Store');
 
-  const page = await client.putPage(ID, { path: '/', pageConfig: { type: 'root', children: [] } });
-  assert.strictEqual(page.path, '/');
+  const saved = await client.savePageDraft(ID, { path: '/', title: 'Home', sections: [] });
+  assert.strictEqual(saved.ok, true);
+  const published = await client.publishPage(ID, '/');
+  assert.strictEqual(published.ok, true);
+  const state = await client.getPageBuilder(ID, '/');
+  assert.strictEqual(state.live?.path, '/');
 
   const list = await client.listStores();
   assert.ok(list.stores.some((s) => s.id === ID));
@@ -74,11 +78,12 @@ test('the SDK mints an agent token and a second SDK client drives the API with i
     token: minted.token,
     fetch: viaApp,
   });
-  const page = await agentClient.putPage(ID, {
+  const saved = await agentClient.savePageDraft(ID, {
     path: '/via-sdk-agent',
-    pageConfig: { type: 'root', children: [] },
+    title: 'Agent',
+    sections: [],
   });
-  assert.strictEqual(page.path, '/via-sdk-agent');
+  assert.strictEqual(saved.ok, true);
 });
 
 test('the SDK reads the store audit trail', async () => {
