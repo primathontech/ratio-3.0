@@ -81,6 +81,23 @@ h1,h2,h3,h4{font-family:var(--font-heading)}
 img{max-width:100%;display:block}
 a{color:inherit;text-decoration:none}
 .rt{max-width:var(--maxw);margin:0 auto;padding:0 20px}
+.hdr{border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:10}
+.hdr-in{display:flex;align-items:center;gap:28px;height:60px}
+.hdr-brand{font-weight:800;font-size:1.15rem;font-family:var(--font-heading);letter-spacing:-.01em}
+.hdr-nav{display:flex;align-items:center;gap:22px;height:100%}
+.hdr-link{display:inline-flex;align-items:center;height:100%;font-size:.95rem;font-weight:500}
+.hdr-link:hover{color:var(--accent)}
+.hdr-item{position:relative;display:inline-flex;align-items:center;height:100%}
+.hdr-mega{position:absolute;top:100%;left:0;display:none;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 12px 32px rgba(24,24,27,.12);padding:18px 22px}
+.hdr-item:hover .hdr-mega,.hdr-item:focus-within .hdr-mega{display:block}
+.hdr-cols{display:flex;gap:34px}
+.hdr-col{min-width:150px}
+.hdr-col-h{display:block;font-weight:700;font-size:.9rem;margin-bottom:8px;white-space:nowrap}
+.hdr-col ul{list-style:none;margin:0;padding:0}
+.hdr-col li{margin:6px 0}
+.hdr-col a{font-size:.9rem;color:var(--muted);white-space:nowrap}
+.hdr-col a:hover{color:var(--accent)}
+@media (max-width:640px){.hdr-nav{display:none}}
 .hero{padding:76px 0 64px;text-align:center}
 .hero h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
 .hero p{font-size:1.15rem;color:var(--muted);margin:0 auto 26px;max-width:52ch}

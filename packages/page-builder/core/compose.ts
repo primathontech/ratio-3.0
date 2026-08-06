@@ -10,6 +10,7 @@ import { renderSection } from '@ratio/page-builder-registry/registry';
 import { islandPlaceholder } from '@ratio/page-builder-registry/islands';
 import type { Tier } from '@ratio/page-builder-render/infer';
 import { storefrontHead, type ThemeTokens } from './storefront';
+import { renderHeader, type NavMenu } from './nav';
 
 const ORDER: Tier[] = ['static', 'shared-volatile', 'per-segment', 'per-user'];
 const maxTier = (a: Tier, b: Tier): Tier => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);
@@ -26,7 +27,8 @@ export interface ComposedPage {
 export async function composePage(
   doc: PageDoc,
   registry: SectionRegistry,
-  theme: ThemeTokens = {}
+  theme: ThemeTokens = {},
+  chrome: { menu?: NavMenu | null; siteName?: string } = {}
 ): Promise<ComposedPage> {
   let tier: Tier = 'static';
   const parts: string[] = [];
@@ -65,7 +67,9 @@ export async function composePage(
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<title>${esc(doc.title ?? '')}</title>` +
     storefrontHead(theme) +
-    `</head><body>\n<main class="rt">\n` +
+    `</head><body>\n` +
+    renderHeader({ menu: chrome.menu ?? null, siteName: chrome.siteName ?? '' }) +
+    `\n<main class="rt">\n` +
     parts.join('\n') +
     `\n</main>\n<script src="/assets/islands.js" defer></script></body></html>`;
 

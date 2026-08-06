@@ -7,6 +7,7 @@ import { renderPage, esc } from '@ratio/theme';
 import { PgPageStore } from '@ratio/page-builder-core/store-pg';
 import { composePage } from '@ratio/page-builder-core/compose';
 import { resolvePage, StubResolver } from '@ratio/page-builder-core/resolve';
+import { fetchMainMenu } from '@ratio/page-builder-core/nav';
 import { commerceResolverFromEnv } from '@ratio/page-builder-core/resolve-shopkit';
 import { defaultRegistry } from '@ratio/page-builder-registry/registry';
 import { canonicalPath } from '@ratio/page-builder-core/path';
@@ -132,7 +133,18 @@ app.all('*', async (c) => {
         routeParams: matched?.params,
         commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
       });
-      const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {});
+      // Header nav is chrome (ours), its menu is DATA (commerce backend, per-tenant). Fetch it when
+      // configured; a merchant with no menu → null → the fallback header (brand only). Static, so
+      // it rides the tenantTag (a menu change purges the store's pages).
+      const navBase = process.env.COMMERCE_NAV_API_URL;
+      const menu =
+        navBase && tenant.commerce?.merchantId
+          ? await fetchMainMenu(tenant.commerce.merchantId, navBase)
+          : null;
+      const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
+        menu,
+        siteName: tenant.name,
+      });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
       c.header('x-page-type', matched?.pageType ?? 'page');
