@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { app } from '../apps/origin/index';
+import { app } from '../apps/origin/src/index';
 import { edge } from './edge-sim';
 
 const ORIGIN_PORT = Number(process.env.ORIGIN_PORT || 9090);
