@@ -6,7 +6,7 @@
 
 import type { SectionRegistry } from '@ratio/builder-registry';
 import { BINDING_CATALOG } from '@ratio/builder-registry';
-import { validateSettings } from '@ratio/builder-registry';
+import { validateSettings } from '@ratio/builder-render';
 import { canonicalPath } from './path';
 import { safeRichText } from '@ratio/theme';
 

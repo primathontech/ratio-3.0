@@ -6,7 +6,7 @@
 // purged on change); cart/personalised = per-user (island, hydrated after the cached shell paints).
 
 import type { Binding } from './infer';
-import type { SettingDef } from '@ratio/builder-registry';
+import type { SettingDef } from './settings';
 
 export interface SectionDef {
   type: string;

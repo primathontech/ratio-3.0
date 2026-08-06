@@ -4,3 +4,4 @@ export * from './engine';
 export * from './infer';
 export * from './isolate';
 export * from './sections';
+export * from './settings';

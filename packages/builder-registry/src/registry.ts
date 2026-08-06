@@ -13,7 +13,7 @@ import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '@ratio/buil
 import { renderUntrusted } from '@ratio/builder-render';
 import { inferTier, type Binding, type Tier } from '@ratio/builder-render';
 import { FIRST_PARTY_SECTIONS } from '@ratio/builder-render';
-import type { SettingDef } from './settings';
+import type { SettingDef } from '@ratio/builder-render';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────
 // Binding identity → tier (+ html flag for sanitize-at-save). This is THE source of tier truth:
