@@ -14,7 +14,7 @@
     "seed": "tsx scripts/seed.ts",
     "db:init": "bun run migrate && bun run seed",
     "start": "node --env-file-if-exists=apps/origin/.env --import tsx dev/server.ts",
-    "admin-api": "node --env-file-if-exists=apps/admin-api/.env --import tsx apps/admin-api/server.ts",
+    "admin-api": "node --env-file-if-exists=apps/admin-api/.env --import tsx apps/admin-api/src/server.ts",
     "gen:client": "tsx scripts/gen-client.ts",
     "prove": "tsx tests/prove.ts",
     "prove:s1": "tsx tests/prove-s1.ts",
@@ -23,12 +23,12 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test:coverage": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test --experimental-test-coverage \"packages/**/*.test.ts\" \"tests/integration/**/*.test.ts\"",
+    "test:coverage": "DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test --experimental-test-coverage \"packages/**/*.test.ts\" \"apps/admin-api/**/*.test.ts\" \"apps/origin/**/*.test.ts\" \"apps/edge/**/*.test.ts\" \"tests/e2e/**/*.test.ts\"",
     "cf:dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "prepare": "husky",
     "test:setup": "bun run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" bun run migrate && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" bun run seed",
-    "test": "bun run test:setup && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test \"packages/**/*.test.ts\" \"tests/integration/**/*.test.ts\""
+    "test": "bun run test:setup && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --test \"packages/**/*.test.ts\" \"apps/admin-api/**/*.test.ts\" \"apps/origin/**/*.test.ts\" \"apps/edge/**/*.test.ts\" \"tests/e2e/**/*.test.ts\""
   },
   "lint-staged": {
     "*.ts": [
