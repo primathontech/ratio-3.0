@@ -34,11 +34,11 @@ describe('admin api client', () => {
 
   test('throws ApiError with the status on a non-2xx (e.g. 403)', async () => {
     const api = createApi('http://api', async () => 't', fakeFetch(403, { error: 'forbidden' }));
-    await expect(api.listPages('x')).rejects.toMatchObject({
+    await expect(api.listStores()).rejects.toMatchObject({
       name: 'ApiError',
       status: 403,
     });
-    await expect(api.listPages('x')).rejects.toBeInstanceOf(ApiError);
+    await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
   });
 
   test('sends no auth header when unauthenticated (getToken null)', async () => {
