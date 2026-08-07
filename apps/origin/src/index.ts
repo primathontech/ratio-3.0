@@ -112,17 +112,24 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
   const backend = cartBackendFor(tenant.commerce);
   const token = readCartToken(c.req.header('cookie'));
 
-  if (c.req.method === 'POST' && path === '/cart/add') {
+  if (c.req.method === 'POST' && (path === '/cart/add' || path === '/cart/update')) {
     if (backend) {
+      const cart = new CartService(backend);
       const body = await c.req.parseBody();
-      const variantId = String(body.variantId || body.handle || '');
-      if (variantId) {
-        try {
-          const updated = await new CartService(backend).add(token, [{ variantId, quantity: 1 }]);
-          if (updated.id) c.header('set-cookie', cartCookie(updated.id)); // persist the cart token
-        } catch {
-          // A backend hiccup must not 500 the shopper — fall through and re-render the cart.
+      try {
+        if (path === '/cart/add') {
+          const variantId = String(body.variantId || body.handle || '');
+          if (variantId) {
+            const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
+            if (updated.id) c.header('set-cookie', cartCookie(updated.id)); // persist the cart token
+          }
+        } else if (token) {
+          const variantId = String(body.variantId || '');
+          const quantity = Number(body.quantity ?? 1);
+          if (variantId) await cart.setQuantity(token, variantId, quantity);
         }
+      } catch {
+        // A backend hiccup must not 500 the shopper — fall through and re-render the cart.
       }
     }
     c.header('x-cache', 'no-store');

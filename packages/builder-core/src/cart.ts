@@ -111,12 +111,23 @@ export class CartService {
     }
     return toCart(unwrap(await this.backend.addToCart({ id, items })));
   }
-  // Remove lines by setting their quantity to 0 (the Shopify-idiomatic remove the gokwik backend
-  // honours; its removeFromCart rejects both the line id and the variant id). `variantIds` are the
-  // line removal keys (mapLine sets CartLine.id = variant_id).
-  async remove(token: string, variantIds: string[]): Promise<Cart> {
-    const items = variantIds.map((variantId) => ({ variantId, quantity: 0 }));
+  // Set one line's quantity (min 1). gokwik's updateCart replaces the WHOLE quantity set, so we fetch
+  // the current cart and re-send every line with just the target changed (R2's updateItemQuantity).
+  // This is the reliable mutation on the gokwik backend.
+  async setQuantity(token: string, variantId: string, quantity: number): Promise<Cart> {
+    const current = await this.get(token);
+    const items = current.items.map((l) => ({
+      variantId: l.id,
+      quantity: l.id === variantId ? Math.max(1, quantity) : l.quantity,
+    }));
     return toCart(unwrap(await this.backend.updateCart({ id: token, items })));
+  }
+
+  // Remove lines by variant id — R2's contract (removeFromCart(token, [variantId])). NOTE: on the
+  // current gokwik backend this reports success but doesn't persist; wiring a remove button waits on
+  // the backend honouring it (tracked for the next slice). Kept here as the documented contract.
+  async remove(token: string, variantIds: string[]): Promise<Cart> {
+    return toCart(unwrap(await this.backend.removeFromCart({ id: token, itemIds: variantIds })));
   }
 }
 
@@ -144,14 +155,35 @@ function money(v: number): string {
   return '₹' + v.toFixed(2);
 }
 
-// One cart line. Quantity edit + remove are the next slice (the gokwik mutation contract for those
-// needs pinning down), so a line is read-only for now.
+// A quantity stepper button: a tiny no-JS form that posts the new quantity for this line.
+function qtyBtn(
+  variantId: string,
+  quantity: number,
+  label: string,
+  aria: string,
+  disabled = false
+): string {
+  return (
+    `<form method="post" action="/cart/update">` +
+    `<input type="hidden" name="variantId" value="${esc(variantId)}">` +
+    `<input type="hidden" name="quantity" value="${quantity}">` +
+    `<button type="submit" aria-label="${aria}"${disabled ? ' disabled' : ''}>${label}</button></form>`
+  );
+}
+
+// One cart line: image, title, a −/+ quantity stepper (min 1), and the line total. Removing a line
+// entirely awaits the gokwik remove contract; for now decrement stops at 1.
 function cartLineRow(l: CartLine): string {
   return (
     `<div class="cart-line">` +
     `<div class="cart-line-ph">${l.image ? `<img src="${esc(l.image)}" alt="${esc(l.title)}">` : ''}</div>` +
     `<div class="cart-line-info"><div class="cart-line-t">${esc(l.title)}</div>` +
-    `<div class="cart-line-q">Qty ${l.quantity} · ${money(l.price)}</div></div>` +
+    `<div class="cart-line-q">${money(l.price)} each</div></div>` +
+    `<div class="cart-qty">` +
+    qtyBtn(l.id, l.quantity - 1, '−', 'Decrease quantity', l.quantity <= 1) +
+    `<span class="cart-qty-n">${l.quantity}</span>` +
+    qtyBtn(l.id, l.quantity + 1, '+', 'Increase quantity') +
+    `</div>` +
     `<div class="cart-line-sum">${money(l.price * l.quantity)}</div>` +
     `</div>`
   );
