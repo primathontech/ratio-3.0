@@ -29,7 +29,13 @@ export async function composePage(
   doc: PageDoc,
   registry: SectionRegistry,
   theme: ThemeTokens = {},
-  chrome: { menu?: NavMenu | null; footer?: FooterMenu | null; siteName?: string } = {}
+  chrome: {
+    menu?: NavMenu | null;
+    footer?: FooterMenu | null;
+    siteName?: string;
+    headExtra?: string;
+    bodyEnd?: string;
+  } = {}
 ): Promise<ComposedPage> {
   let tier: Tier = 'static';
   const parts: string[] = [];
@@ -68,13 +74,16 @@ export async function composePage(
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
     `<title>${esc(doc.title ?? '')}</title>` +
     storefrontHead(theme) +
+    (chrome.headExtra ?? '') +
     `</head><body>\n` +
     renderHeader({ menu: chrome.menu ?? null, siteName: chrome.siteName ?? '' }) +
     `\n<main class="rt">\n` +
     parts.join('\n') +
     `\n</main>\n` +
     renderFooter({ footer: chrome.footer ?? null, siteName: chrome.siteName ?? '' }) +
-    `\n<script src="/assets/islands.js" defer></script></body></html>`;
+    `\n<script src="/assets/islands.js" defer></script>` +
+    (chrome.bodyEnd ?? '') +
+    `</body></html>`;
 
   return { html, tier, cacheable: tier !== 'per-user' };
 }

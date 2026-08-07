@@ -18,11 +18,21 @@ import {
   CartService,
   readCartToken,
   cartCookie,
+  expireCartCookie,
   renderCartPage,
+  renderOrderPage,
   emptyCart,
   type Cart,
   type CartBackend,
 } from '@ratio/builder-core';
+import {
+  composeGokwik,
+  gokwikCartCookies,
+  mergeCsp,
+  cspToString,
+  type CspDirectives,
+  type IntegrationContext,
+} from '@ratio/gokwik';
 import { defaultRegistry } from '@ratio/builder-registry';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
@@ -57,14 +67,30 @@ const pbRegistry = defaultRegistry();
 // local dev renders without a backend.
 const resolver = commerceResolverFromEnv(process.env) ?? new StubResolver();
 
-// Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the
-// backstop that contains any HTML/color injection that slips through content validation;
-// inline <style> is the theme's, so style-src allows it. Applied to every storefront HTML
-// response. The edge forwards these headers on the proxied path.
-const STOREFRONT_CSP =
-  "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src https: data:; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
-function setStorefrontSecurity(c: Context): void {
-  c.header('content-security-policy', STOREFRONT_CSP);
+// Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the backstop that
+// contains any HTML/color injection that slips through content validation; inline <style> is the
+// theme's, so style-src allows it. This is the DEFAULT for every storefront response; an enabled
+// external integration (see @ratio/gokwik) merges its own hosts onto this base, per request.
+const STOREFRONT_BASE_CSP: CspDirectives = {
+  'default-src': ["'none'"],
+  'script-src': ["'none'"],
+  'style-src': ["'unsafe-inline'"],
+  'img-src': ['https:', 'data:'],
+  'font-src': ["'self'", 'data:'],
+  'base-uri': ["'none'"],
+  'form-action': ["'self'"],
+  'frame-ancestors': ["'none'"],
+};
+const STRICT_CSP = cspToString(STOREFRONT_BASE_CSP);
+
+function integrationContext(commerce: CartTenant['commerce'], page: string): IntegrationContext {
+  return { env: process.env, merchantId: commerce?.merchantId ?? '', page };
+}
+
+// `csp` defaults to the strict no-JS policy; storefront handlers pass the merged policy when an
+// integration is active.
+function setStorefrontSecurity(c: Context, csp: string = STRICT_CSP): void {
+  c.header('content-security-policy', csp);
   c.header('x-content-type-options', 'nosniff');
   c.header('referrer-policy', 'strict-origin-when-cross-origin');
 }
@@ -90,6 +116,7 @@ async function renderCartResponse(
   cart: Cart
 ): Promise<Response> {
   const merchantId = tenant.commerce?.merchantId ?? '';
+  const ix = composeGokwik(integrationContext(tenant.commerce, 'cart'));
   const [menu, footer] = await Promise.all([
     fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
     fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
@@ -99,11 +126,52 @@ async function renderCartResponse(
     styleHead: storefrontHead((tenant.theme ?? {}) as never),
     header: renderHeader({ menu, siteName: tenant.name }),
     footer: renderFooter({ footer, siteName: tenant.name }),
+    headExtra: ix.head,
+    bodyEnd: ix.bodyEnd,
   });
   c.header('x-tenant', tenantId);
   c.header('x-handler', 'cart');
   c.header('x-cache', 'no-store');
-  setStorefrontSecurity(c);
+  setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
+  return c.html(html);
+}
+
+// Order confirmation (thank-you) page. The checkout SDK redirects here after order-complete with the
+// order id/total/payment in the query; render them and expire the (now-spent) cart cookie.
+async function renderOrderResponse(
+  c: Context,
+  tenant: CartTenant,
+  tenantId: string
+): Promise<Response> {
+  const merchantId = tenant.commerce?.merchantId ?? '';
+  const url = new URL(c.req.url);
+  const rawTotal = Number(url.searchParams.get('total'));
+  const ix = composeGokwik(integrationContext(tenant.commerce, 'order'));
+  const [menu, footer] = await Promise.all([
+    fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+    fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
+  ]);
+  const html = renderOrderPage(
+    {
+      id: url.searchParams.get('id') ?? '',
+      // The checkout event reports amounts in MAJOR units (rupees), unlike the cart API (paise).
+      total: Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : undefined,
+      paymentMethod: url.searchParams.get('payment') ?? undefined,
+    },
+    {
+      siteName: tenant.name,
+      styleHead: storefrontHead((tenant.theme ?? {}) as never),
+      header: renderHeader({ menu, siteName: tenant.name }),
+      footer: renderFooter({ footer, siteName: tenant.name }),
+      headExtra: ix.head,
+      bodyEnd: ix.bodyEnd,
+    }
+  );
+  c.header('x-tenant', tenantId);
+  c.header('x-handler', 'order');
+  c.header('x-cache', 'no-store');
+  c.header('set-cookie', expireCartCookie());
+  setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
   return c.html(html);
 }
 
@@ -118,10 +186,21 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
       const body = await c.req.parseBody();
       try {
         if (path === '/cart/add') {
-          const variantId = String(body.variantId || body.handle || '');
+          // Grid/collection cards carry no variant, so they post the handle; resolve the variant
+          // server-side. The PDP posts a real variantId and skips the lookup.
+          let variantId = String(body.variantId || '');
+          const handle = String(body.handle || '');
+          if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
             const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
-            if (updated.id) c.header('set-cookie', cartCookie(updated.id)); // persist the cart token
+            if (updated.id) {
+              c.header('set-cookie', cartCookie(updated.id)); // httpOnly, for the server
+              // Enabled integrations mirror the token in their own cookie (e.g. the side-cart widget's
+              // JS-readable X-Cart-Token); none configured → nothing appended.
+              const ctx = integrationContext(tenant.commerce, 'cart');
+              for (const ck of gokwikCartCookies(updated.id, ctx))
+                c.header('set-cookie', ck, { append: true });
+            }
           }
         } else if (token) {
           const variantId = String(body.variantId || '');
@@ -176,7 +255,13 @@ app.all('*', async (c) => {
 
   const tenantId = c.req.header('x-ratio-tenant');
 
-  if (path.startsWith('/api/') || RESERVED.some((r) => path === r || path.startsWith(r + '/'))) {
+  // POST /checkout is OUR endpoint (the GoKwik checkout handshake); everything else under the
+  // reserved prefixes stays app-owned/stubbed.
+  const isCheckoutApi = path === '/checkout' && c.req.method === 'POST';
+  if (
+    !isCheckoutApi &&
+    (path.startsWith('/api/') || RESERVED.some((r) => path === r || path.startsWith(r + '/')))
+  ) {
     c.header('x-handler', 'reserved');
     c.header('x-cache', 'no-store');
     return c.text('reserved'); // don't echo tenant id / path back to the caller (I-4)
@@ -199,6 +284,28 @@ app.all('*', async (c) => {
   // backend, keyed by a token in an httpOnly cookie. Always no-store (per-shopper).
   if (path === '/cart' || path.startsWith('/cart/')) {
     return handleCart(c, tenant, tenantId as string);
+  }
+
+  // Order confirmation page (post-checkout thank-you). Always no-store (per-order).
+  if (path === '/order') {
+    return renderOrderResponse(c, tenant, tenantId as string);
+  }
+
+  // Checkout handshake (JS-only path): create the GoKwik checkout server-side and hand the
+  // merchantCheckoutId to the browser SDK. The GoKwik checkout integration's client script POSTs here.
+  if (isCheckoutApi) {
+    const backend = cartBackendFor(tenant.commerce);
+    const token = readCartToken(c.req.header('cookie'));
+    let merchantCheckoutId = '';
+    if (backend && token) {
+      try {
+        merchantCheckoutId = await new CartService(backend).createCheckout(token);
+      } catch {
+        // Surface as an empty id — the client shows "checkout unavailable" rather than 500ing.
+      }
+    }
+    c.header('x-cache', 'no-store');
+    return c.json({ merchantCheckoutId });
   }
 
   // Page-builder render path — the sole renderer. A published PageDoc for the URL (exact or a
@@ -238,10 +345,13 @@ app.all('*', async (c) => {
         tenant.commerce?.merchantId ?? '',
         process.env.COMMERCE_FOOTER_API_URL ?? ''
       );
+      const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
       const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
         menu,
         footer,
         siteName: tenant.name,
+        headExtra: ix.head,
+        bodyEnd: ix.bodyEnd,
       });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
@@ -257,7 +367,7 @@ app.all('*', async (c) => {
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
       if (composed.cacheable)
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-      setStorefrontSecurity(c);
+      setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
       return c.html(composed.html);
     }
     // No published page for this URL (exact or template) → 404. The page builder is the sole

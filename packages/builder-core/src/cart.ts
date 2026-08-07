@@ -33,12 +33,19 @@ export function emptyCart(): Cart {
 }
 
 // The cart-method subset of @shopkit/data-layer's ICommerceClient (buildCustomClient returns one).
+// getProduct is optional — used only to resolve a variant when the caller has just a handle (product
+// list/grid data carries no variants, so add-from-grid resolves the variant server-side).
 export interface CartBackend {
   createCart(options?: unknown): Promise<IResponse>;
   getCart(params: { id: string }, options?: unknown): Promise<IResponse>;
   addToCart(params: { id: string; items: CartItemInput[] }, options?: unknown): Promise<IResponse>;
   removeFromCart(params: { id: string; itemIds: string[] }, options?: unknown): Promise<IResponse>;
   updateCart(params: { id: string; items: CartItemInput[] }, options?: unknown): Promise<IResponse>;
+  getProduct?(params: { handle?: string; id?: string }, options?: unknown): Promise<IResponse>;
+  createCheckout?(
+    params: { payload: { cart_token: string; checkout_id?: string; attributes?: unknown } },
+    options?: unknown
+  ): Promise<IResponse>;
 }
 
 const num = (v: unknown): number => {
@@ -123,6 +130,37 @@ export class CartService {
     return toCart(unwrap(await this.backend.updateCart({ id: token, items })));
   }
 
+  // Resolve a product's first variant id from its handle. Grid/collection data carries no variants,
+  // so add-from-grid posts the handle and the origin resolves the variant here (the same product read
+  // the PDP uses). Returns '' when the backend can't look it up — the caller then skips the add rather
+  // than sending a bogus id the commerce backend rejects.
+  async resolveVariant(handle: string): Promise<string> {
+    if (!handle || !this.backend.getProduct) return '';
+    try {
+      const res = await this.backend.getProduct({ handle });
+      if (!res || res.success === false || res.data == null) return '';
+      const data = res.data as Record<string, unknown>;
+      const product = (data.product ?? data) as Record<string, unknown>;
+      const variants = Array.isArray(product.variants)
+        ? (product.variants as Record<string, unknown>[])
+        : [];
+      return variants[0] ? str(variants[0].id ?? variants[0].variant_id) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  // Create a GoKwik checkout for the token's cart and return the merchantCheckoutId the browser SDK
+  // needs (window.gokwikSdk.initCheckout). The actual payment UI is the SDK's, in the browser — this
+  // is only the server-side handshake. Returns '' when the backend can't create one.
+  async createCheckout(token: string): Promise<string> {
+    if (!token || !this.backend.createCheckout) return '';
+    const data = unwrap(
+      await this.backend.createCheckout({ payload: { cart_token: token, checkout_id: '' } })
+    );
+    return str(data.id);
+  }
+
   // Remove lines by variant id — R2's contract (removeFromCart(token, [variantId])). NOTE: on the
   // current gokwik backend this reports success but doesn't persist; wiring a remove button waits on
   // the backend honouring it (tracked for the next slice). Kept here as the documented contract.
@@ -148,6 +186,10 @@ export function readCartToken(cookieHeader: string | undefined): string | null {
 }
 export function cartCookie(token: string): string {
   return `${COOKIE_NAME}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE}`;
+}
+// Expire the cart cookie — the order is placed, the cart is spent, a fresh one starts on the next add.
+export function expireCartCookie(): string {
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 // ── render: the /cart page (the origin renders this directly, not the page builder) ─────────────
@@ -190,12 +232,20 @@ function cartLineRow(l: CartLine): string {
 }
 
 // A full HTML page for /cart. `styleHead` is storefrontHead(theme); header/footer are the composed
-// chrome strings (so the cart page matches the storefront). Checkout hands off to GoKwik.
+// chrome strings (so the cart page matches the storefront). `headExtra`/`bodyEnd` are the composed
+// external-integration fragments (vendor-neutral — the origin fills them). Checkout hands off to GoKwik.
 export function renderCartPage(
   cart: Cart,
-  opts: { siteName: string; styleHead: string; header?: string; footer?: string }
+  opts: {
+    siteName: string;
+    styleHead: string;
+    header?: string;
+    footer?: string;
+    headExtra?: string;
+    bodyEnd?: string;
+  }
 ): string {
-  const { siteName, styleHead, header = '', footer = '' } = opts;
+  const { siteName, styleHead, header = '', footer = '', headExtra = '', bodyEnd = '' } = opts;
   const inner = cart.items.length
     ? `<div class="cart-lines">${cart.items.map(cartLineRow).join('')}</div>` +
       `<div class="cart-foot"><div class="cart-sub"><span>Subtotal</span><span>${money(cart.subtotal)}</span></div>` +
@@ -207,10 +257,61 @@ export function renderCartPage(
   return (
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>Cart · ${esc(siteName)}</title>${styleHead}</head><body>` +
+    `<title>Cart · ${esc(siteName)}</title>${styleHead}${headExtra}</head><body>` +
     header +
     `<main class="rt cart-main"><h1 class="cart-title">Your cart</h1>${inner}</main>` +
     footer +
+    bodyEnd +
+    `</body></html>`
+  );
+}
+
+// The order confirmation (thank-you) page, rendered after a GoKwik checkout completes. Full line-item
+// detail needs the customer-auth'd order API (deferred); this shows what the order-complete event
+// gives us — the order id, total, and payment method.
+export interface OrderSummary {
+  id: string;
+  total?: number; // in the store's display currency
+  paymentMethod?: string;
+}
+export function renderOrderPage(
+  order: OrderSummary,
+  opts: {
+    siteName: string;
+    styleHead: string;
+    header?: string;
+    footer?: string;
+    headExtra?: string;
+    bodyEnd?: string;
+  }
+): string {
+  const { siteName, styleHead, header = '', footer = '', headExtra = '', bodyEnd = '' } = opts;
+  const rows =
+    (order.id
+      ? `<div class="order-row"><span>Order</span><span>${esc(order.id)}</span></div>`
+      : '') +
+    (order.total != null
+      ? `<div class="order-row"><span>Total</span><span>${money(order.total)}</span></div>`
+      : '') +
+    (order.paymentMethod
+      ? `<div class="order-row"><span>Payment</span><span>${esc(order.paymentMethod)}</span></div>`
+      : '');
+  return (
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>Order confirmed · ${esc(siteName)}</title>${styleHead}${headExtra}</head><body>` +
+    header +
+    `<main class="rt order-main"><div class="order-card">` +
+    `<h1 class="order-title">Thank you!</h1>` +
+    `<p class="order-sub">Your order is confirmed. A confirmation will be sent to you.</p>` +
+    (rows ? `<div class="order-rows">${rows}</div>` : '') +
+    // Line items are per-order client data (from the checkout event); an integration hydration script
+    // fills this from sessionStorage. Empty (and invisible) when there's nothing to show.
+    `<div class="order-rows order-items" id="rt-order-items"></div>` +
+    `<a class="btn" href="/">Continue shopping</a>` +
+    `</div></main>` +
+    footer +
+    bodyEnd +
     `</body></html>`
   );
 }

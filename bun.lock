@@ -77,10 +77,6 @@
       "name": "@ratio/control-plane-client",
       "version": "0.1.0",
     },
-    "packages/data-content-model": {
-      "name": "@ratio/data-content-model",
-      "version": "0.1.0",
-    },
     "packages/data-db": {
       "name": "@ratio/data-db",
       "version": "0.1.0",
@@ -97,8 +93,8 @@
       "name": "@ratio/edge-core",
       "version": "0.1.0",
     },
-    "packages/theme": {
-      "name": "@ratio/theme",
+    "packages/gokwik": {
+      "name": "@ratio/gokwik",
       "version": "0.1.0",
     },
   },
@@ -363,8 +359,6 @@
 
     "@ratio/control-plane-client": ["@ratio/control-plane-client@workspace:packages/control-plane-client"],
 
-    "@ratio/data-content-model": ["@ratio/data-content-model@workspace:packages/data-content-model"],
-
     "@ratio/data-db": ["@ratio/data-db@workspace:packages/data-db"],
 
     "@ratio/data-provisioning": ["@ratio/data-provisioning@workspace:packages/data-provisioning"],
@@ -375,9 +369,9 @@
 
     "@ratio/edge-core": ["@ratio/edge-core@workspace:packages/edge-core"],
 
-    "@ratio/origin": ["@ratio/origin@workspace:apps/origin"],
+    "@ratio/gokwik": ["@ratio/gokwik@workspace:packages/gokwik"],
 
-    "@ratio/theme": ["@ratio/theme@workspace:packages/theme"],
+    "@ratio/origin": ["@ratio/origin@workspace:apps/origin"],
 
     "@redocly/ajv": ["@redocly/ajv@8.11.2", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2", "uri-js-replace": "^1.0.1" } }, "sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg=="],
 

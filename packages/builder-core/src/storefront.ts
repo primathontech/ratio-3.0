@@ -120,12 +120,15 @@ a{color:inherit;text-decoration:none}
 .btn:hover,.button:hover{filter:brightness(1.08)}
 .heading{font-size:1.5rem;letter-spacing:-.01em;margin:44px 0 18px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;padding:6px 0 40px}
-.card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);transition:box-shadow .16s,transform .16s}
+.card{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--bg);transition:box-shadow .16s,transform .16s;display:flex;flex-direction:column}
 .card:hover{box-shadow:0 10px 28px rgba(24,24,27,.09);transform:translateY(-2px)}
+.card-link{display:flex;flex-direction:column;flex:1}
 .card .ph{aspect-ratio:1;background:var(--surface)}
 .card .ph img{width:100%;height:100%;object-fit:cover}
 .card .body{padding:12px 14px;font-size:.95rem}
 .card .price{color:var(--accent);font-weight:700;margin-top:4px}
+.card-atc{padding:0 14px 14px}
+.card-atc .btn{width:100%;padding:9px 14px;font-size:.9rem}
 .price .was{color:var(--muted);font-weight:500;text-decoration:line-through;font-size:.82em;margin-left:8px}
 .slideshow{display:flex;gap:16px;overflow-x:auto;padding:6px 0 26px;scroll-snap-type:x mandatory}
 .slide{flex:0 0 min(82%,540px);scroll-snap-align:start;background:var(--surface);border-radius:var(--radius);padding:48px 30px;min-height:210px;display:flex;align-items:flex-end}
@@ -177,6 +180,13 @@ a{color:inherit;text-decoration:none}
 .cart-cont{color:var(--muted);font-size:.95rem}
 .cart-cont:hover{color:var(--accent)}
 .cart-empty{text-align:center;padding:64px 0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:18px}
+.order-main{padding:56px 20px 80px;max-width:560px;display:flex;justify-content:center}
+.order-card{width:100%;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.order-title{font-size:2rem;letter-spacing:-.02em;margin:0}
+.order-sub{color:var(--muted);margin:0}
+.order-rows{width:100%;max-width:360px;margin:10px 0 18px;display:flex;flex-direction:column;gap:10px}
+.order-row{display:flex;justify-content:space-between;gap:24px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius);font-variant-numeric:tabular-nums}
+.order-row span:first-child{color:var(--muted)}
 `;
 
 // The full <style> block to drop into <head>: safe token overrides first, then the base rules.
