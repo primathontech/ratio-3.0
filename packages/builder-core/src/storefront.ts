@@ -153,6 +153,24 @@ a{color:inherit;text-decoration:none}
 .ftr-col a{font-size:.9rem;color:var(--muted)}
 .ftr-col a:hover{color:var(--accent)}
 .ftr-legal{color:var(--muted);font-size:.85rem}
+.atc{margin:18px 0 0}
+.atc-btn{width:100%;max-width:320px;font-size:1rem;padding:13px 22px}
+.cart-main{padding:40px 20px 72px;max-width:820px}
+.cart-title{font-size:1.9rem;letter-spacing:-.02em;margin:0 0 24px}
+.cart-lines{display:flex;flex-direction:column;gap:4px}
+.cart-line{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}
+.cart-line-ph{width:64px;height:64px;border-radius:calc(var(--radius) - 4px);background:var(--surface);overflow:hidden}
+.cart-line-ph img{width:100%;height:100%;object-fit:cover}
+.cart-line-t{font-weight:600}
+.cart-line-q{color:var(--muted);font-size:.9rem;margin-top:2px}
+.cart-line-sum{font-weight:700;font-variant-numeric:tabular-nums}
+.cart-foot{margin-top:26px;display:flex;flex-direction:column;align-items:flex-end;gap:16px}
+.cart-sub{display:flex;justify-content:space-between;gap:40px;width:100%;max-width:340px;font-size:1.15rem;font-weight:700;font-variant-numeric:tabular-nums}
+.cart-checkout{width:100%;max-width:340px;text-align:center;font-size:1.05rem;padding:14px 22px}
+.cart-nocheckout{color:var(--muted);font-size:.9rem}
+.cart-cont{color:var(--muted);font-size:.95rem}
+.cart-cont:hover{color:var(--accent)}
+.cart-empty{text-align:center;padding:64px 0;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:18px}
 `;
 
 // The full <style> block to drop into <head>: safe token overrides first, then the base rules.
