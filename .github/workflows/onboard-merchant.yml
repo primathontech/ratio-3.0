@@ -35,8 +35,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
       # All ${{ inputs.* }} / secrets go through env (shell vars), never interpolated into
       # the run script — otherwise an input like "$(...)" executes on the runner, which
       # holds DATABASE_URL + CLOUDFLARE_API_TOKEN. The JSON body is built with jq so `sub`

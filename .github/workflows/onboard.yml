@@ -30,8 +30,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
       - name: Onboard into Neon
         # Inputs go through env (shell vars), never interpolated into the run script — a
         # ${{ inputs.* }} value like "$(...)" would otherwise execute on the runner, which
