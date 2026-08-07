@@ -111,6 +111,13 @@ a{color:inherit;text-decoration:none}
 .hdr-action:hover{color:var(--accent)}
 .hdr-ic{width:22px;height:22px;flex:none}
 .hdr-badge{position:absolute;top:-7px;left:12px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:#e11d48;color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
+.hdr-acct{position:relative;display:inline-flex}
+.hdr-acct-btn{background:none;border:0;cursor:pointer;color:inherit;font:inherit}
+.hdr-acct-menu{position:absolute;right:0;top:calc(100% + 10px);min-width:180px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:0 10px 28px rgba(24,24,27,.12);padding:8px;display:flex;flex-direction:column;gap:2px;z-index:50}
+.hdr-acct-menu[hidden]{display:none}
+.hdr-acct-menu a,.hdr-acct-menu button{display:block;width:100%;text-align:left;padding:9px 12px;border-radius:8px;background:none;border:0;cursor:pointer;color:inherit;font:inherit;font-size:.92rem}
+.hdr-acct-menu a:hover,.hdr-acct-menu button:hover{background:var(--surface);color:var(--accent)}
+.hdr-acct-menu #rt-logout{margin-top:4px;border-top:1px solid var(--border);border-radius:0}
 @media (max-width:900px){.hdr-search{min-width:0;width:150px}}
 @media (max-width:760px){.hdr-nav,.hdr-action-t{display:none}}
 .hero{padding:76px 0 64px;text-align:center}
@@ -187,6 +194,16 @@ a{color:inherit;text-decoration:none}
 .order-rows{width:100%;max-width:360px;margin:10px 0 18px;display:flex;flex-direction:column;gap:10px}
 .order-row{display:flex;justify-content:space-between;gap:24px;padding:12px 16px;border:1px solid var(--border);border-radius:var(--radius);font-variant-numeric:tabular-nums}
 .order-row span:first-child{color:var(--muted)}
+.acct-main{padding:40px 20px 72px;max-width:820px}
+.acct-login{display:flex;flex-direction:column;align-items:flex-start;gap:16px;color:var(--muted)}
+.acct-orders{display:flex;flex-direction:column;gap:18px}
+.acct-order{border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px}
+.acct-order-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.acct-order-id{font-weight:700}
+.acct-order-status{font-size:.82rem;color:var(--muted);text-transform:capitalize}
+.acct-order-total{font-weight:700;border-top:1px solid var(--border);padding-top:10px;margin-top:4px}
+.acct-empty{color:var(--muted)}
+.acct-logout{margin-top:24px;background:none;border:0;cursor:pointer}
 `;
 
 // The full <style> block to drop into <head>: safe token overrides first, then the base rules.

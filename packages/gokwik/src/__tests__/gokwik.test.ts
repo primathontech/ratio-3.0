@@ -4,6 +4,9 @@ import { sideCartTag, readableCartCookie } from '../side-cart/side-cart';
 import { sideCartIntegration } from '../side-cart';
 import { checkoutTag } from '../checkout/checkout';
 import { checkoutIntegration } from '../checkout';
+import { kwikpassTag } from '../kwikpass/kwikpass';
+import { kwikpassIntegration } from '../kwikpass';
+import { readCustomerToken } from '../auth';
 import { composeGokwik, gokwikCartCookies } from '../compose';
 import { mergeCsp, cspToString } from '../csp';
 import type { IntegrationContext } from '../types';
@@ -145,6 +148,36 @@ test('composeGokwik: side-cart enabled → bodyEnd script, gokwik csp, X-Cart-To
   assert.match(out.bodyEnd, /"mid":"195qow8rsryx"/);
   assert.ok(out.csp['connect-src']?.includes('https://*.gokwik.io'));
   assert.deepEqual(gokwikCartCookies('t1', ctx()), [readableCartCookie('t1')]);
+});
+
+test('kwikpassTag: empty unless every field present; else emits SDK scripts + merchantInfo + wiring', () => {
+  assert.equal(kwikpassTag(null), '');
+  assert.equal(kwikpassTag({ scriptUrl: 'x', mid: '', environment: 'production' }), '');
+  const html = kwikpassTag({
+    scriptUrl: 'https://pdp.gokwik.co',
+    mid: '196jdfqy1aot',
+    environment: 'production',
+  });
+  assert.match(html, /window\.merchantInfo=Object\.assign/);
+  assert.match(html, /"mid":"196jdfqy1aot"/);
+  assert.match(html, /kwikpass\/non-shopify-core-functions\.min\.js/);
+  assert.match(html, /kwikpass\/plugin\/build\/kp-merchant-v2\.js/);
+  assert.match(html, /handleCustomLogin/); // login trigger
+  assert.match(html, /rt-account-btn/); // header account island hydration
+  assert.match(html, /user-loggedin/); // reload on login so the server sees the cookie
+  assert.match(html, /kpUpdateDOM/);
+});
+
+test('kwikpass integration on with GOKWIK_SCRIPT_URL + mid + environment', () => {
+  assert.equal(kwikpassIntegration.enabled(ctx({ env: checkoutEnv })), true);
+  assert.equal(kwikpassIntegration.enabled(ctx({ env: {} })), false);
+});
+
+test('readCustomerToken reads the KWIKUSERTOKEN cookie (and env variants), else null', () => {
+  assert.equal(readCustomerToken('a=1; KWIKUSERTOKEN=tok%20en; b=2'), 'tok en');
+  assert.equal(readCustomerToken('SANDBOXKWIKUSERTOKEN=st'), 'st');
+  assert.equal(readCustomerToken('other=x'), null);
+  assert.equal(readCustomerToken(undefined), null);
 });
 
 test('mergeCsp drops none when a real source is added; keeps none when alone', () => {
