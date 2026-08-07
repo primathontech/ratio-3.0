@@ -35,7 +35,8 @@ test('renders a tenant home with tenant + cache + surrogate headers', async () =
 });
 
 test('reserved path -> no-store system handler', async () => {
-  const res = await call('/cart', edge({ 'x-ratio-tenant': 't_acme' }));
+  // /cart is now server-rendered (its own handler); /checkout + /account stay app-owned stubs.
+  const res = await call('/checkout', edge({ 'x-ratio-tenant': 't_acme' }));
   assert.strictEqual(res.headers.get('x-handler'), 'reserved');
   assert.strictEqual(res.headers.get('x-cache'), 'no-store');
 });

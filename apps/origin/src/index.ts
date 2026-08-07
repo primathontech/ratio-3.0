@@ -6,9 +6,23 @@ import { esc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
 import { resolvePage, StubResolver } from '@ratio/builder-core';
-import { fetchMainMenu } from '@ratio/builder-core';
-import { fetchFooter } from '@ratio/builder-core';
-import { commerceResolverFromEnv } from '@ratio/builder-core';
+import { fetchMainMenu, renderHeader } from '@ratio/builder-core';
+import { fetchFooter, renderFooter } from '@ratio/builder-core';
+import {
+  commerceResolverFromEnv,
+  buildCustomClient,
+  commerceUrlsFromEnv,
+} from '@ratio/builder-core';
+import { storefrontHead } from '@ratio/builder-core';
+import {
+  CartService,
+  readCartToken,
+  cartCookie,
+  renderCartPage,
+  emptyCart,
+  type Cart,
+  type CartBackend,
+} from '@ratio/builder-core';
 import { defaultRegistry } from '@ratio/builder-registry';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
@@ -27,7 +41,9 @@ export function edgeAuthOk(provided: string | undefined, secret: string): boolea
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-const RESERVED = ['/cart', '/checkout', '/account'];
+// /cart is handled here (server-rendered cart, no-store); /checkout + /account are app-owned and
+// still stubbed as reserved. The cart routes live below, after the tenant is resolved.
+const RESERVED = ['/checkout', '/account'];
 
 let renders = 0;
 
@@ -51,6 +67,77 @@ function setStorefrontSecurity(c: Context): void {
   c.header('content-security-policy', STOREFRONT_CSP);
   c.header('x-content-type-options', 'nosniff');
   c.header('referrer-policy', 'strict-origin-when-cross-origin');
+}
+
+// Cart (no-JS). The cart lives on the commerce backend; the origin holds only the token cookie and
+// renders the cart server-side. Add/remove are form POSTs → mutate → 303 back to /cart.
+type CartTenant = {
+  name: string;
+  theme?: unknown;
+  commerce?: { merchantId?: string; storeId?: string } | null;
+};
+
+function cartBackendFor(commerce: CartTenant['commerce']): CartBackend | null {
+  const urls = commerceUrlsFromEnv(process.env);
+  if (!urls) return null;
+  return buildCustomClient(commerce, urls) as CartBackend | null;
+}
+
+async function renderCartResponse(
+  c: Context,
+  tenant: CartTenant,
+  tenantId: string,
+  cart: Cart
+): Promise<Response> {
+  const merchantId = tenant.commerce?.merchantId ?? '';
+  const [menu, footer] = await Promise.all([
+    fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+    fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
+  ]);
+  const html = renderCartPage(cart, {
+    siteName: tenant.name,
+    styleHead: storefrontHead((tenant.theme ?? {}) as never),
+    header: renderHeader({ menu, siteName: tenant.name }),
+    footer: renderFooter({ footer, siteName: tenant.name }),
+  });
+  c.header('x-tenant', tenantId);
+  c.header('x-handler', 'cart');
+  c.header('x-cache', 'no-store');
+  setStorefrontSecurity(c);
+  return c.html(html);
+}
+
+async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Promise<Response> {
+  const path = new URL(c.req.url).pathname;
+  const backend = cartBackendFor(tenant.commerce);
+  const token = readCartToken(c.req.header('cookie'));
+
+  if (c.req.method === 'POST' && path === '/cart/add') {
+    if (backend) {
+      const body = await c.req.parseBody();
+      const variantId = String(body.variantId || body.handle || '');
+      if (variantId) {
+        try {
+          const updated = await new CartService(backend).add(token, [{ variantId, quantity: 1 }]);
+          if (updated.id) c.header('set-cookie', cartCookie(updated.id)); // persist the cart token
+        } catch {
+          // A backend hiccup must not 500 the shopper — fall through and re-render the cart.
+        }
+      }
+    }
+    c.header('x-cache', 'no-store');
+    return c.redirect('/cart', 303);
+  }
+
+  let cart: Cart = emptyCart();
+  if (backend && token) {
+    try {
+      cart = await new CartService(backend).get(token);
+    } catch {
+      cart = emptyCart();
+    }
+  }
+  return renderCartResponse(c, tenant, tenantId, cart);
 }
 
 export const app = new Hono();
@@ -100,6 +187,13 @@ app.all('*', async (c) => {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
   }
+
+  // Cart (no-JS, server-rendered). Add-to-cart is a form POST; the cart itself lives on the commerce
+  // backend, keyed by a token in an httpOnly cookie. Always no-store (per-shopper).
+  if (path === '/cart' || path.startsWith('/cart/')) {
+    return handleCart(c, tenant, tenantId as string);
+  }
+
   // Page-builder render path — the sole renderer. A published PageDoc for the URL (exact or a
   // shared template) is served; a URL with none is a 404 (there is no legacy fallback).
   {

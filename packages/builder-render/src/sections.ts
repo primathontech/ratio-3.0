@@ -58,8 +58,8 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   product: {
     type: 'product',
     // ONE canonical product binding (carries the volatile price → shared-volatile). Reads the data
-    // layer's fields as-is; the add-to-cart + live stock are an island (per-user), hydrated
-    // client-side — NOT rendered into the cached shell here.
+    // layer's fields as-is. Add-to-cart is a plain form POST to /cart/add (no JS) — the same markup
+    // for every shopper, so it stays in the cached shell; the origin does the work per-request.
     bindings: [{ name: 'product', tier: 'shared-volatile' }],
     // image: getProduct returns no top-level image_url — the image lives in images[] (main first),
     // same fallback the grid uses. description is the backend's HTML, rendered as-is (the storefront
@@ -71,7 +71,11 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
     <h1>{{ product.title | escape }}</h1>
     <div class="price">{{ product.price | money }}{% if product.compare_at_price and product.compare_at_price > product.price %} <s class="was">{{ product.compare_at_price | money }}</s>{% endif %}</div>
     {% if product.description %}<div class="rte">{{ product.description }}</div>{% endif %}
-    <div data-island="add-to-cart" data-sku="{{ product.handle | escape }}"></div>
+    <form class="atc" method="post" action="/cart/add">
+      <input type="hidden" name="variantId" value="{{ product.variants.first.id | default: product.id | default: product.handle | escape }}">
+      <input type="hidden" name="handle" value="{{ product.handle | escape }}">
+      <button type="submit" class="btn atc-btn">Add to cart</button>
+    </form>
   </div>
 </section>`,
   },
