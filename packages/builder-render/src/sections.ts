@@ -46,10 +46,17 @@ export const FIRST_PARTY_SECTIONS: Record<string, SectionDef> = {
   <div class="grid">
     {% for p in grid.products %}
     {% assign img = p.image_url | default: p.images.first.url %}
-    <a class="card" href="/products/{{ p.handle | escape }}">
-      <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
-      <div class="body"><div>{{ p.title | escape }}</div><div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div></div>
-    </a>
+    <div class="card">
+      <a class="card-link" href="/products/{{ p.handle | escape }}">
+        <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
+        <div class="body"><div>{{ p.title | escape }}</div><div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div></div>
+      </a>
+      <form class="card-atc" method="post" action="/cart/add">
+        <input type="hidden" name="variantId" value="{{ p.variants.first.id | default: p.variant_id | escape }}">
+        <input type="hidden" name="handle" value="{{ p.handle | escape }}">
+        <button type="submit" class="btn">Add to cart</button>
+      </form>
+    </div>
     {% endfor %}
   </div>
 </section>`,

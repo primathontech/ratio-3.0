@@ -7,7 +7,9 @@ import {
   CartService,
   readCartToken,
   cartCookie,
+  expireCartCookie,
   renderCartPage,
+  renderOrderPage,
   emptyCart,
   type CartBackend,
   type Cart,
@@ -141,6 +143,52 @@ test('remove calls removeFromCart by variant id; a failed op throws', async () =
   );
 });
 
+test('resolveVariant: handle → first variant id; empty when no lookup / no variants / failure', async () => {
+  const withProduct = (product: unknown): CartBackend =>
+    fakeBackend({ getProduct: async () => ok(product) });
+  // gokwik product/details shape: data.variants[0].id is the variant to add
+  assert.equal(
+    await new CartService(withProduct({ variants: [{ id: '42729391128654' }] })).resolveVariant(
+      'h'
+    ),
+    '42729391128654'
+  );
+  // nested under data.product, keyed by variant_id
+  assert.equal(
+    await new CartService(
+      withProduct({ product: { variants: [{ variant_id: 'v9' }] } })
+    ).resolveVariant('h'),
+    'v9'
+  );
+  // no getProduct on the backend → '' (caller skips the add rather than sending a bogus id)
+  assert.equal(await new CartService(fakeBackend()).resolveVariant('h'), '');
+  // no variants / failed lookup → ''
+  assert.equal(await new CartService(withProduct({ variants: [] })).resolveVariant('h'), '');
+  assert.equal(await new CartService(fakeBackend({ getProduct: fail })).resolveVariant('h'), '');
+  assert.equal(
+    await new CartService(withProduct({ variants: [{ id: 'x' }] })).resolveVariant(''),
+    ''
+  );
+});
+
+test('createCheckout: token → merchantCheckoutId; empty when no backend method / no token', async () => {
+  let sentPayload: unknown;
+  const withCheckout = new CartService(
+    fakeBackend({
+      createCheckout: async (p) => {
+        sentPayload = p.payload;
+        return ok({ id: 'chk_123' });
+      },
+    })
+  );
+  assert.equal(await withCheckout.createCheckout('81bdbe9b'), 'chk_123');
+  assert.deepEqual(sentPayload, { cart_token: '81bdbe9b', checkout_id: '' });
+  // no createCheckout on the backend → '' (checkout stays unavailable, no crash)
+  assert.equal(await new CartService(fakeBackend()).createCheckout('t'), '');
+  // no token → ''
+  assert.equal(await withCheckout.createCheckout(''), '');
+});
+
 test('readCartToken parses the cart cookie; cartCookie is httpOnly + scoped', () => {
   assert.equal(readCartToken('a=1; rt_cart=tok%20en; b=2'), 'tok en');
   assert.equal(readCartToken('other=x'), null);
@@ -150,6 +198,34 @@ test('readCartToken parses the cart cookie; cartCookie is httpOnly + scoped', ()
   assert.match(c, /HttpOnly/);
   assert.match(c, /SameSite=Lax/);
   assert.match(c, /Path=\//);
+});
+
+test('expireCartCookie clears rt_cart (Max-Age 0, httpOnly)', () => {
+  const c = expireCartCookie();
+  assert.match(c, /^rt_cart=;/);
+  assert.match(c, /Max-Age=0/);
+  assert.match(c, /HttpOnly/);
+});
+
+test('renderOrderPage: thank-you with order id/total/payment, chrome, escaping', () => {
+  const html = renderOrderPage(
+    { id: 'ord_<1>', total: 279, paymentMethod: 'UPI' },
+    { siteName: 'Acme', styleHead: '', header: '<header>H</header>', footer: '<footer>F</footer>' }
+  );
+  assert.match(html, /Thank you!/);
+  assert.match(html, /<title>Order confirmed · Acme<\/title>/);
+  assert.match(html, /ord_&lt;1&gt;/); // id escaped
+  assert.match(html, /₹279\.00/);
+  assert.match(html, />UPI</);
+  assert.match(html, /<header>H<\/header>/);
+  assert.match(html, /<footer>F<\/footer>/);
+});
+
+test('renderOrderPage: omits rows that are absent (only id → no total/payment rows)', () => {
+  const html = renderOrderPage({ id: 'o1' }, { siteName: 'Acme', styleHead: '' });
+  assert.match(html, />o1</);
+  assert.doesNotMatch(html, /Total<\/span>/);
+  assert.doesNotMatch(html, /Payment<\/span>/);
 });
 
 test('renderCartPage: empty state', () => {

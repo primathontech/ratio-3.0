@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/gokwik",
+  "version": "0.1.0",
+  "description": "GoKwik storefront integrations (side-cart, checkout, kwikpass) behind one seam",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}
