@@ -142,7 +142,17 @@ const HEADER_ACTIONS =
   '<input name="q" placeholder="Search products" aria-label="Search products">' +
   '</form>' +
   `<a class="hdr-action hdr-cart" href="/cart" aria-label="Cart">${ICON_CART}<span class="hdr-badge">0</span><span class="hdr-action-t">Cart</span></a>` +
-  `<a class="hdr-action" href="/account" aria-label="Account">${ICON_USER}<span class="hdr-action-t">Account</span></a>` +
+  // Account is a hydratable island: neutral scaffolding in the cached shell, revealed per-user by the
+  // KwikPass script (logged-out → the button opens the login modal; logged-in → the dropdown). The
+  // menu is hidden by default so a no-JS/unauthed page just shows an inert "Account" button.
+  '<div class="hdr-acct" id="rt-account" data-auth="out">' +
+  `<button type="button" class="hdr-action hdr-acct-btn" id="rt-account-btn" aria-haspopup="true" aria-expanded="false" aria-label="Account">${ICON_USER}<span class="hdr-action-t">Account</span></button>` +
+  '<div class="hdr-acct-menu" id="rt-account-menu" hidden>' +
+  '<a href="/account">Your Profile</a>' +
+  '<a href="/account">Order History</a>' +
+  '<button type="button" id="rt-logout">Logout</button>' +
+  '</div>' +
+  '</div>' +
   '</div>';
 
 // The header chrome: brand + nav + actions. No menu → brand + actions (still a real header).

@@ -21,13 +21,17 @@ import {
   expireCartCookie,
   renderCartPage,
   renderOrderPage,
+  OrderService,
+  renderAccountPage,
   emptyCart,
   type Cart,
   type CartBackend,
+  type OrderBackend,
 } from '@ratio/builder-core';
 import {
   composeGokwik,
   gokwikCartCookies,
+  readCustomerToken,
   mergeCsp,
   cspToString,
   type CspDirectives,
@@ -51,9 +55,9 @@ export function edgeAuthOk(provided: string | undefined, secret: string): boolea
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// /cart is handled here (server-rendered cart, no-store); /checkout + /account are app-owned and
-// still stubbed as reserved. The cart routes live below, after the tenant is resolved.
-const RESERVED = ['/checkout', '/account'];
+// /cart, /order, /account are handled here (server-rendered, no-store); POST /checkout is the GoKwik
+// handshake (see below). Other /checkout* paths stay app-owned/stubbed as reserved.
+const RESERVED = ['/checkout'];
 
 let renders = 0;
 
@@ -175,6 +179,49 @@ async function renderOrderResponse(
   return c.html(html);
 }
 
+// Protected /account page. Optimistic: the KwikPass token cookie's presence gates the logged-in view;
+// GoKwik's order API is the real authority (a bad token → empty history). No hard server session.
+async function renderAccountResponse(
+  c: Context,
+  tenant: CartTenant,
+  tenantId: string
+): Promise<Response> {
+  const merchantId = tenant.commerce?.merchantId ?? '';
+  const token = readCustomerToken(c.req.header('cookie'));
+  const ix = composeGokwik(integrationContext(tenant.commerce, 'account'));
+  const [menu, footer] = await Promise.all([
+    fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+    fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
+  ]);
+  let orders: Awaited<ReturnType<OrderService['history']>> = [];
+  if (token) {
+    const backend = cartBackendFor(tenant.commerce);
+    if (backend) {
+      try {
+        orders = await new OrderService(backend as unknown as OrderBackend).history(token);
+      } catch {
+        orders = [];
+      }
+    }
+  }
+  const html = renderAccountPage(
+    { loggedIn: !!token, orders },
+    {
+      siteName: tenant.name,
+      styleHead: storefrontHead((tenant.theme ?? {}) as never),
+      header: renderHeader({ menu, siteName: tenant.name }),
+      footer: renderFooter({ footer, siteName: tenant.name }),
+      headExtra: ix.head,
+      bodyEnd: ix.bodyEnd,
+    }
+  );
+  c.header('x-tenant', tenantId);
+  c.header('x-handler', 'account');
+  c.header('x-cache', 'no-store');
+  setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
+  return c.html(html);
+}
+
 async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Promise<Response> {
   const path = new URL(c.req.url).pathname;
   const backend = cartBackendFor(tenant.commerce);
@@ -289,6 +336,11 @@ app.all('*', async (c) => {
   // Order confirmation page (post-checkout thank-you). Always no-store (per-order).
   if (path === '/order') {
     return renderOrderResponse(c, tenant, tenantId as string);
+  }
+
+  // Customer account (order history). Protected via the KwikPass token cookie; always no-store.
+  if (path === '/account') {
+    return renderAccountResponse(c, tenant, tenantId as string);
   }
 
   // Checkout handshake (JS-only path): create the GoKwik checkout server-side and hand the
