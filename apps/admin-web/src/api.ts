@@ -212,6 +212,14 @@ export function createApi(
     createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
+    getCommerce: (id: string) =>
+      req<{ merchantId: string }>('GET', `/stores/${id}/commerce`).then((d) => d.merchantId ?? ''),
+    saveCommerce: (id: string, merchantId: string) =>
+      req<{ ok: boolean; merchantId: string; edgePurged?: boolean }>(
+        'PUT',
+        `/stores/${id}/commerce`,
+        { merchantId }
+      ),
     getTheme: (id: string) =>
       req<{ theme: StoreTheme }>('GET', `/stores/${id}/theme`).then((d) => d.theme ?? {}),
     saveTheme: (id: string, theme: StoreTheme) =>
