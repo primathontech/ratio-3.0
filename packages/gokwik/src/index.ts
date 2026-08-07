@@ -6,3 +6,6 @@ export { sideCartTag, readableCartCookie, type SideCartConfig } from './side-car
 export { sideCartIntegration } from './side-cart';
 export { checkoutTag, type CheckoutConfig } from './checkout/checkout';
 export { checkoutIntegration } from './checkout';
+export { kwikpassTag, type KwikpassConfig } from './kwikpass/kwikpass';
+export { kwikpassIntegration } from './kwikpass';
+export { readCustomerToken, KWIKPASS_TOKEN_KEYS } from './auth';
