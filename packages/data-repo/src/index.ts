@@ -42,5 +42,13 @@ export function forTenant(tenantId: string) {
         JSON.stringify(theme),
       ]);
     },
+    // Connect (or disconnect, with null) the store's commerce backend. `commerce` carries the
+    // GoKwik merchant id that powers products/collections/cart/checkout.
+    async setCommerce(commerce: TenantCommerce | null): Promise<void> {
+      await pool.query('UPDATE tenants SET commerce = $2 WHERE id = $1', [
+        tenantId,
+        commerce ? JSON.stringify(commerce) : null,
+      ]);
+    },
   };
 }
