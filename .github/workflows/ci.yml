@@ -195,24 +195,21 @@ jobs:
   admin-ui:
     needs: build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/admin-web
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      # admin-web is a bun workspace member (no per-app npm lockfile); install from the root like
+      # the build job, then run its scripts with `bun run --cwd`.
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: apps/admin-web/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd apps/admin-web typecheck
+      - run: bun run --cwd apps/admin-web test
       - name: Build
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
           VITE_ADMIN_API_URL: ${{ vars.ADMIN_API_URL }}
-        run: npm run build
+        run: bun run --cwd apps/admin-web build
       - name: Deploy to Cloudflare Pages
         if: github.ref == 'refs/heads/main' && vars.DEPLOY_ADMIN_UI == 'true'
         env:
@@ -220,5 +217,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: '7f06c71e716a0e4a5d38073c16758c60'
         run: |
           # Create the Pages project if it doesn't exist yet (idempotent).
-          npx --yes wrangler pages project create ratio-admin --production-branch=main 2>/dev/null || true
-          npx --yes wrangler pages deploy dist --project-name=ratio-admin --branch=main
+          bunx wrangler pages project create ratio-admin --production-branch=main 2>/dev/null || true
+          bunx wrangler pages deploy apps/admin-web/dist --project-name=ratio-admin --branch=main
