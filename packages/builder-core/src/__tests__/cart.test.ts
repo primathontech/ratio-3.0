@@ -84,21 +84,60 @@ test('add bootstraps via createCart when there is no token, and reuses the token
   assert.equal(reused.id, '81bdbe9b');
 });
 
-test('remove sets quantity 0 via updateCart (gokwik idiom); a failed op throws', async () => {
+test('setQuantity re-sends the full line set with just the target changed (min 1)', async () => {
   let sent: unknown;
   const svc = new CartService(
     fakeBackend({
+      // current cart has two lines: v1 (qty 2) and v2 (qty 5)
+      getCart: async () =>
+        ok(
+          gkCart({
+            items: [
+              { id: 'x', variant_id: 'v1', title: 'A', quantity: 2, final_price: 10000 },
+              { id: 'y', variant_id: 'v2', title: 'B', quantity: 5, final_price: 20000 },
+            ],
+          })
+        ),
       updateCart: async (p) => {
         sent = p.items;
         return ok(emptyGk());
       },
     })
   );
-  const cart = await svc.remove('81bdbe9b', ['v1']);
-  assert.deepEqual(sent, [{ variantId: 'v1', quantity: 0 }]);
-  assert.equal(cart.count, 0);
+  await svc.setQuantity('81bdbe9b', 'v1', 3);
+  assert.deepEqual(sent, [
+    { variantId: 'v1', quantity: 3 }, // target changed
+    { variantId: 'v2', quantity: 5 }, // others preserved
+  ]);
+  // qty floored at 1 (removing a line entirely is a separate op)
+  const svc2 = new CartService(
+    fakeBackend({
+      getCart: async () =>
+        ok(gkCart({ items: [{ variant_id: 'v1', title: 'A', quantity: 2, final_price: 10000 }] })),
+      updateCart: async (p) => {
+        sent = p.items;
+        return ok(emptyGk());
+      },
+    })
+  );
+  await svc2.setQuantity('81bdbe9b', 'v1', 0);
+  assert.deepEqual(sent, [{ variantId: 'v1', quantity: 1 }]);
+});
+
+test('remove calls removeFromCart by variant id; a failed op throws', async () => {
+  let sent: unknown;
+  const svc = new CartService(
+    fakeBackend({
+      removeFromCart: async (p) => {
+        sent = p.itemIds;
+        return ok(emptyGk());
+      },
+    })
+  );
+  await svc.remove('81bdbe9b', ['v1']);
+  assert.deepEqual(sent, ['v1']);
   await assert.rejects(() =>
-    new CartService(fakeBackend({ updateCart: fail })).remove('t', ['v1'])
+    new CartService(fakeBackend({ removeFromCart: fail })).remove('t', ['v1'])
   );
 });
 
@@ -134,8 +173,9 @@ test('renderCartPage: lines, subtotal, GoKwik checkout handoff, chrome, escaping
     footer: '<footer>F</footer>',
   });
   assert.match(html, /&lt;b&gt;Shampoo&lt;\/b&gt;/); // title escaped
-  assert.match(html, /Qty 2/);
-  assert.match(html, /₹558\.00/); // subtotal (and line sum 279×2)
+  assert.match(html, /action="\/cart\/update"[\s\S]*name="variantId" value="v1"/); // qty stepper form
+  assert.match(html, /cart-qty-n">2</); // current quantity shown
+  assert.match(html, /₹558\.00/); // line sum 279×2 (and subtotal)
   assert.match(html, /href="https:\/\/gk\/checkout\/c1"[^>]*>Checkout</); // checkout → GoKwik
   assert.match(html, /<header>H<\/header>/);
   assert.match(html, /<footer>F<\/footer>/);
