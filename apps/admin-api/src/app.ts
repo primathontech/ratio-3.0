@@ -339,6 +339,15 @@ export function createApp(
     if (e instanceof ConflictError || e instanceof IdempotencyInProgressError) {
       return c.json({ error: e.message }, 409);
     }
+    // Log the real error server-side (method + path + stack) so prod 500s are diagnosable in the
+    // container logs. The client still gets only the generic message in production.
+    let pathname = c.req.path;
+    try {
+      pathname = new URL(c.req.url).pathname;
+    } catch {
+      /* keep c.req.path */
+    }
+    console.error(`[admin-api] 500 ${c.req.method} ${pathname}:`, e);
     const detail = process.env.NODE_ENV === 'production' ? 'internal error' : e.message;
     return c.json({ error: detail }, 500);
   });
@@ -691,25 +700,32 @@ export function createApp(
           return { host, kind: 'platform', status: 'active', sslStatus: 'active' };
         if (!cfg)
           return { host, kind: 'custom', status: 'unconfigured', sslStatus: 'unconfigured' };
-        const s = await customHostnameStatus(cfg, host).catch(() => null);
-        // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
-        // claim to verified. Skip the write if it's already verified (L-2). (H1)
-        if (s?.status === 'active' && !verified.has(host)) {
-          // Publish to the edge KV ONLY when the DB actually flipped verified for THIS tenant
-          // (H1). markDomainVerified no-ops for a tenant that reclaimed the row but isn't its
-          // connector; publishing on the CF status alone would route the host to a tenant
-          // Postgres never verified — a cross-tenant hijack. Best-effort; the edge repopulates
-          // on miss, so a failed push self-heals within the TTL.
-          const nowVerified = await markDomainVerified(id, host);
-          const kv = kvConfig();
-          if (nowVerified && kv) void publishTenantMapping(kv, host, id).catch(() => {});
+        try {
+          const s = await customHostnameStatus(cfg, host).catch(() => null);
+          // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
+          // claim to verified. Skip the write if it's already verified (L-2). (H1)
+          if (s?.status === 'active' && !verified.has(host)) {
+            // Publish to the edge KV ONLY when the DB actually flipped verified for THIS tenant
+            // (H1). markDomainVerified no-ops for a tenant that reclaimed the row but isn't its
+            // connector; publishing on the CF status alone would route the host to a tenant
+            // Postgres never verified — a cross-tenant hijack. Best-effort; the edge repopulates
+            // on miss, so a failed push self-heals within the TTL.
+            const nowVerified = await markDomainVerified(id, host);
+            const kv = kvConfig();
+            if (nowVerified && kv) void publishTenantMapping(kv, host, id).catch(() => {});
+          }
+          return {
+            host,
+            kind: 'custom',
+            status: s?.status ?? 'pending',
+            sslStatus: s?.sslStatus ?? 'unknown',
+          };
+        } catch (e) {
+          // One domain's status lookup / read-repair failing must NOT 500 the whole panel —
+          // degrade that row to "pending" and log it (visible via onError-style server logs).
+          console.error(`[admin-api] domain-status failed for ${host} (tenant ${id}):`, e);
+          return { host, kind: 'custom', status: 'pending', sslStatus: 'unknown' };
         }
-        return {
-          host,
-          kind: 'custom',
-          status: s?.status ?? 'pending',
-          sslStatus: s?.sslStatus ?? 'unknown',
-        };
       })
     );
     return c.json({ domains });
