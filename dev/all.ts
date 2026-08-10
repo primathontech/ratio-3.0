@@ -1,7 +1,7 @@
 // One command to boot the whole local stack: `bun run dev`.
 //
 //   1. bring up the Postgres container (docker compose)
-//   2. migrate + seed it (schema + the Acme/Beta demo stores on *.localhost)
+//   2. migrate it (schema only — onboard a store via the admin :5173 or `bun run onboard`)
 //   3. run all three long-lived processes together, with prefixed/colored logs:
 //        storefront  → edge :8080  + origin :9090   (dev/server.ts)
 //        admin-api   → :8787                          (apps/admin-api/src/server.ts)
@@ -41,9 +41,8 @@ function must(label: string, cmd: string, args: string[], opts: { retries?: numb
 step('starting Postgres (docker compose)');
 must('db:up', 'docker', ['compose', 'up', '-d']);
 // The container reports "up" before Postgres accepts connections; migrate is the readiness probe.
-step('applying schema + seed');
+step('applying schema');
 must('migrate', 'bun', ['run', 'migrate'], { retries: 15 });
-must('seed', 'bun', ['run', 'seed'], { retries: 3 });
 
 // ── the three services ───────────────────────────────────────────────────────────────────────
 const children: ChildProcess[] = [];

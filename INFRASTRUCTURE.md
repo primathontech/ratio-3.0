@@ -63,14 +63,14 @@ Hono (framework) · TypeScript · `tsx` (run) · `node:test` (tests) · Docker.
 
 ### GitHub Actions — Secrets (values hidden)
 
-| Name                    | Used by                                 | Purpose                                                                                                                                                                                  |
-| ----------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`  | deploy, cf-* workflows                  | deploy Worker; manage DNS/routes/custom-hostnames. Scopes: Workers Scripts:Edit, Workers Routes:Edit, Zone:Read, DNS:Edit (+ SSL&Certificates:Edit needed to finish Cloudflare-for-SaaS) |
-| `DATABASE_URL`          | CI migrate/seed; Worker secret; ECS env | Neon connection string                                                                                                                                                                   |
-| `AWS_ACCESS_KEY_ID`     | origin-image                            | ECR push (IAM user `ratio-3-0-ci`)                                                                                                                                                       |
-| `AWS_SECRET_ACCESS_KEY` | origin-image                            | ECR push                                                                                                                                                                                 |
-| `ORIGIN_URL`            | deploy (→ Worker secret)                | ECS origin base URL (enables path B)                                                                                                                                                     |
-| `EDGE_SECRET`           | deploy (→ Worker secret)                | shared secret; edge injects it, origin verifies it (private-origin boundary)                                                                                                             |
+| Name                    | Used by                            | Purpose                                                                                                                                                                                  |
+| ----------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | deploy, cf-* workflows             | deploy Worker; manage DNS/routes/custom-hostnames. Scopes: Workers Scripts:Edit, Workers Routes:Edit, Zone:Read, DNS:Edit (+ SSL&Certificates:Edit needed to finish Cloudflare-for-SaaS) |
+| `DATABASE_URL`          | CI migrate; Worker secret; ECS env | Neon connection string                                                                                                                                                                   |
+| `AWS_ACCESS_KEY_ID`     | origin-image                       | ECR push (IAM user `ratio-3-0-ci`)                                                                                                                                                       |
+| `AWS_SECRET_ACCESS_KEY` | origin-image                       | ECR push                                                                                                                                                                                 |
+| `ORIGIN_URL`            | deploy (→ Worker secret)           | ECS origin base URL (enables path B)                                                                                                                                                     |
+| `EDGE_SECRET`           | deploy (→ Worker secret)           | shared secret; edge injects it, origin verifies it (private-origin boundary)                                                                                                             |
 
 ### GitHub Actions — Variables (non-secret)
 
@@ -95,21 +95,21 @@ Worker config in `wrangler.toml`: `name`, `account_id`, route `*.ratiodev.in/*`.
 
 ## CI/CD workflows (`.github/workflows/`)
 
-| Workflow                               | Trigger         | Does                                                                                                                                                                                                                                          |
-| -------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                               | push/PR to main | **build**: typecheck + lint + format:check + `npm audit` + tests on a Postgres service. **deploy** (main): migrate+seed Neon, `wrangler deploy`, set Worker secrets. **origin-image** (gated `DEPLOY_AWS`): build + push origin image to ECR. |
-| `onboard.yml`                          | manual          | Onboard a merchant into Neon (tenant + host + home route) — "merchant = data".                                                                                                                                                                |
-| `cf-setup-domain.yml`                  | manual          | Create proxied DNS records for subdomains + the `*.ratiodev.in/*` Worker route.                                                                                                                                                               |
-| `cf-saas.yml`                          | manual          | Cloudflare-for-SaaS: fallback origin + `*/*` route + register a merchant custom hostname (BYO domain).                                                                                                                                        |
-| `cf-add-zone.yml` / `cf-zone-info.yml` | manual          | Create a CF zone / read zone status + nameservers.                                                                                                                                                                                            |
-| `aws-check.yml`                        | manual          | Verify AWS creds (`sts get-caller-identity`).                                                                                                                                                                                                 |
+| Workflow                               | Trigger         | Does                                                                                                                                                                                                                                     |
+| -------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                               | push/PR to main | **build**: typecheck + lint + format:check + `npm audit` + tests on a Postgres service. **deploy** (main): migrate Neon, `wrangler deploy`, set Worker secrets. **origin-image** (gated `DEPLOY_AWS`): build + push origin image to ECR. |
+| `onboard.yml`                          | manual          | Onboard a merchant into Neon (tenant + host + home route) — "merchant = data".                                                                                                                                                           |
+| `cf-setup-domain.yml`                  | manual          | Create proxied DNS records for subdomains + the `*.ratiodev.in/*` Worker route.                                                                                                                                                          |
+| `cf-saas.yml`                          | manual          | Cloudflare-for-SaaS: fallback origin + `*/*` route + register a merchant custom hostname (BYO domain).                                                                                                                                   |
+| `cf-add-zone.yml` / `cf-zone-info.yml` | manual          | Create a CF zone / read zone status + nameservers.                                                                                                                                                                                       |
+| `aws-check.yml`                        | manual          | Verify AWS creds (`sts get-caller-identity`).                                                                                                                                                                                            |
 
 ## Setup performed (what got provisioned)
 
 1. **Repo**: `primathontech/ratio-3.0`, TypeScript + TDD + CI/CD + enterprise baseline
    (ESLint, Prettier, Docker, husky, Dependabot, health probes).
 2. **Neon**: serverless Postgres; schema via migrations (`db/migrations/*.sql` + runner);
-   seeded tenants/domains/routes.
+   stores come from onboarding (no seed).
 3. **AWS**: IAM user `ratio-3-0-ci` (ECR push) → keys in GitHub secrets; ECR repo
    `ratio-3-0-origin`; **ECS Express Mode** service from that image (port 8080,
    health `/health`, env `DATABASE_URL` + `EDGE_SECRET`).
@@ -133,7 +133,7 @@ _On Enterprise (proxied wildcard DNS), step 2 + the propagation wait disappear._
 ```
 cp .env.example .env          # point DATABASE_URL at local Postgres
 bun install                   # Bun = package manager + script runner
-bun run db:init               # migrate + seed
+bun run db:init               # migrate (schema only — no seed)
 bun start                     # edge :8080 + origin :9090 (two-server sim)
 bun run test                  # node:test against s2poc_test
 bun run prove ; bun run prove:s1   # full-stack proofs

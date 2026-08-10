@@ -86,7 +86,7 @@ export async function onboardStore({
       if (!tenantId) throw new Error('could not allocate a unique store id');
     } else {
       // Re-onboarding an existing id is allowed only for an existing owner (idempotent) or a
-      // trusted internal caller with no principal (scripts/seed). An authenticated create
+      // trusted internal caller with no principal (CLI onboard). An authenticated create
       // must never clobber another merchant's store.
       const existing = await client.query('SELECT 1 FROM tenants WHERE id=$1', [tenantId]);
       if (existing.rowCount && ownerUserId) {
