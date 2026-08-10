@@ -42,7 +42,7 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
       - run: bun run format:check
-      - run: bun run test # runs test:setup (ensure-test-db + migrate + seed) then node --test
+      - run: bun run test # runs test:setup (ensure-test-db + migrate) then node --test
 
   deploy:
     needs: build
@@ -59,8 +59,7 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
-      # Only apply schema to prod. db/seed.sql is a DEV/TEST demo fixture (Acme/Beta +
-      # *.localhost domains) — never seed it into prod; real stores come from onboarding.
+      # Only apply schema to prod. There is no seed — real stores come from onboarding.
       - name: Migrate Neon
         run: DATABASE_URL="${{ secrets.DATABASE_URL }}" bun run migrate
       - name: Deploy Worker

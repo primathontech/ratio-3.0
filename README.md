@@ -45,10 +45,10 @@ on hold (see Jira OFCE-359 / INFRASTRUCTURE.md).
 ```bash
 cp .env.example .env      # sets RATIO_LOCAL=true + the docker DATABASE_URL
 bun install               # Bun is the package manager AND the script runner
-bun run db:init           # run migrations + seed
+bun run db:init           # run migrations (schema only — no seed)
 bun start                 # edge :8080 + origin :9090 (two-server local sim)
 RATIO_LOCAL=true bun run admin-api   # control plane :8787 (dev Clerk bypass — no secret needed)
-bun run test              # test:setup (ensure-db + migrate + seed) then node:test
+bun run test              # test:setup (ensure-db + migrate) then node:test
 bun run typecheck && bun run lint
 bun run prove             # S2 full-stack proof — expect ALL GREEN
 bun run prove:s1          # S1 cacheability proof — expect ALL GREEN
