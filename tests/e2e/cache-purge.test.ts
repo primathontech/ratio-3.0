@@ -1,6 +1,6 @@
 // OFCE-411 (audit M-2): content writes must invalidate the edge cache, and storefront
 // pages must carry a real, short-TTL Cache-Control so "changes go live" is actually true.
-import { test, after } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 
@@ -15,7 +15,27 @@ const json = (body: unknown) =>
   new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 const SECRET = process.env.EDGE_SECRET as string;
 
-after(() => pool.end());
+// Provision our own cacheable store (no reliance on shared seed rows).
+const ACME = 't_cache_acme';
+before(async () => {
+  await pool.query(
+    `INSERT INTO tenants (id, name) VALUES ($1,'Acme') ON CONFLICT (id) DO NOTHING`,
+    [ACME]
+  );
+  await pool.query(
+    `INSERT INTO pages (tenant_id, path, live_doc, revision) VALUES ($1,'/',$2::jsonb,1)
+     ON CONFLICT (tenant_id, path) DO NOTHING`,
+    [
+      ACME,
+      '{"path":"/","title":"Home","sections":[{"id":"hero","type":"hero","data":{"hero":{"heading":"Acme"}}}]}',
+    ]
+  );
+});
+after(async () => {
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ACME]);
+  await pool.query('DELETE FROM tenants WHERE id=$1', [ACME]);
+  await pool.end();
+});
 
 test('purgeUrls POSTs purge_cache with the given files and reports success', async () => {
   const purged: { url: string; body: string }[] = [];
@@ -101,7 +121,7 @@ test('purgeUrls reports failure when Cloudflare rejects', async () => {
 test('storefront cacheable pages carry a short-TTL Cache-Control with stale-while-revalidate', async () => {
   const res = await origin.fetch(
     new Request('http://origin/', {
-      headers: { 'x-edge-auth': SECRET, 'x-ratio-tenant': 't_acme' },
+      headers: { 'x-edge-auth': SECRET, 'x-ratio-tenant': ACME },
     })
   );
   assert.strictEqual(res.status, 200);
