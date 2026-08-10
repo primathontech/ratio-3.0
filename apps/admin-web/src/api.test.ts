@@ -77,6 +77,20 @@ describe('admin api client', () => {
     expect(new URL(seen!.url).pathname).toBe('/stores/t_x');
   });
 
+  test('getCommerce GETs and unwraps merchantId; saveCommerce PUTs it', async () => {
+    let seen: Request | undefined;
+    const get = createApi('http://api', async () => 't', fakeFetch(200, { merchantId: 'm1' }));
+    expect(await get.getCommerce('t_x')).toBe('m1');
+    const put = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, merchantId: 'm2' }, (r) => (seen = r))
+    );
+    await put.saveCommerce('t_x', 'm2');
+    expect(seen?.method).toBe('PUT');
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x/commerce');
+  });
+
   test('listAudit unwraps the entries array', async () => {
     const entries = [
       { at: 't', actor: 'u', actorKind: 'user', action: 'pages:write', method: 'PUT', status: 200 },

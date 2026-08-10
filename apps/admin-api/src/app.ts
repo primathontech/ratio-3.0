@@ -625,6 +625,30 @@ export function createApp(
     return c.json({ ok: true, theme, ...(edgePurged !== null && { edgePurged }) });
   });
 
+  // Commerce backend connection: the GoKwik merchant id that powers products/collections/cart.
+  app.get('/stores/:id/commerce', requireMembership, async (c) => {
+    const tenant = await forTenant(c.req.param('id')).getTenant();
+    if (!tenant) return c.json({ error: 'not found' }, 404);
+    return c.json({ merchantId: tenant.commerce?.merchantId ?? '' });
+  });
+
+  // Connect/update (or disconnect with an empty id) the commerce backend. Owner-only. Purge the
+  // store's pages — product/collection data is baked into the cached shells.
+  app.put('/stores/:id/commerce', requireRole('owner'), async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { merchantId?: string };
+    const merchantId = String(body.merchantId ?? '').trim();
+    await forTenant(id).setCommerce(merchantId ? { merchantId } : null);
+    await purgeEdgeTags([tenantTag(id)]); // local dev edge-sim (by tag)
+    const pages = await pbStore.listPages(id);
+    const edgePurged = await purgeStoreUrls(
+      id,
+      pages.map((p) => p.path)
+    );
+    c.set('auditTenant', id);
+    return c.json({ ok: true, merchantId, ...(edgePurged !== null && { edgePurged }) });
+  });
+
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
   // (validated + version-pinned, live page untouched), then publish to promote draft->live and
   // purge. The origin serves the published PageDoc (the sole renderer). ---
