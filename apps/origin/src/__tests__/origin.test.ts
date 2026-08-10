@@ -1,5 +1,6 @@
-// Origin contract tests — in-process via app.fetch() (no server, real test DB).
-import { test, after } from 'node:test';
+// Origin contract tests — in-process via app.fetch() (no server, real test DB). Provisions its own
+// store (no reliance on shared seed rows) and cleans it up after.
+import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { app, edgeAuthOk } from '../index';
 import { pool } from '@ratio/data-db';
@@ -10,7 +11,26 @@ const call = (path: string, headers: Record<string, string> = {}) =>
   app.fetch(new Request('http://origin' + path, { headers }));
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 
-after(() => pool.end());
+const ACME = 't_origin_acme';
+const HOME_DOC =
+  '{"path":"/","title":"Home","sections":[{"id":"hero","type":"hero","data":{"hero":{"heading":"Acme","sub":"Welcome"}}}]}';
+
+before(async () => {
+  await pool.query(
+    `INSERT INTO tenants (id, name) VALUES ($1,'Acme') ON CONFLICT (id) DO NOTHING`,
+    [ACME]
+  );
+  await pool.query(
+    `INSERT INTO pages (tenant_id, path, live_doc, revision) VALUES ($1,'/',$2::jsonb,1)
+     ON CONFLICT (tenant_id, path) DO NOTHING`,
+    [ACME, HOME_DOC]
+  );
+});
+after(async () => {
+  await pool.query('DELETE FROM pages WHERE tenant_id=$1', [ACME]);
+  await pool.query('DELETE FROM tenants WHERE id=$1', [ACME]);
+  await pool.end();
+});
 
 test('edgeAuthOk matches only the exact secret, constant-time (L-1)', () => {
   assert.strictEqual(edgeAuthOk('s3cret', 's3cret'), true);
@@ -25,12 +45,12 @@ test('origin is private: no edge auth -> 403', async () => {
 });
 
 test('renders a tenant home with tenant + cache + surrogate headers', async () => {
-  const res = await call('/', edge({ 'x-ratio-tenant': 't_acme' }));
+  const res = await call('/', edge({ 'x-ratio-tenant': ACME }));
   assert.strictEqual(res.status, 200);
-  assert.strictEqual(res.headers.get('x-tenant'), 't_acme');
+  assert.strictEqual(res.headers.get('x-tenant'), ACME);
   assert.strictEqual(res.headers.get('x-cache'), 'long');
   // page-builder surrogate keys: tenantTag is `t.<id>` (a page tag `p.<id>.<hash>` also rides along).
-  assert.match(res.headers.get('x-surrogate-keys') || '', /(^| )t\.t_acme( |$)/);
+  assert.match(res.headers.get('x-surrogate-keys') || '', new RegExp(`(^| )t\\.${ACME}( |$)`));
   assert.match(await res.text(), /Acme/);
 });
 
@@ -42,7 +62,7 @@ test('reserved path -> no-store system handler', async () => {
 });
 
 test('tenant isolation: acme cannot render betas /about route (404)', async () => {
-  const res = await call('/about', edge({ 'x-ratio-tenant': 't_acme' }));
+  const res = await call('/about', edge({ 'x-ratio-tenant': ACME }));
   assert.strictEqual(res.status, 404);
 });
 

@@ -1,10 +1,23 @@
-// The one-gate tests (ADR-001 D-MT3) — real test DB, no mocks.
-import { test, after } from 'node:test';
+// The one-gate tests (ADR-001 D-MT3) — real test DB, no mocks. Each test provisions its own
+// tenants (no reliance on shared seed rows) and cleans them up after.
+import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 
-after(() => pool.end());
+const A = 't_repo_a';
+const B = 't_repo_b';
+
+before(async () => {
+  await pool.query(
+    `INSERT INTO tenants (id, name) VALUES ($1,'Acme'),($2,'Beta') ON CONFLICT (id) DO NOTHING`,
+    [A, B]
+  );
+});
+after(async () => {
+  await pool.query('DELETE FROM tenants WHERE id IN ($1,$2)', [A, B]);
+  await pool.end();
+});
 
 test('deny-by-default: forTenant without a tenantId throws', () => {
   assert.throws(() => forTenant(undefined as unknown as string));
@@ -13,11 +26,11 @@ test('deny-by-default: forTenant without a tenantId throws', () => {
 });
 
 test('the gate injects tenant_id: A and B resolve to their own rows only', async () => {
-  const acme = await forTenant('t_acme').getTenant();
-  const beta = await forTenant('t_beta').getTenant();
-  assert.strictEqual(acme!.id, 't_acme');
-  assert.strictEqual(beta!.id, 't_beta');
-  assert.notStrictEqual(acme!.id, beta!.id);
+  const a = await forTenant(A).getTenant();
+  const b = await forTenant(B).getTenant();
+  assert.strictEqual(a!.id, A);
+  assert.strictEqual(b!.id, B);
+  assert.notStrictEqual(a!.id, b!.id);
 });
 
 test('a scoped read for an unknown tenant yields nothing (deny-by-default)', async () => {
@@ -25,7 +38,7 @@ test('a scoped read for an unknown tenant yields nothing (deny-by-default)', asy
 });
 
 test('getTenant returns the scoped tenant only', async () => {
-  const acme = await forTenant('t_acme').getTenant();
-  assert.strictEqual(acme!.id, 't_acme');
-  assert.strictEqual(acme!.name, 'Acme');
+  const a = await forTenant(A).getTenant();
+  assert.strictEqual(a!.id, A);
+  assert.strictEqual(a!.name, 'Acme');
 });

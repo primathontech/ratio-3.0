@@ -28,7 +28,7 @@
     "cf:dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "prepare": "husky",
-    "test:setup": "bun run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" bun run migrate && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" bun run seed",
+    "test:setup": "bun run typecheck && tsx scripts/ensure-test-db.ts && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" bun run migrate",
     "test": "bun run test:setup && DATABASE_URL=\"${TEST_DATABASE_URL:-postgres://localhost:5432/s2poc_test}\" node --import tsx --import ./tests/bootstrap.ts --test \"packages/**/*.test.ts\" \"apps/admin-api/**/*.test.ts\" \"apps/origin/**/*.test.ts\" \"apps/edge/**/*.test.ts\" \"tests/e2e/**/*.test.ts\""
   },
   "lint-staged": {

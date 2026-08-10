@@ -22,6 +22,10 @@ const scaffold = (id: string, name: string) =>
 const ORIGIN_PORT = 19090;
 process.env.ORIGIN_PORT = String(ORIGIN_PORT); // edge reads the origin port lazily (per request)
 
+// Self-provisioned store for the host->tenant tests (no reliance on shared seed rows).
+const ACME_ID = 't_edge_acme';
+const ACME_HOST = 'acmeedge.localhost';
+
 let originServer: ReturnType<typeof serve>;
 let edgeServer: http.Server;
 let edgePort: number;
@@ -48,23 +52,26 @@ before(async () => {
     edgeServer = edge.listen(0, () => r());
   });
   edgePort = (edgeServer.address() as import('net').AddressInfo).port;
+  await onboardStore({ id: ACME_ID, name: 'Acme', host: ACME_HOST });
+  await scaffold(ACME_ID, 'Acme'); // page-builder home so / renders with the store name
 });
 
 after(async () => {
+  await deleteStore(ACME_ID);
   await new Promise<void>((r) => edgeServer.close(() => r()));
   originServer.close();
   await pool.end();
 });
 
 test('host -> tenant on one shared edge', async () => {
-  const a = await get(edgePort, '/', { host: 'acme.localhost' });
-  assert.strictEqual(a.headers['x-tenant'], 't_acme');
+  const a = await get(edgePort, '/', { host: ACME_HOST });
+  assert.strictEqual(a.headers['x-tenant'], ACME_ID);
   assert.match(a.body, /Acme/);
 });
 
 test('spoofed x-ratio-tenant is stripped by the edge', async () => {
-  const s = await get(edgePort, '/', { host: 'acme.localhost', 'x-ratio-tenant': 't_beta' });
-  assert.strictEqual(s.headers['x-tenant'], 't_acme');
+  const s = await get(edgePort, '/', { host: ACME_HOST, 'x-ratio-tenant': 't_beta' });
+  assert.strictEqual(s.headers['x-tenant'], ACME_ID);
 });
 
 test('unknown host -> park page (404)', async () => {
