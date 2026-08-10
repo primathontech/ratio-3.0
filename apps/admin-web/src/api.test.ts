@@ -65,6 +65,18 @@ describe('admin api client', () => {
     expect(res).toEqual({ token: 'rat_abc', scope: ['t_x'], expiresIn: 3600 });
   });
 
+  test('deleteStore DELETEs the store endpoint', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, {}, (r) => (seen = r))
+    );
+    await api.deleteStore('t_x');
+    expect(seen?.method).toBe('DELETE');
+    expect(new URL(seen!.url).pathname).toBe('/stores/t_x');
+  });
+
   test('listAudit unwraps the entries array', async () => {
     const entries = [
       { at: 't', actor: 'u', actorKind: 'user', action: 'pages:write', method: 'PUT', status: 200 },
