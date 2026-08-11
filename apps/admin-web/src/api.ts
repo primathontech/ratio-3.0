@@ -18,6 +18,12 @@ export interface StoreTheme {
   radius?: string;
   container?: string;
 }
+export interface ThemeVersion {
+  version: number;
+  note: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
 // --- Page builder (section/block PageDoc) ---
 export interface PbSettingDef {
   key: string; // dotted path into section data, e.g. 'hero.heading'
@@ -227,6 +233,23 @@ export function createApi(
         'PUT',
         `/stores/${id}/theme`,
         theme
+      ),
+    themeVersions: (id: string) =>
+      req<{ published: number | null; versions: ThemeVersion[] }>(
+        'GET',
+        `/stores/${id}/theme/versions`
+      ),
+    publishTheme: (id: string, note?: string, expectedBase?: number | null) =>
+      req<{ ok: boolean; version: number; edgePurged?: boolean }>(
+        'POST',
+        `/stores/${id}/theme/publish`,
+        { note, expectedBase }
+      ),
+    rollbackTheme: (id: string, version: number) =>
+      req<{ ok: boolean; version: number; edgePurged?: boolean }>(
+        'POST',
+        `/stores/${id}/theme/rollback`,
+        { version }
       ),
     listDomains: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
