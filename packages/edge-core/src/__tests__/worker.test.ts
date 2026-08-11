@@ -41,6 +41,16 @@ test('publicHeaders strips internal x-* but keeps public response headers (M-5)'
   assert.strictEqual(out.get('x-page-type'), null);
 });
 
+test('publicHeaders keeps the cart redirect intact: Set-Cookie + Location survive to the browser', () => {
+  // A cart write answers 303 → /cart with the cart-token cookie. Both must reach the browser so it
+  // follows the redirect WITH the token; stripping either loses the cart (empty-cart bug).
+  const h = new Headers({ location: '/cart' });
+  h.append('set-cookie', 'rt_cart=abc; Path=/; HttpOnly');
+  const out = publicHeaders(h);
+  assert.strictEqual(out.get('location'), '/cart');
+  assert.match(out.get('set-cookie') || '', /rt_cart=abc/);
+});
+
 test('proxyInit: GET forwards no body and injects the trusted tenant/secret', () => {
   const req = new Request('http://edge/', {
     method: 'GET',
@@ -68,4 +78,14 @@ test('proxyInit: POST forwards the body + content-type with duplex half', () => 
   const h = init.headers as Headers;
   assert.strictEqual(h.get('content-type'), 'application/json');
   assert.strictEqual(h.get('x-ratio-tenant'), 't_real'); // not the client-supplied value
+});
+
+test('proxyInit: passes origin redirects through to the browser instead of following them', () => {
+  // A cart write answers 303 → /cart with the cart cookie. If the edge fetch FOLLOWS it (the fetch
+  // default), the Set-Cookie is swallowed and the followed GET /cart is cookieless → empty cart.
+  // The edge must hand the 303 (+ Set-Cookie) to the browser, which follows it WITH the token.
+  const get = proxyInit(new Request('http://edge/'), 't', 's');
+  const post = proxyInit(new Request('http://edge/cart/add', { method: 'POST' }), 't', 's');
+  assert.strictEqual(get.redirect, 'manual');
+  assert.strictEqual(post.redirect, 'manual');
 });
