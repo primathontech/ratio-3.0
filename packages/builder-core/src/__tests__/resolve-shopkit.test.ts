@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { ShopkitResolver, commerceResolverFromEnv } from '../resolve-shopkit';
+import { ShopkitResolver, commerceResolverFromEnv, storefrontResolver } from '../resolve-shopkit';
+import { StubResolver } from '../resolve';
 import { DATA_SOURCE_TYPES } from '../doc';
 import type { ICommerceClient } from '@shopkit/data-layer';
 
@@ -94,6 +95,22 @@ test('commerceResolverFromEnv: null without all platform URLs, a resolver with t
   assert.strictEqual(commerceResolverFromEnv({}), null);
   assert.strictEqual(commerceResolverFromEnv({ COMMERCE_PRODUCT_API_URL: 'http://x' }), null);
   assert.ok(commerceResolverFromEnv(ALL_URLS));
+});
+
+test('storefrontResolver: in production, a missing COMMERCE_* throws instead of silently stubbing', () => {
+  // The prod incident: with COMMERCE_* unset the origin served StubResolver "Sample product N"
+  // and looked healthy. In production that must fail loud (crash at boot), not serve fake data.
+  assert.throws(() => storefrontResolver({ NODE_ENV: 'production' }), /COMMERCE_.*not configured/i);
+});
+
+test('storefrontResolver: in production with COMMERCE_* set, returns the real resolver (not the stub)', () => {
+  const r = storefrontResolver({ NODE_ENV: 'production', ...ALL_URLS });
+  assert.ok(r);
+  assert.ok(!(r instanceof StubResolver), 'must be the real ShopkitResolver, never the stub');
+});
+
+test('storefrontResolver: outside production, a missing COMMERCE_* falls back to the stub (local dev)', () => {
+  assert.ok(storefrontResolver({}) instanceof StubResolver);
 });
 
 test('per-tenant: a tenant with no commerce config gets no client → empty data (no crash/fetch)', async () => {
