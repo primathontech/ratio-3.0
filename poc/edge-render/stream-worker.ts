@@ -1,10 +1,9 @@
 // OFCE-491 · Step 2 — streaming render on workerd. Flush the shell immediately, then write each
 // section as its (simulated) data resolves, via a TransformStream. `?mode=buffer` renders the old
 // way (build the whole string, then respond) so we can compare TTFB with curl -w.
-/* eslint-disable no-restricted-imports -- PoC reaches the edge-clean render modules directly (see worker.ts). */
-import { render } from '../../packages/builder-render/src/engine';
-import { FIRST_PARTY_SECTIONS } from '../../packages/builder-render/src/sections';
-/* eslint-enable no-restricted-imports */
+// @ratio/builder-render's barrel is edge-safe since #148 (the untrusted isolate is a separate
+// subpath), so these are ordinary package imports now — no reaching into src/.
+import { render, FIRST_PARTY_SECTIONS } from '@ratio/builder-render';
 import { worstCasePage } from './worst-case';
 
 const enc = new TextEncoder();

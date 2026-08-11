@@ -1,36 +1,13 @@
 // OFCE-491 · edge-render PoC on workerd (real Workers V8). nodejs_compat is OFF.
 //
-// FINDING: the render CORE is edge-clean, but the package BARRELS are not — importing
-// `@ratio/builder-core` drags in `pg` (Postgres driver → pgpass → split2 → node:stream), and
-// `@ratio/builder-render`'s barrel drags in the untrusted isolate (`node:worker_threads`). Neither
-// belongs at the edge. So this worker imports ONLY the edge-safe render modules directly:
-//   - engine.ts   (LiquidJS render; node:crypto already removed)
-//   - sections.ts (the first-party section templates — plain strings)
-// and runs a minimal trusted compose. Production fix = split an `edge-render-core` entry that
-// excludes the DB store + the worker-thread isolate.
-/* eslint-disable no-restricted-imports --
-   PoC deliberately reaches into the edge-CLEAN render modules directly. Importing the package
-   barrels (@ratio/builder-render / @ratio/builder-core) is what drags pg + node:worker_threads
-   into the edge bundle — the very finding this PoC documents. Production fix = a real
-   edge-render-core entry, after which these become normal @ratio/* imports. */
-import { render } from '../../packages/builder-render/src/engine';
-import { FIRST_PARTY_SECTIONS } from '../../packages/builder-render/src/sections';
-/* eslint-enable no-restricted-imports */
+// Since the edge-render-core split (#148) this imports the REAL render pipeline through clean
+// package entries — `@ratio/builder-core/edge` (composePage, no pg store) + `@ratio/builder-registry`
+// (edge-safe, untrusted isolate injected only on Node). No reaching into src/, no eslint-disable.
+import { composePage } from '@ratio/builder-core/edge';
+import { defaultRegistry } from '@ratio/builder-registry';
 import { worstCasePage } from './worst-case';
 
-const esc = (s: string) =>
-  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-// Minimal trusted compose: section templates rendered in order (the productGrid Liquid loop is the
-// dominant cost, identical to composePage). Chrome is trivialized — we're measuring render CPU.
-async function composeMinimal(doc: ReturnType<typeof worstCasePage>): Promise<string> {
-  const parts: string[] = [];
-  for (const s of doc.sections) {
-    const def = FIRST_PARTY_SECTIONS[s.type];
-    parts.push(await render(def.template, s.data as Record<string, unknown>, { trusted: true }));
-  }
-  return `<!doctype html><html><head><title>${esc(doc.title ?? '')}</title></head><body>${parts.join('\n')}</body></html>`;
-}
+const registry = defaultRegistry();
 
 export default {
   async fetch(req: Request): Promise<Response> {
@@ -40,12 +17,12 @@ export default {
     const iters = Number(url.searchParams.get('iters') ?? 50);
 
     const doc = worstCasePage(sections, products);
-    const warm = await composeMinimal(doc); // warmup: compile + cache templates
+    const warm = await composePage(doc, registry); // warmup: compile + cache templates
 
     const samples: number[] = [];
     for (let i = 0; i < iters; i++) {
       const t = performance.now();
-      await composeMinimal(doc);
+      await composePage(doc, registry);
       samples.push(performance.now() - t);
     }
     samples.sort((a, b) => a - b);
@@ -55,11 +32,12 @@ export default {
     const body = {
       runtime: 'workerd (Cloudflare Workers V8)',
       nodejs_compat: false,
-      note: 'render core imported directly (barrels excluded: no pg, no worker_threads)',
+      note: 'real composePage via @ratio/builder-core/edge (no pg, no worker_threads)',
       sections,
       products,
       productRenders: doc.sections.filter((s) => s.type === 'productGrid').length * products,
-      outputKB: +(warm.length / 1024).toFixed(1),
+      outputKB: +(warm.html.length / 1024).toFixed(1),
+      tier: warm.tier,
       iters,
       median_ms: +pct(50).toFixed(2),
       p95_ms: +pct(95).toFixed(2),
