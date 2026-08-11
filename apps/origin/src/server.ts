@@ -20,11 +20,23 @@ function parseOtlpHeaders(s?: string): Record<string, string> | undefined {
   }
   return Object.keys(out).length ? out : undefined;
 }
-initTracing({
+const tracing = initTracing({
   service: 'origin',
   endpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  tracesEndpoint: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
   headers: parseOtlpHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS),
+  sampleRatio: process.env.OTEL_TRACES_SAMPLER_ARG
+    ? Number(process.env.OTEL_TRACES_SAMPLER_ARG)
+    : undefined,
 });
+
+// Flush the span buffer on shutdown (ECS/Fargate sends SIGTERM on deploy/scale-down) — otherwise the
+// last BatchSpanProcessor batch is silently dropped every rollout.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    void Promise.resolve(tracing?.shutdown()).finally(() => process.exit(0));
+  });
+}
 
 // Inject DB config before serving; the pool opens lazily on the first query.
 configureDb({ connectionString: config.databaseUrl, insecureTls: config.insecureTls });

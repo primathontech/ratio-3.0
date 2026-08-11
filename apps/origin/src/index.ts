@@ -36,7 +36,7 @@ import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
 import { resolveEdgeSecret } from '@ratio/edge-core';
-import { withSpan, withRequestSpan } from '@ratio/observability-tracing';
+import { withSpan, withRequestSpan, SpanKind } from '@ratio/observability-tracing';
 import {
   logger,
   requestLog,
@@ -235,7 +235,8 @@ async function handleCart(
                 const u = await cart.add(token, [{ variantId, quantity: 1 }]);
                 span.setAttribute('ratio.cart.lines', u.items.length); // 0 = added nothing
                 return u;
-              }
+              },
+              SpanKind.CLIENT
             );
             logCartAdd(log, {
               tenant: tenantId,
@@ -283,7 +284,8 @@ async function handleCart(
           const cc = await new CartService(backend).get(token);
           span.setAttribute('ratio.cart.lines', cc.items.length);
           return cc;
-        }
+        },
+        SpanKind.CLIENT
       );
     } catch (e) {
       logCommerceError(log, 'get', tenantId, e);
@@ -316,7 +318,10 @@ app.use('*', async (c, next) => {
     'origin.request',
     { 'ratio.reqId': reqId, 'http.request.method': c.req.method },
     { traceparent: c.req.header('traceparent'), tracestate: c.req.header('tracestate') },
-    () => next()
+    async (span) => {
+      await next();
+      span.setAttribute('http.response.status_code', c.res.status); // so SigNoz can see 4xx/5xx
+    }
   );
 });
 
@@ -439,7 +444,8 @@ app.all('*', async (c) => {
             const id = await new CartService(backend).createCheckout(token);
             span.setAttribute('ratio.checkout.ok', !!id);
             return id;
-          }
+          },
+          SpanKind.CLIENT
         );
         logCheckout(c.get('log'), { tenant: tenantId as string, ok: !!merchantCheckoutId });
       } catch (e) {
