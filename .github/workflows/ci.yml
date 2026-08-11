@@ -135,15 +135,37 @@ jobs:
           REGISTRY="$ACCOUNT.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com"
           NEW_IMAGE="$REGISTRY/ratio-3-0-origin:${{ github.sha }}"
           CLUSTER=$(aws ecs list-clusters --query 'clusterArns[0]' --output text)
+          # Storefront platform config (commerce API URLs + GoKwik widget config) rides the deploy
+          # from repo variables, so it's the source of truth and can't drift off the task def. With
+          # any of these absent the origin silently serves StubResolver sample products and the
+          # GoKwik widgets stay off — so they must be re-applied on every revision, not set once.
+          ORIGIN_ENV=$(jq -cn \
+            --arg COMMERCE_PRODUCT_API_URL   "${{ vars.COMMERCE_PRODUCT_API_URL }}" \
+            --arg COMMERCE_CART_API_URL      "${{ vars.COMMERCE_CART_API_URL }}" \
+            --arg COMMERCE_ORDER_API_URL     "${{ vars.COMMERCE_ORDER_API_URL }}" \
+            --arg COMMERCE_NAV_API_URL       "${{ vars.COMMERCE_NAV_API_URL }}" \
+            --arg COMMERCE_FOOTER_API_URL    "${{ vars.COMMERCE_FOOTER_API_URL }}" \
+            --arg KWIKCART_SCRIPT_URL        "${{ vars.KWIKCART_SCRIPT_URL }}" \
+            --arg GOKWIK_SCRIPT_URL          "${{ vars.GOKWIK_SCRIPT_URL }}" \
+            --arg GOKWIK_ENVIRONMENT         "${{ vars.GOKWIK_ENVIRONMENT }}" \
+            --arg KWIKCART_CURRENCY          "${{ vars.KWIKCART_CURRENCY }}" \
+            --arg KWIKCART_CURRENCY_FORMAT   "${{ vars.KWIKCART_CURRENCY_FORMAT }}" \
+            '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
             CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
               --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
             echo "rolling ${SVC##*/}: $CUR_TD -> $NEW_IMAGE"
+            # Only the origin gets the storefront env; admin-api keeps its own env untouched.
+            case "${SVC##*/}" in *origin*) OV="$ORIGIN_ENV" ;; *) OV='[]' ;; esac
             aws ecs describe-task-definition --task-definition "$CUR_TD" \
               --query 'taskDefinition' --output json \
-            | jq --arg img "$NEW_IMAGE" '
+            | jq --arg img "$NEW_IMAGE" --argjson ov "$OV" '
                 .containerDefinitions[0].image = $img
+                | .containerDefinitions[0].environment =
+                    (((.containerDefinitions[0].environment // [])
+                       | map(select(.name as $n | ($ov | map(.name) | index($n)) | not)))
+                     + $ov)
                 | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
                       .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
             NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
