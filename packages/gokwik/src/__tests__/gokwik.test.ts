@@ -10,10 +10,10 @@ import type { IntegrationContext } from '../types';
 
 const ctx = (over: Partial<IntegrationContext> = {}): IntegrationContext => ({
   env: {
-    KWIKCART_SCRIPT_URL: 'https://kwikcart.gokwik.co/kwikcart/side-cart-os.js',
+    GOKWIK_SIDECART_SCRIPT_URL: 'https://kwikcart.gokwik.co/kwikcart/side-cart-os.js',
     GOKWIK_ENVIRONMENT: 'production',
-    KWIKCART_CURRENCY: 'INR',
-    KWIKCART_CURRENCY_FORMAT: 'en-IN',
+    GOKWIK_CURRENCY: 'INR',
+    GOKWIK_CURRENCY_FORMAT: 'en-IN',
   },
   merchantId: '195qow8rsryx',
   page: 'home',
@@ -67,9 +67,9 @@ test('sideCart integration is off unless every config field is present', () => {
     sideCartIntegration.enabled(
       ctx({
         env: {
-          KWIKCART_SCRIPT_URL: 'x',
-          KWIKCART_CURRENCY: 'INR',
-          KWIKCART_CURRENCY_FORMAT: 'en-IN',
+          GOKWIK_SIDECART_SCRIPT_URL: 'x',
+          GOKWIK_CURRENCY: 'INR',
+          GOKWIK_CURRENCY_FORMAT: 'en-IN',
         },
       })
     ),
@@ -79,12 +79,12 @@ test('sideCart integration is off unless every config field is present', () => {
 
 const checkoutEnv = {
   ...({
-    KWIKCART_SCRIPT_URL: 'https://kwikcart.gokwik.co/kwikcart/side-cart-os.js',
+    GOKWIK_SIDECART_SCRIPT_URL: 'https://kwikcart.gokwik.co/kwikcart/side-cart-os.js',
     GOKWIK_ENVIRONMENT: 'production',
-    KWIKCART_CURRENCY: 'INR',
-    KWIKCART_CURRENCY_FORMAT: 'en-IN',
+    GOKWIK_CURRENCY: 'INR',
+    GOKWIK_CURRENCY_FORMAT: 'en-IN',
   } as Record<string, string>),
-  GOKWIK_SCRIPT_URL: 'https://pdp.gokwik.co',
+  GOKWIK_BASE_SCRIPT_URL: 'https://pdp.gokwik.co',
 };
 
 test('checkoutTag: empty unless every field present; else defines the trigger + loads gokwik.js', () => {
@@ -113,8 +113,8 @@ test('checkoutTag: empty unless every field present; else defines the trigger + 
   assert.match(html, /location\.href='\/order\?id='/);
 });
 
-test('checkout integration is off without GOKWIK_SCRIPT_URL (type is the constant merchantInfo)', () => {
-  assert.equal(checkoutIntegration.enabled(ctx()), false); // ctx() lacks GOKWIK_SCRIPT_URL → off
+test('checkout integration is off without GOKWIK_BASE_SCRIPT_URL (type is the constant merchantInfo)', () => {
+  assert.equal(checkoutIntegration.enabled(ctx()), false); // ctx() lacks GOKWIK_BASE_SCRIPT_URL → off
   assert.equal(checkoutIntegration.enabled(ctx({ env: checkoutEnv })), true);
 });
 

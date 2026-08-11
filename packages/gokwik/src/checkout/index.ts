@@ -7,7 +7,7 @@ import { checkoutTag, type CheckoutConfig } from './checkout';
 // gkPlatform markers), not configurable. No defaults on env — a missing value leaves checkout off.
 function configFrom(ctx: IntegrationContext): Partial<CheckoutConfig> {
   return {
-    scriptUrl: ctx.env.GOKWIK_SCRIPT_URL,
+    scriptUrl: ctx.env.GOKWIK_BASE_SCRIPT_URL,
     mid: ctx.merchantId,
     environment: ctx.env.GOKWIK_ENVIRONMENT,
     type: 'merchantInfo',

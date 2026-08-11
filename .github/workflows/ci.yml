@@ -143,13 +143,12 @@ jobs:
             --arg COMMERCE_PRODUCT_API_URL   "${{ vars.COMMERCE_PRODUCT_API_URL }}" \
             --arg COMMERCE_CART_API_URL      "${{ vars.COMMERCE_CART_API_URL }}" \
             --arg COMMERCE_ORDER_API_URL     "${{ vars.COMMERCE_ORDER_API_URL }}" \
-            --arg COMMERCE_NAV_API_URL       "${{ vars.COMMERCE_NAV_API_URL }}" \
-            --arg COMMERCE_FOOTER_API_URL    "${{ vars.COMMERCE_FOOTER_API_URL }}" \
-            --arg KWIKCART_SCRIPT_URL        "${{ vars.KWIKCART_SCRIPT_URL }}" \
-            --arg GOKWIK_SCRIPT_URL          "${{ vars.GOKWIK_SCRIPT_URL }}" \
-            --arg GOKWIK_ENVIRONMENT         "${{ vars.GOKWIK_ENVIRONMENT }}" \
-            --arg KWIKCART_CURRENCY          "${{ vars.KWIKCART_CURRENCY }}" \
-            --arg KWIKCART_CURRENCY_FORMAT   "${{ vars.KWIKCART_CURRENCY_FORMAT }}" \
+            --arg COMMERCE_NAV_API_URL         "${{ vars.COMMERCE_NAV_API_URL }}" \
+            --arg GOKWIK_BASE_SCRIPT_URL       "${{ vars.GOKWIK_BASE_SCRIPT_URL }}" \
+            --arg GOKWIK_SIDECART_SCRIPT_URL   "${{ vars.GOKWIK_SIDECART_SCRIPT_URL }}" \
+            --arg GOKWIK_ENVIRONMENT           "${{ vars.GOKWIK_ENVIRONMENT }}" \
+            --arg GOKWIK_CURRENCY              "${{ vars.GOKWIK_CURRENCY }}" \
+            --arg GOKWIK_CURRENCY_FORMAT       "${{ vars.GOKWIK_CURRENCY_FORMAT }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
