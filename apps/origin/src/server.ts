@@ -55,6 +55,7 @@ configureDb({
   insecureTls: config.insecureTls,
   idleTimeoutMillis: 0,
   keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
 });
 
 // Fail fast: refuse to boot in production without a real edge secret (H2 hardening).

@@ -12,6 +12,10 @@ export interface DbConfig {
   // A short-lived script/test leaves these unset so pg's default (10s idle close) still lets it exit.
   idleTimeoutMillis?: number;
   keepAlive?: boolean;
+  // How long a held connection may sit idle before the first TCP keepalive probe. keepAlive alone is
+  // near-useless without this: pg defaults it to 0, which node reads as the OS default (~2h on Linux),
+  // so probes never fire in time to keep a short-idle socket alive. Set it (~10s) when keepAlive is on.
+  keepAliveInitialDelayMillis?: number;
 }
 
 // This package is `type: module`, but its CommonJS importers (scripts, tests) load it through a
@@ -49,6 +53,7 @@ function real(): Pool {
     // to hold the connection through traffic gaps and avoid the reconnect-spike (see DbConfig).
     idleTimeoutMillis: state.config.idleTimeoutMillis,
     keepAlive: state.config.keepAlive,
+    keepAliveInitialDelayMillis: state.config.keepAliveInitialDelayMillis,
   });
   // An idle client can emit 'error' (e.g. Neon drops it). With no listener Node crashes; the pool
   // discards the bad client on its own, so we only observe it (L-3).
