@@ -33,6 +33,19 @@ const hangsUntilAborted = ((_url: string, init?: RequestInit) =>
     );
   })) as unknown as typeof fetch;
 
+// Resolves after `ms`, unless aborted first (then rejects, like a real fetch). Lets us prove which
+// requests are bound by which timeout: an origin slower than the read budget but faster than the
+// write budget resolves for a write but is aborted for a read.
+const resolvesAfter = (ms: number, res: Response) =>
+  ((_url: string, init?: RequestInit) =>
+    new Promise((resolve, reject) => {
+      const t = setTimeout(() => resolve(res), ms);
+      init?.signal?.addEventListener('abort', () => {
+        clearTimeout(t);
+        reject(new DOMException('The operation was aborted', 'AbortError'));
+      });
+    })) as unknown as typeof fetch;
+
 test('Tier-1: serves stale from cache when the origin throws', async () => {
   const req = new Request('https://shop.example/');
   const good = new Response('<h1>last good</h1>', {
@@ -171,6 +184,41 @@ test('D-R3 breaker: once the origin trips the breaker, later requests serve stal
   assert.strictEqual(third.headers.get('x-ratio-stale'), null);
   assert.strictEqual(await third.text(), 'fresh');
 });
+
+test(
+  'D-R3: a write is NOT aborted at the short read-survival budget (add-to-cart 503 repro)',
+  { timeout: 2000 },
+  async () => {
+    // The origin takes 40ms (2 sequential GoKwik calls). The read budget is a tiny 10ms. A write
+    // can never serve stale, so aborting it at the read budget only turns a slow-but-succeeding
+    // cart-add into a 503 — it must instead get its own, longer budget and complete.
+    const req = new Request('https://shop.example/cart/add', { method: 'POST' });
+    const slowOk = resolvesAfter(40, new Response('added', { status: 200 }));
+    const res = await fetchViaOrigin(
+      req,
+      'https://origin/cart/add',
+      { method: 'POST' },
+      memCache(),
+      slowOk,
+      10 // read budget — must NOT bound the write
+    );
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(await res.text(), 'added');
+  }
+);
+
+test(
+  'D-R3: a read IS still bound by the read-survival budget (unchanged)',
+  { timeout: 2000 },
+  async () => {
+    const req = new Request('https://shop.example/');
+    const slowOk = resolvesAfter(40, new Response('fresh', { status: 200 }));
+    // GET slower than the 10ms read budget, no cached copy → aborts and propagates (no hang).
+    await assert.rejects(
+      fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, memCache(), slowOk, 10)
+    );
+  }
+);
 
 test('a successful GET is stored so it can be served stale later', async () => {
   const req = new Request('https://shop.example/');
