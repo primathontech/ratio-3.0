@@ -149,6 +149,7 @@ jobs:
             --arg GOKWIK_ENVIRONMENT           "${{ vars.GOKWIK_ENVIRONMENT }}" \
             --arg GOKWIK_CURRENCY              "${{ vars.GOKWIK_CURRENCY }}" \
             --arg GOKWIK_CURRENCY_FORMAT       "${{ vars.GOKWIK_CURRENCY_FORMAT }}" \
+            --arg CART_DEBUG                    "${{ vars.CART_DEBUG }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do

@@ -86,6 +86,11 @@ const ISLANDS_CSP: CspDirectives = { 'script-src': ["'self'"], 'connect-src': ["
 // declares an island; an unknown name → 404. Exported so an app/section can wire its handler.
 export const islandRegistry = new IslandRegistry();
 
+// Cart diagnostics (staging only). When CART_DEBUG=1, /cart/add + /checkout surface an x-cart-debug
+// header with the resolved variant, the add RESPONSE's line count, and any swallowed backend error —
+// so a broken add ("cart id but empty cart") can be diagnosed without shipping details to real prod.
+const CART_DEBUG = process.env.CART_DEBUG === '1';
+
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the backstop that
 // contains any HTML/color injection that slips through content validation; inline <style> is the
 // theme's, so style-src allows it. This is the DEFAULT for every storefront response; an enabled
@@ -212,6 +217,13 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
           if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
             const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
+            // lines = what the addToCart RESPONSE echoed back. 0 → GoKwik took the call but added
+            // nothing (the variant id is wrong for the cart API); >0 but /cart empty → token mismatch.
+            if (CART_DEBUG)
+              c.header(
+                'x-cart-debug',
+                `variant=${variantId};lines=${updated.items.length};count=${updated.count};cartId=${updated.id}`
+              );
             if (updated.id) {
               c.header('set-cookie', cartCookie(updated.id)); // httpOnly, for the server
               // Enabled integrations mirror the token in their own cookie (e.g. the side-cart widget's
@@ -220,14 +232,20 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
               for (const ck of gokwikCartCookies(updated.id, ctx))
                 c.header('set-cookie', ck, { append: true });
             }
+          } else if (CART_DEBUG) {
+            c.header('x-cart-debug', `variant=UNRESOLVED;handle=${handle}`);
           }
         } else if (token) {
           const variantId = String(body.variantId || '');
           const quantity = Number(body.quantity ?? 1);
           if (variantId) await cart.setQuantity(token, variantId, quantity);
         }
-      } catch {
-        // A backend hiccup must not 500 the shopper — fall through and re-render the cart.
+      } catch (e) {
+        // A backend hiccup must not 500 the shopper — fall through and re-render the cart. But it must
+        // not be SILENT either (that hid the empty-cart bug): log it, and surface it when debugging.
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('[cart] add/update failed:', msg);
+        if (CART_DEBUG) c.header('x-cart-debug', `error=${msg}`);
       }
     }
     c.header('x-cache', 'no-store');
@@ -350,11 +368,22 @@ app.all('*', async (c) => {
     const token = readCartToken(c.req.header('cookie'));
     let merchantCheckoutId = '';
     if (backend && token) {
+      const svc = new CartService(backend);
       try {
-        merchantCheckoutId = await new CartService(backend).createCheckout(token);
-      } catch {
-        // Surface as an empty id — the client shows "checkout unavailable" rather than 500ing.
+        // When debugging, also report whether the token's cart even HAS items — an empty server
+        // cart is why "checkout does nothing" (createCheckout on an empty cart returns no id).
+        if (CART_DEBUG) {
+          const cart = await svc.get(token);
+          c.header('x-cart-debug', `checkout;token=1;cartLines=${cart.items.length}`);
+        }
+        merchantCheckoutId = await svc.createCheckout(token);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('[checkout] createCheckout failed:', msg);
+        if (CART_DEBUG) c.header('x-cart-debug', `checkout;error=${msg}`);
       }
+    } else if (CART_DEBUG) {
+      c.header('x-cart-debug', `checkout;token=${token ? 1 : 0};backend=${backend ? 1 : 0}`);
     }
     c.header('x-cache', 'no-store');
     return c.json({ merchantCheckoutId });
