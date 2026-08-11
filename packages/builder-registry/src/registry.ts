@@ -10,9 +10,21 @@
 // silently change already-published pages (they re-render on their own edit→purge cycle).
 
 import { compile, render, UNTRUSTED_LIMITS, FILTER_ALLOWLIST } from '@ratio/builder-render';
-import { renderUntrusted } from '@ratio/builder-render';
 import { inferTier, type Binding, type Tier } from '@ratio/builder-render';
 import { FIRST_PARTY_SECTIONS } from '@ratio/builder-render';
+
+// The untrusted-section renderer (the Node worker-thread isolate, D40) is INJECTED by the Node
+// origin at startup via setUntrustedRenderer. Keeping it out of this module's static graph is what
+// makes the whole trusted render path edge-safe — nothing here imports node:worker_threads. At the
+// edge only trusted first-party sections render; untrusted rendering is a Node-only capability.
+export type UntrustedRenderer = (
+  template: string,
+  data: Record<string, unknown>
+) => Promise<string>;
+let untrustedRenderer: UntrustedRenderer | null = null;
+export function setUntrustedRenderer(fn: UntrustedRenderer): void {
+  untrustedRenderer = fn;
+}
 import type { SettingDef } from '@ratio/builder-render';
 
 // ── the platform-owned binding catalog ───────────────────────────────────────
@@ -169,7 +181,9 @@ export async function renderSection(
   data: Record<string, unknown>
 ): Promise<string> {
   if (rec.trusted) return render(rec.template, data, { trusted: true });
-  return renderUntrusted(rec.template, data);
+  if (!untrustedRenderer)
+    throw new Error('untrusted section render requires setUntrustedRenderer() — Node origin only');
+  return untrustedRenderer(rec.template, data);
 }
 
 // A registry preloaded with the first-party library (Track 2 sections), trusted, as version 1.

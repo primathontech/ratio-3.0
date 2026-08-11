@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render, compile, UNTRUSTED_LIMITS } from '@ratio/builder-render';
-import { renderUntrusted, RenderTimeout, RenderFailed } from '@ratio/builder-render';
+import { renderUntrusted, RenderTimeout, RenderFailed } from '@ratio/builder-render/isolate';
 import { inferTier } from '@ratio/builder-render';
 import { FIRST_PARTY_SECTIONS } from '@ratio/builder-render';
 

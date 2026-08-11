@@ -11,6 +11,7 @@ import {
   SectionRejected,
   defaultRegistry,
   renderSection,
+  setUntrustedRenderer,
 } from '@ratio/builder-registry';
 import {
   islandPlaceholder,
@@ -18,7 +19,11 @@ import {
   IslandRegistry,
   assertIslandName,
 } from '@ratio/builder-registry';
-import { RenderTimeout } from '@ratio/builder-render';
+import { renderUntrusted, RenderTimeout } from '@ratio/builder-render/isolate';
+
+// This suite renders UNTRUSTED sections (renderSection on trusted:false recs) — a Node-only
+// capability the composition root injects. Wire the real worker-thread isolate for the test.
+setUntrustedRenderer(renderUntrusted);
 
 // ─── registry: first-party preload + inferred tiers ──────────────────────────
 
