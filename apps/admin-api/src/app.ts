@@ -2,45 +2,24 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
-import {
-  onboardStore,
-  deleteStore,
-  listDomains,
-  addDomain,
-  removeDomain,
-  markDomainVerified,
-  markDomainConnected,
-  ConflictError,
-} from '@ratio/data-provisioning';
-import { forTenant } from '@ratio/data-repo';
+import { listDomains, ConflictError } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { config } from './config';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
-import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore } from '@ratio/builder-core';
 import { storeSettingsRoutes } from './routes/store-settings';
-import { scaffoldStorefront } from '@ratio/builder-core';
+import { storeRoutes } from './routes/stores';
+import { pageBuilderRoutes } from './routes/page-builder';
+import { domainsRoutes } from './routes/domains';
 import { defaultRegistry } from '@ratio/builder-registry';
-import {
-  cfConfig,
-  connectCustomHostname,
-  customHostnameStatus,
-  deleteCustomHostname,
-  purgeUrls,
-  storeCacheUrls,
-  kvConfig,
-  publishTenantMapping,
-  unpublishTenantMapping,
-} from './domains';
+import { cfConfig, purgeUrls, storeCacheUrls } from './domains';
 import {
   authMiddleware,
   csrfGuard,
   requireMembership,
   requireRole,
-  listStoresForUser,
-  listAllStores,
   isPlatformAdmin,
   clerkVerifier,
   insecureDevClerkVerifier,
@@ -371,113 +350,8 @@ export function createApp(
     return c.json({ ok: true, type: body.type, purged: tags });
   });
 
-  // The stores the signed-in user may manage (drives the admin portal's home screen).
-  // Platform admins see every store; everyone else sees only their memberships.
-  app.get('/stores', async (c) => {
-    const userId = c.get('userId');
-    const stores = isPlatformAdmin(userId)
-      ? await listAllStores()
-      : await listStoresForUser(userId);
-    return c.json({ stores });
-  });
-
-  // Create a store. The authenticated caller becomes its owner — the membership is
-  // written in the same transaction as the tenant, so a store always has an owner.
-  app.post('/stores', denyNarrowedScope, async (c) => {
-    const { id, name, host, color, merchantId } = (await c.req.json().catch(() => ({}))) as {
-      id?: string;
-      name?: string;
-      host?: string;
-      color?: string;
-      merchantId?: string;
-    };
-    if (!name || !host) {
-      return c.json({ error: 'name and host are required' }, 400);
-    }
-    // The gokwik merchant id (data-layer). Optional at create; identifies the store's catalog.
-    if (merchantId !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(merchantId)) {
-      return c.json({ error: 'merchantId must be 1–64 chars: letters, digits, _ or -' }, 400);
-    }
-    // The store id is GENERATED server-side (merchants never supply one). An explicit id is only
-    // accepted from internal callers (CLI/scripts) — validate its slug shape when present, since it
-    // flows into routing, cache-purge URLs, and agent-token scopes (where '*' is the wildcard).
-    if (id !== undefined && !/^[a-z][a-z0-9_-]{1,62}$/.test(id)) {
-      return c.json(
-        { error: 'id must be 2–63 chars: a lowercase letter, then letters, digits, _ or -' },
-        400
-      );
-    }
-    if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
-      return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
-    }
-    // Host format at the boundary (H1) — symmetric with POST /stores/:id/domains. Blocks junk
-    // domain rows in the global routing table. (This does NOT prove ownership of a custom
-    // domain — squatting mitigation is a separate, verified-claim design; see OFCE backlog.)
-    if (!/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
-      return c.json({ error: 'host must be a valid domain like shop.example.com' }, 400);
-    }
-    // Hosts are case-insensitive; store + serve them lowercase so a mixed-case onboard
-    // isn't a dead row the (lowercase) browser Host never matches (M-5).
-    const lcHost = host.toLowerCase();
-    // H-1: reserved/apex/multi-label platform subdomains are not self-serviceable — they'd
-    // let a merchant serve content on Ratio's own trusted domain (phishing/brand). Ops
-    // (platform admins) assign those; merchants get a single non-reserved *.ratiodev.in.
-    if (!platformSubdomainAllowed(lcHost, isPlatformAdmin(c.get('userId')))) {
-      return c.json({ error: 'that subdomain is reserved — choose another' }, 403);
-    }
-    const { id: tenantId, hostReclaimedFrom } = await onboardStore({
-      id,
-      name,
-      host: lcHost,
-      color,
-      ownerUserId: c.get('userId'),
-      merchantId,
-      local: config.local,
-    });
-    c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
-    // Scaffold the default home + product + collection pages so the store renders out of the box
-    // (the page builder is the sole renderer, so these URLs 404 until the pages exist). Best-effort
-    // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
-    // pages in the editor.
-    await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
-    // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
-    const cfg = cfConfig();
-    if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
-    return c.json({ id: tenantId, url: `https://${lcHost}/` }, 201);
-  });
-
-  // Read a store — caller must have a membership on it.
-  app.get('/stores/:id', requireMembership, async (c) => {
-    const tenant = await forTenant(c.req.param('id')).getTenant();
-    if (!tenant) return c.json({ error: 'not found' }, 404);
-    return c.json({ id: tenant.id, name: tenant.name, theme: tenant.theme });
-  });
-
-  // Provably-complete hard-delete (ADR-010 D-SEC4) — owner-only (M-4).
-  app.delete('/stores/:id', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
-    const cfg = cfConfig();
-    const kv = kvConfig();
-    // Gather hosts (for cache + edge-KV cleanup) BEFORE the rows are purged.
-    const hosts = cfg || kv ? await listDomains(id) : [];
-    const urls = cfg
-      ? storeCacheUrls(
-          hosts,
-          (await pbStore.listPages(id))
-            .filter((p) => p.published && !p.path.includes(':'))
-            .map((p) => p.path)
-        )
-      : [];
-    const proof = await deleteStore(id);
-    // Drop the deleted store's edge-KV mappings (S2 Decision #7). The origin also rejects a
-    // missing tenant, so this is fast-path cleanup — best-effort.
-    if (kv) for (const h of hosts) void unpublishTenantMapping(kv, h.toLowerCase()).catch(() => {});
-    // Purge the edge cache so a hard-deleted store stops serving cached content immediately
-    // (M-1) — completes the "provably complete" delete. Awaited so it's reportable.
-    const cachePurged =
-      cfg && urls.length ? await purgeUrls(cfg, urls).catch(() => false) : undefined;
-    return c.json({ ...proof, cachePurged });
-  });
+  // Store lifecycle — list / create / read / hard-delete (routes/stores.ts).
+  app.route('/', storeRoutes({ pbStore, pageBuilder, platformSubdomainAllowed }));
 
   // Mint a short-lived agent token scoped to THIS store (ADR-007 / OFCE-399), so the owner
   // can delegate the AI agent access to the same API. Membership-gated; scope is exactly
@@ -560,227 +434,11 @@ export function createApp(
   // Store settings — theme, theme versions (§13), commerce, collections (routes/store-settings.ts).
   app.route('/', storeSettingsRoutes({ pbStore, themeStore, purgeEdgeTags, purgeStoreUrls }));
 
-  // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
-  // (validated + version-pinned, live page untouched), then publish to promote draft->live and
-  // purge. The origin serves the published PageDoc (the sole renderer). ---
+  // Page builder — draft/publish (routes/page-builder.ts).
+  app.route('/', pageBuilderRoutes({ pbStore, pageBuilder, purgeStoreUrls, sectionCatalog }));
 
-  // Global section catalog (any authenticated user) — the editor renders inputs from it.
-  app.get('/page-builder/catalog', (c) => c.json({ sections: sectionCatalog() }));
-
-  // Every page-builder page for a store (path + publish state) — the editor's page switcher.
-  app.get('/stores/:id/page-builder/pages', requireMembership, async (c) => {
-    return c.json({ pages: await pbStore.listPages(c.req.param('id')) });
-  });
-
-  app.get('/stores/:id/page-builder', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    const path = c.req.query('path') || '/';
-    const [draft, live, revision] = await Promise.all([
-      pbStore.getDraft(id, path),
-      pbStore.getLive(id, path),
-      pbStore.revision(id, path),
-    ]);
-    return c.json({ path, draft, live, revision, hasDraft: draft !== null });
-  });
-
-  app.put('/stores/:id/page-builder', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as { doc?: unknown };
-    if (typeof body.doc !== 'object' || body.doc === null) {
-      return c.json({ error: 'doc (a PageDoc) is required' }, 400);
-    }
-    try {
-      // validatePageDoc (inside saveDraft) rejects unknown section/block types + bad settings.
-      const draft = await pageBuilder.saveDraft(id, body.doc as PageDoc);
-      c.set('auditTenant', id);
-      return c.json({ ok: true, draft });
-    } catch (e) {
-      return c.json({ error: 'invalid page doc', detail: (e as Error).message }, 422);
-    }
-  });
-
-  app.post('/stores/:id/page-builder/publish', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    const path = ((await c.req.json().catch(() => ({}))) as { path?: string }).path || '/';
-    const res = await pageBuilder.publish(id, path);
-    if (!res) return c.json({ error: 'no draft to publish' }, 404);
-    // pageBuilder.publish already purged the local edge by tag; also purge the prod CF edge by URL.
-    const edgePurged = await purgeStoreUrls(id, [path]);
-    c.set('auditTenant', id);
-    return c.json({ ok: true, revision: res.revision, ...(edgePurged !== null && { edgePurged }) });
-  });
-
-  // --- Custom domains (OFCE-398 / ADR-013). Membership-gated. Cloudflare-for-SaaS
-  // custom hostnames; platform *.ratiodev.in subdomains are already live via wildcard. ---
-
-  const isPlatformHost = (h: string) => h.endsWith('.ratiodev.in') || h.endsWith('.localhost');
-
-  app.get('/stores/:id/domains', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    const hosts = await listDomains(id);
-    const cfg = cfConfig();
-    // Which hosts are already verified — so we skip the redundant read-repair write on every
-    // load once a domain is verified (L-2 write amplification).
-    const verified = new Set(
-      (
-        await pool.query<{ host: string }>(
-          'SELECT host FROM domains WHERE tenant_id = $1 AND verified = true',
-          [id]
-        )
-      ).rows.map((r) => r.host)
-    );
-    const domains = await Promise.all(
-      hosts.map(async (host) => {
-        if (isPlatformHost(host))
-          return { host, kind: 'platform', status: 'active', sslStatus: 'active' };
-        if (!cfg)
-          return { host, kind: 'custom', status: 'unconfigured', sslStatus: 'unconfigured' };
-        try {
-          const s = await customHostnameStatus(cfg, host).catch(() => null);
-          // Read-repair: once Cloudflare reports the hostname active, DV succeeded → promote the
-          // claim to verified. Skip the write if it's already verified (L-2). (H1)
-          if (s?.status === 'active' && !verified.has(host)) {
-            // Publish to the edge KV ONLY when the DB actually flipped verified for THIS tenant
-            // (H1). markDomainVerified no-ops for a tenant that reclaimed the row but isn't its
-            // connector; publishing on the CF status alone would route the host to a tenant
-            // Postgres never verified — a cross-tenant hijack. Best-effort; the edge repopulates
-            // on miss, so a failed push self-heals within the TTL.
-            const nowVerified = await markDomainVerified(id, host);
-            const kv = kvConfig();
-            if (nowVerified && kv) void publishTenantMapping(kv, host, id).catch(() => {});
-          }
-          return {
-            host,
-            kind: 'custom',
-            status: s?.status ?? 'pending',
-            sslStatus: s?.sslStatus ?? 'unknown',
-          };
-        } catch (e) {
-          // One domain's status lookup / read-repair failing must NOT 500 the whole panel —
-          // degrade that row to "pending" and log it (visible via onError-style server logs).
-          console.error(`[admin-api] domain-status failed for ${host} (tenant ${id}):`, e);
-          return { host, kind: 'custom', status: 'pending', sslStatus: 'unknown' };
-        }
-      })
-    );
-    return c.json({ domains });
-  });
-
-  // Connect a merchant's own domain: map it to the tenant + create the CF custom hostname,
-  // and return the DNS records the merchant must add at their registrar.
-  app.post('/stores/:id/domains', requireRole('owner'), async (c) => {
-    const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
-    if (!host || !/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(host)) {
-      return c.json({ error: 'a valid domain is required' }, 400);
-    }
-    // Platform subdomains (*.ratiodev.in) are assigned at onboarding, never connected as a
-    // "custom domain" — otherwise a merchant could squat an unclaimed platform subdomain.
-    if (isPlatformHost(host.toLowerCase())) {
-      return c.json({ error: 'platform subdomains cannot be connected as a custom domain' }, 400);
-    }
-    const { reclaimedFrom } = await addDomain(c.req.param('id'), host.toLowerCase());
-    const cfg = cfConfig();
-    if (!cfg) {
-      return c.json(
-        {
-          host,
-          configured: false,
-          note: 'Domain mapped. Set CLOUDFLARE_API_TOKEN on the API to enable SSL/custom-hostname provisioning.',
-        },
-        201
-      );
-    }
-    // On a cross-tenant reclaim, delete the prior tenant's stale CF custom hostname so this
-    // claimant can create their own and run DV — otherwise CF's one-object-per-host rule would
-    // permanently block them (OFCE-422). Best-effort; a failure just surfaces as a connect error.
-    if (reclaimedFrom) await deleteCustomHostname(cfg, host.toLowerCase()).catch(() => {});
-    try {
-      const conn = await connectCustomHostname(cfg, host.toLowerCase());
-      // Bind verification to this tenant: only the connector can later be promoted to verified,
-      // so a reclaim can't inherit another tenant's DV (R10-H1).
-      await markDomainConnected(c.req.param('id'), host.toLowerCase());
-      return c.json({ ...conn, configured: true }, 201);
-    } catch (e) {
-      // Don't leak raw Cloudflare error text to the merchant in production (L-1); log detail
-      // server-side, return a generic message.
-      if (process.env.NODE_ENV !== 'production') console.error('connectCustomHostname failed:', e);
-      return c.json(
-        {
-          host,
-          configured: true,
-          error:
-            process.env.NODE_ENV === 'production'
-              ? 'could not reach the domain provider — please try again'
-              : (e as Error).message,
-        },
-        502
-      );
-    }
-  });
-
-  app.delete('/stores/:id/domains', requireRole('owner'), async (c) => {
-    const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
-    if (!host) return c.json({ error: 'host is required' }, 400);
-    const id = c.req.param('id');
-    const removed = await removeDomain(id, host);
-    // Drop the edge-KV mapping so the host stops resolving at the edge (S2 Decision #7).
-    const kv = kvConfig();
-    if (removed && kv) void unpublishTenantMapping(kv, host.toLowerCase()).catch(() => {});
-    // Purge the removed host's cached pages so it stops serving after unmapping (M-1).
-    const cfg = cfConfig();
-    if (removed && cfg && !host.toLowerCase().endsWith('.localhost')) {
-      const paths = (await pbStore.listPages(id))
-        .filter((p) => p.published && !p.path.includes(':'))
-        .map((p) => p.path);
-      void purgeUrls(cfg, storeCacheUrls([host.toLowerCase()], paths)).catch(() => {});
-    }
-    return c.json({ removed });
-  });
-
-  // The DNS records + status for ONE domain — so a merchant can pull the setup details
-  // back up anytime. Creates the custom hostname if it wasn't provisioned yet (e.g. the
-  // domain was mapped before the Cloudflare token was configured).
-  app.get('/stores/:id/domain', requireMembership, async (c) => {
-    const host = c.req.query('host');
-    if (!host) return c.json({ error: 'host query param required' }, 400);
-    if (isPlatformHost(host)) {
-      return c.json({
-        host,
-        configured: true,
-        kind: 'platform',
-        status: 'active',
-        sslStatus: 'active',
-        records: [],
-      });
-    }
-    const cfg = cfConfig();
-    if (!cfg)
-      return c.json({
-        host,
-        configured: false,
-        note: 'Custom domains are not configured on this server.',
-      });
-    try {
-      const conn =
-        (await customHostnameStatus(cfg, host)) ?? (await connectCustomHostname(cfg, host));
-      return c.json({ ...conn, configured: true });
-    } catch (e) {
-      // Don't leak raw Cloudflare error text to the merchant in production (L-1); log detail
-      // server-side, return a generic message.
-      if (process.env.NODE_ENV !== 'production') console.error('connectCustomHostname failed:', e);
-      return c.json(
-        {
-          host,
-          configured: true,
-          error:
-            process.env.NODE_ENV === 'production'
-              ? 'could not reach the domain provider — please try again'
-              : (e as Error).message,
-        },
-        502
-      );
-    }
-  });
+  // Custom domains — Cloudflare-for-SaaS custom hostnames (routes/domains.ts).
+  app.route('/', domainsRoutes({ pbStore }));
 
   return app;
 }
