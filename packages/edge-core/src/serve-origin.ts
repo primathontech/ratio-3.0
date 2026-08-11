@@ -22,7 +22,7 @@ const ORIGIN_TIMEOUT_MS = 1500;
 // abort has no upside for it — it only turns a slow-but-succeeding mutation into a 503. Give writes
 // a real budget instead (well under Cloudflare's ~30s subrequest cap); a genuinely dead origin
 // still propagates honestly via the catch below.
-const ORIGIN_WRITE_TIMEOUT_MS = 10_000;
+const ORIGIN_WRITE_TIMEOUT_MS = 10000;
 export async function fetchViaOrigin(
   req: Request,
   target: string,
