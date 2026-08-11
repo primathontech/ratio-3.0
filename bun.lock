@@ -98,6 +98,10 @@
       "name": "@ratio/gokwik",
       "version": "0.1.0",
     },
+    "packages/observability": {
+      "name": "@ratio/observability",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.111.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-1hUqKi+uJQoS5X90+InwHbFAXMvgq0DnsC5hVLEeSRaODiU5WvmqDAcVCmGS2wC0pN9Z8jtWCbWw7JLzeDdm/Q=="],
@@ -373,6 +377,8 @@
     "@ratio/edge-core": ["@ratio/edge-core@workspace:packages/edge-core"],
 
     "@ratio/gokwik": ["@ratio/gokwik@workspace:packages/gokwik"],
+
+    "@ratio/observability": ["@ratio/observability@workspace:packages/observability"],
 
     "@ratio/origin": ["@ratio/origin@workspace:apps/origin"],
 

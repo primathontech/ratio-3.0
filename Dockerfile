@@ -16,6 +16,7 @@ COPY packages/data-provisioning/package.json ./packages/data-provisioning/packag
 COPY packages/data-repo/package.json ./packages/data-repo/package.json
 COPY packages/edge-core/package.json ./packages/edge-core/package.json
 COPY packages/gokwik/package.json ./packages/gokwik/package.json
+COPY packages/observability/package.json ./packages/observability/package.json
 COPY apps/admin-api/package.json ./apps/admin-api/package.json
 COPY apps/admin-web/package.json ./apps/admin-web/package.json
 COPY apps/edge/package.json ./apps/edge/package.json

@@ -22,14 +22,20 @@ CloudWatch); the **edge** is a Cloudflare Worker (Workers Logs + Analytics Engin
 Three tiers. Build tier 1 now; adopt OpenTelemetry deliberately for tiers 2–3.
 
 **Tier 1 — structured logs (this ADR, implemented).**
-The origin logs with **pino** (the standard Node structured logger) via `apps/origin/src/log.ts` —
-not a hand-rolled `console.log`, so we get levels, an event timestamp, an injectable destination
-(tests don't monkeypatch a global), and redaction. JSON to stdout (12-factor: one stream; the
-aggregator alerts off the `lvl` field, not stderr-splitting). Every silent `catch {}` on the commerce
-path is replaced with an event (`cart_add`, `cart_update`, `checkout`, `commerce_error`); `cart_add`
-carries `lines` = the line count the backend echoed (`0` = took the call, added nothing) — the datum
-that diagnoses the empty-cart class. Always on: `aws logs tail /ecs/ratio-origin --filter '"reqId"'`
-— **query the logs, never redeploy to debug.**
+Logging is centralized in one package, **`@ratio/observability`**, so the whole system shares one
+discipline (and it's the home tier-2 OTel slots into):
+
+- `@ratio/observability` (node) → **pino** for the container apps (origin, admin-api).
+- `@ratio/observability/edge` → a Workers-safe `console.log(JSON)` logger (pino needs Node APIs a
+  Cloudflare Worker can't have) emitting the SAME shape, so edge + origin logs correlate.
+- `@ratio/observability/core` → the pure shared bits both import (Logger shape, redaction,
+  `classifyError`). Config is injected — the package reads no `process.env` (ADR-0001).
+
+Apps own their **domain events** on top (origin: `cart_add`/`cart_update`/`checkout`/`commerce_error`;
+`cart_add.lines` = the line count the backend echoed, `0` = took the call/added nothing — the datum
+that diagnoses the empty-cart class). Every silent `catch {}` on the commerce path is now an event.
+JSON to stdout (12-factor: one stream; alert off `lvl`, not stderr-splitting). Always on:
+`aws logs tail /ecs/ratio-origin --filter '"reqId"'` — **query the logs, never redeploy to debug.**
 
 Two safety rules the code enforces, not just documents:
 

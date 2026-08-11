@@ -10,12 +10,12 @@ import {
   lookupTenant,
   buildAccessLog,
   buildMetricPoint,
-  logAccess,
   storeUnavailable,
   type EdgeCache,
   type TenantKV,
   type AnalyticsEngineDataset,
 } from '@ratio/edge-core';
+import { createLogger } from '@ratio/observability/edge';
 
 // The portable edge logic lives in packages/edge-core (shared by every edge adapter, tested there).
 // This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core
@@ -35,6 +35,10 @@ interface Env {
 
 const app = new Hono<{ Bindings: Env; Variables: { tenantId?: string } }>();
 
+// Workers-safe logger from the shared @ratio/observability package (pino can't run on Workers) — same
+// JSON shape/conventions as the Node services, so edge + origin logs correlate.
+const edgeLog = createLogger({ service: 'edge' });
+
 // D-R6: any unhandled error while serving (uncached origin failure, routing/DB failure, or an
 // unexpected throw) becomes the branded 503 — never a raw 500 or leaked internal detail.
 app.onError(() => storeUnavailable());
@@ -51,7 +55,7 @@ app.use('*', async (c, next) => {
     ms: Date.now() - start,
   };
   const path = new URL(c.req.url).pathname;
-  logAccess(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
+  edgeLog.info(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
   // Durable, queryable per-tenant metrics — no-op if the dataset isn't bound (local / unprovisioned).
   c.env.METRICS?.writeDataPoint(buildMetricPoint({ ...common, path }));
 });

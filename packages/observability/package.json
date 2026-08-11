@@ -1,0 +1,13 @@
+{
+  "name": "@ratio/observability",
+  "version": "0.1.0",
+  "description": "centralized logging (+ future traces/metrics): pino for Node, a Workers-safe logger for the edge, one shared discipline",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/node.ts",
+    "./edge": "./src/edge.ts",
+    "./core": "./src/core.ts"
+  },
+  "license": "UNLICENSED"
+}
