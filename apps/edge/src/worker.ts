@@ -15,7 +15,7 @@ import {
   type TenantKV,
   type AnalyticsEngineDataset,
 } from '@ratio/edge-core';
-import { createLogger } from '@ratio/observability/edge';
+import { createLogger } from '@ratio/observability-edge';
 
 // The portable edge logic lives in packages/edge-core (shared by every edge adapter, tested there).
 // This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core

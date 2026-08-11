@@ -22,14 +22,19 @@ CloudWatch); the **edge** is a Cloudflare Worker (Workers Logs + Analytics Engin
 Three tiers. Build tier 1 now; adopt OpenTelemetry deliberately for tiers 2–3.
 
 **Tier 1 — structured logs (this ADR, implemented).**
-Logging is centralized in one package, **`@ratio/observability`**, so the whole system shares one
-discipline (and it's the home tier-2 OTel slots into):
+Logging is centralized so the whole system shares one discipline. It's **three packages** — split by
+runtime so the boundary is enforced (an edge worker physically cannot pull pino), not just a
+convention:
 
-- `@ratio/observability` (node) → **pino** for the container apps (origin, admin-api).
-- `@ratio/observability/edge` → a Workers-safe `console.log(JSON)` logger (pino needs Node APIs a
-  Cloudflare Worker can't have) emitting the SAME shape, so edge + origin logs correlate.
-- `@ratio/observability/core` → the pure shared bits both import (Logger shape, redaction,
-  `classifyError`). Config is injected — the package reads no `process.env` (ADR-0001).
+- **`@ratio/observability-core`** → pure shared bits: the `Logger` shape, redaction, `classifyError`.
+  No deps, no Node APIs; both loggers depend on it, neither depends on the other.
+- **`@ratio/observability`** (node) → **pino** for the container apps (origin, admin-api).
+- **`@ratio/observability-edge`** → a Workers-safe `console.log(JSON)` logger (pino needs Node APIs a
+  Cloudflare Worker can't have) emitting the SAME shape, so edge + origin logs correlate. Bundles
+  clean into a Worker (verified via `wrangler deploy --dry-run`).
+
+Config is injected — the packages read no `process.env` (ADR-0001). (This is where tier-2 OTel slots
+in — origin traces bind the same `reqId`.)
 
 Apps own their **domain events** on top (origin: `cart_add`/`cart_update`/`checkout`/`commerce_error`;
 `cart_add.lines` = the line count the backend echoed, `0` = took the call/added nothing — the datum

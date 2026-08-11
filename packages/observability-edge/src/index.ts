@@ -1,10 +1,10 @@
-// Edge logger — Workers-safe. pino needs Node APIs it can't have on Cloudflare Workers, so this is a
-// tiny console.log(JSON) sink that emits the SAME shape as the Node logger (`lvl`, `svc`, `time`,
-// bound `reqId`, event fields) with the same level filtering + redaction. Same package, same
-// discipline, runtime-appropriate sink — an edge worker imports `@ratio/observability/edge`.
-import { REDACT_KEYS, type Level, type Logger } from './core';
+// @ratio/observability-edge — a Workers-safe logger for Cloudflare edge workers. pino needs Node APIs
+// a Worker can't have, so this is a tiny console.log(JSON) sink that emits the SAME shape as the Node
+// logger (`lvl`, `svc`, `time`, bound `reqId`, event fields) with the same level filtering + redaction
+// from @ratio/observability-core. NO Node deps → bundles clean into a Worker.
+import { REDACT_KEYS, type Level, type Logger } from '@ratio/observability-core';
 
-export * from './core';
+export * from '@ratio/observability-core';
 
 const RANK: Record<Level, number> = { info: 30, warn: 40, error: 50 };
 

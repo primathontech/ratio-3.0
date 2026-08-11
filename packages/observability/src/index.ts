@@ -1,10 +1,11 @@
-// Node logger — pino, for the container apps (origin, admin-api). JSON to stdout (12-factor: one
-// stream; alert off the `lvl` field). Config is INJECTED (ADR-0001: a package reads no process.env —
-// the app passes level from its env). Re-exports core so callers get one import surface.
+// @ratio/observability — Node logging with pino, for the container apps (origin, admin-api). JSON to
+// stdout (12-factor: one stream; alert off the `lvl` field). Config is INJECTED (ADR-0001: a package
+// reads no process.env — the app passes level from its env). Re-exports the shared conventions so a
+// caller gets one import surface (createLogger + requestLog/classifyError/Logger).
 import pino, { type DestinationStream } from 'pino';
-import { REDACT_KEYS, type Logger } from './core';
+import { REDACT_KEYS, type Logger } from '@ratio/observability-core';
 
-export * from './core';
+export * from '@ratio/observability-core';
 
 export interface LoggerConfig {
   service: string; // the `svc` field, e.g. 'origin' | 'admin-api'

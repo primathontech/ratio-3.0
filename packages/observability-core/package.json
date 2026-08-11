@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/observability-core",
+  "version": "0.1.0",
+  "description": "runtime-agnostic logging conventions (Logger shape, redaction, classifyError) — shared by the Node and edge loggers; no deps",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}

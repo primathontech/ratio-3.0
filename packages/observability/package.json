@@ -1,13 +1,11 @@
 {
   "name": "@ratio/observability",
   "version": "0.1.0",
-  "description": "centralized logging (+ future traces/metrics): pino for Node, a Workers-safe logger for the edge, one shared discipline",
+  "description": "Node logging (pino) for the container apps; shares conventions with @ratio/observability-core",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/node.ts",
-    "./edge": "./src/edge.ts",
-    "./core": "./src/core.ts"
+    ".": "./src/index.ts"
   },
   "license": "UNLICENSED"
 }

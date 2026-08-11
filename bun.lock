@@ -102,6 +102,14 @@
       "name": "@ratio/observability",
       "version": "0.1.0",
     },
+    "packages/observability-core": {
+      "name": "@ratio/observability-core",
+      "version": "0.1.0",
+    },
+    "packages/observability-edge": {
+      "name": "@ratio/observability-edge",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.111.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-1hUqKi+uJQoS5X90+InwHbFAXMvgq0DnsC5hVLEeSRaODiU5WvmqDAcVCmGS2wC0pN9Z8jtWCbWw7JLzeDdm/Q=="],
@@ -379,6 +387,10 @@
     "@ratio/gokwik": ["@ratio/gokwik@workspace:packages/gokwik"],
 
     "@ratio/observability": ["@ratio/observability@workspace:packages/observability"],
+
+    "@ratio/observability-core": ["@ratio/observability-core@workspace:packages/observability-core"],
+
+    "@ratio/observability-edge": ["@ratio/observability-edge@workspace:packages/observability-edge"],
 
     "@ratio/origin": ["@ratio/origin@workspace:apps/origin"],
 

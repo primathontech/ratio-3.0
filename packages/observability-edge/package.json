@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/observability-edge",
+  "version": "0.1.0",
+  "description": "Workers-safe logger (console.log JSON) for Cloudflare edge workers; shares conventions with @ratio/observability-core, no Node deps",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}

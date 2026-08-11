@@ -1,6 +1,6 @@
-// @ratio/observability core — pure, runtime-agnostic conventions shared by the Node (pino) and edge
-// (Cloudflare Workers) loggers. NO pino, NO Node APIs, so it is safe to import from a Worker. This is
-// the single place the whole system's log discipline lives: the Logger shape, the redaction backstop,
+// @ratio/observability-core — the pure, runtime-agnostic logging discipline shared by the Node (pino)
+// and edge (Cloudflare Workers) loggers. NO deps, NO Node APIs, so it is safe to import from a Worker.
+// This is the single source of the system's log conventions: the Logger shape, the redaction backstop,
 // and classifyError (map any throw to a CLOSED taxonomy + type name, so an untrusted upstream error
 // message — which can carry a token/PII — never enters a log line).
 
@@ -21,8 +21,8 @@ export function requestLog(base: Logger, reqId: string): Logger {
   return base.child({ reqId });
 }
 
-// Secret-bearing keys scrubbed as defense-in-depth. Events are built from closed field sets below, but
-// this guards a future careless call site that spreads one in.
+// Secret-bearing keys scrubbed as defense-in-depth. Events are built from closed field sets, but this
+// guards a future careless call site that spreads one in.
 export const REDACT_KEYS = ['token', 'cookie', 'authorization', 'password', 'secret'] as const;
 
 // Map any thrown value to a stable, non-sensitive shape: a closed taxonomy `code` + the error's type
