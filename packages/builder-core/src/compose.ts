@@ -23,6 +23,7 @@ export interface ComposedPage {
   html: string;
   tier: Tier; // shell tier — drives the origin's cacheability opt-in (B-2)
   cacheable: boolean;
+  hasIsland: boolean; // page ships the islands runtime → origin relaxes the strict CSP for it
 }
 
 export async function composePage(
@@ -35,9 +36,13 @@ export async function composePage(
     siteName?: string;
     headExtra?: string;
     bodyEnd?: string;
+    // The versioned runtime URL (/assets/islands.<hash>.js). Referenced ONLY when the page has an
+    // island — a page with none must not ship (or 404 on) a runtime it doesn't use.
+    islandsRuntimeUrl?: string;
   } = {}
 ): Promise<ComposedPage> {
   let tier: Tier = 'static';
+  let hasIsland = false;
   const parts: string[] = [];
 
   for (const w of doc.sections) {
@@ -46,6 +51,7 @@ export async function composePage(
     if (rec.island) {
       // island: placeholder only. The instance id rides along so the island endpoint can load
       // THIS instance's config. Public bytes only — user identity never appears here.
+      hasIsland = true;
       parts.push(islandPlaceholder(rec.island.name, { instance: w.id }));
     } else {
       let data = w.data;
@@ -81,9 +87,11 @@ export async function composePage(
     parts.join('\n') +
     `\n</main>\n` +
     renderFooter({ footer: chrome.footer ?? null, siteName: chrome.siteName ?? '' }) +
-    `\n<script src="/assets/islands.js" defer></script>` +
+    (hasIsland && chrome.islandsRuntimeUrl
+      ? `\n<script src="${esc(chrome.islandsRuntimeUrl)}" defer></script>`
+      : '') +
     (chrome.bodyEnd ?? '') +
     `</body></html>`;
 
-  return { html, tier, cacheable: tier !== 'per-user' };
+  return { html, tier, cacheable: tier !== 'per-user', hasIsland };
 }

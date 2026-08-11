@@ -27,6 +27,7 @@ export function islandPlaceholder(name: string, params: Record<string, string> =
 
 // Server side of an island: given the request context, produce the per-user HTML fragment.
 export type IslandHandler = (ctx: {
+  tenantId: string; // the store the request is for (islands are per-tenant AND per-user)
   params: URLSearchParams;
   userId: string | null; // from the session cookie — null = anonymous
 }) => Promise<{ status?: number; html: string }>;
@@ -49,7 +50,8 @@ export class IslandRegistry {
   async handle(
     name: string,
     params: URLSearchParams,
-    userId: string | null
+    userId: string | null,
+    tenantId = ''
   ): Promise<{ status: number; headers: Record<string, string>; body: string }> {
     const headers = {
       'cache-control': 'no-store, private',
@@ -58,7 +60,7 @@ export class IslandRegistry {
     const handler = this.handlers.get(name);
     if (!handler) return { status: 404, headers, body: '' };
     try {
-      const res = await handler({ params, userId });
+      const res = await handler({ tenantId, params, userId });
       return { status: res.status ?? 200, headers, body: res.html };
     } catch {
       // an island failure degrades to an empty slot — it must never take the page down

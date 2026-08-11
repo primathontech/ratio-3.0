@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 import { esc } from '@ratio/builder-core';
@@ -30,6 +30,7 @@ import {
   type IntegrationContext,
 } from '@ratio/gokwik';
 import { defaultRegistry, setUntrustedRenderer } from '@ratio/builder-registry';
+import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
@@ -68,6 +69,22 @@ setUntrustedRenderer(renderUntrusted);
 // local dev renders without a backend — but in production a missing COMMERCE_* throws here rather
 // than silently serving sample data (see storefrontResolver).
 const resolver = storefrontResolver(process.env);
+
+// Islands (Track 5): the ONLY per-user path. The cached shell carries inert placeholders that a
+// small first-party runtime hydrates from /api/island/*. The runtime is content-addressed so a
+// change busts the immutable edge cache by URL; the shell references it only when a page actually
+// has an island (composePage gate), so all-static pages ship no JS and stay under the strict CSP.
+const ISLANDS_JS = islandsRuntimeScript();
+export const ISLANDS_URL = `/assets/islands.${createHash('sha256')
+  .update(ISLANDS_JS)
+  .digest('hex')
+  .slice(0, 16)}.js`;
+// An island page relaxes the strict no-JS CSP by exactly what the first-party runtime needs and no
+// more: run the self-hosted script, and let it fetch the same-origin island endpoints.
+const ISLANDS_CSP: CspDirectives = { 'script-src': ["'self'"], 'connect-src': ["'self'"] };
+// Island server handlers register here (per-tenant + per-user fragments). Empty until a section
+// declares an island; an unknown name → 404. Exported so an app/section can wire its handler.
+export const islandRegistry = new IslandRegistry();
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the backstop that
 // contains any HTML/color injection that slips through content validation; inline <style> is the
@@ -255,13 +272,32 @@ app.all('*', async (c) => {
 
   if (path === '/__stats') return c.json({ renders });
 
+  // Islands runtime: a public, tenant-agnostic, content-addressed asset. Immutable (the hash in the
+  // URL changes only when the runtime changes), so the edge caches it hard. Any other /assets path
+  // 404s WITH a nosniff JS-safe response so it never falls through to the HTML 404 page (whose
+  // text/html body is what made the browser refuse to execute the script).
+  if (path.startsWith('/assets/')) {
+    c.header('x-content-type-options', 'nosniff');
+    if (path === ISLANDS_URL) {
+      c.header('content-type', 'text/javascript; charset=utf-8');
+      c.header('cache-control', 'public, max-age=31536000, immutable');
+      c.header('x-cache', 'long');
+      return c.body(ISLANDS_JS);
+    }
+    c.header('x-cache', 'no-store');
+    return c.text('404 — not found', 404);
+  }
+
   const tenantId = c.req.header('x-ratio-tenant');
+  const isIslandApi = path.startsWith('/api/island/');
 
   // POST /checkout is OUR endpoint (the GoKwik checkout handshake); everything else under the
-  // reserved prefixes stays app-owned/stubbed.
+  // reserved prefixes stays app-owned/stubbed. /api/island/* is OURS too (handled below, after the
+  // tenant resolves), so it must not be swallowed as "reserved" here.
   const isCheckoutApi = path === '/checkout' && c.req.method === 'POST';
   if (
     !isCheckoutApi &&
+    !isIslandApi &&
     (path.startsWith('/api/') || RESERVED.some((r) => path === r || path.startsWith(r + '/')))
   ) {
     c.header('x-handler', 'reserved');
@@ -280,6 +316,20 @@ app.all('*', async (c) => {
   if (tenant.status !== 'active') {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
+  }
+
+  // Island hydration: the per-user fragment behind a shell placeholder. The runtime fetches this
+  // after paint; it is ALWAYS no-store + private (the class C2 forbids in any shared cache) and the
+  // edge never caches this reserved path. Unknown island → 404. Anonymous for now (no user session).
+  if (isIslandApi) {
+    const name = path.slice('/api/island/'.length);
+    const params = new URL(c.req.url).searchParams;
+    const out = await islandRegistry.handle(name, params, null, tenantId as string);
+    c.header('x-tenant', tenantId as string);
+    c.header('x-handler', 'island');
+    for (const [k, v] of Object.entries(out.headers)) c.header(k, v);
+    c.header('x-cache', 'no-store');
+    return c.body(out.body, out.status as 200 | 404 | 500);
   }
 
   // Cart (no-JS, server-rendered). Add-to-cart is a form POST; the cart itself lives on the commerce
@@ -354,6 +404,7 @@ app.all('*', async (c) => {
         siteName: tenant.name,
         headExtra: ix.head,
         bodyEnd: ix.bodyEnd,
+        islandsRuntimeUrl: ISLANDS_URL,
       });
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
@@ -369,7 +420,13 @@ app.all('*', async (c) => {
       c.header('x-cache', composed.cacheable ? 'long' : 'no-store');
       if (composed.cacheable)
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-      setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
+      // An island page relaxes the strict no-JS base by exactly what the runtime needs (self script
+      // + same-origin fetch); a page with no island keeps script-src 'none'. Integration CSP merges
+      // on top of either.
+      const baseCsp = composed.hasIsland
+        ? mergeCsp(STOREFRONT_BASE_CSP, ISLANDS_CSP)
+        : STOREFRONT_BASE_CSP;
+      setStorefrontSecurity(c, cspToString(mergeCsp(baseCsp, ix.csp)));
       return c.html(composed.html);
     }
     // No published page for this URL (exact or template) → 404. The page builder is the sole

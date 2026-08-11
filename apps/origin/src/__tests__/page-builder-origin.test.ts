@@ -4,7 +4,7 @@
 // The page builder is the origin's storefront renderer (no flag).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { app } from '../index';
+import { app, ISLANDS_URL, islandRegistry } from '../index';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { PgPageStore } from '@ratio/builder-core';
@@ -169,4 +169,41 @@ test('routing: /pages/:handle is a self-keyed static page (its own doc, page typ
   const keys = res.headers.get('x-surrogate-keys') || '';
   assert.ok(keys.includes(pageTag(T, '/pages/about-us')), 'tagged by its own path');
   assert.match(await res.text(), /About us page/);
+});
+
+// ── Islands runtime delivery: the shell references /assets/islands.<hash>.js only for island
+// pages, the origin serves that runtime (immutable), and /api/island/:name hydrates per-request.
+
+test('islands: the versioned runtime is served as executable JS with an immutable cache', async () => {
+  const res = await call(ISLANDS_URL, edge());
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /javascript/);
+  assert.match(res.headers.get('cache-control') || '', /immutable/);
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  const js = await res.text();
+  assert.match(js, /data-island/, 'this is the hydration runtime');
+});
+
+test('islands: an unknown /assets path is a 404 (not the HTML 404 page that broke MIME checks)', async () => {
+  const res = await call('/assets/islands.deadbeef.js', edge());
+  assert.equal(res.status, 404);
+});
+
+test('islands: /api/island/:name reaches the registry, is no-store, and is NOT swallowed as reserved', async () => {
+  islandRegistry.register('cart-count', async ({ tenantId, userId }) => ({
+    html: `<span data-t="${tenantId}">${userId ? 'you: 3' : 'cart: 0'}</span>`,
+  }));
+  const res = await call('/api/island/cart-count?sku=A1', edge({ 'x-ratio-tenant': T }));
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('x-handler'), 'island');
+  assert.match(res.headers.get('cache-control') || '', /no-store/);
+  assert.match(await res.text(), new RegExp(`data-t="${T}"`), 'the tenant reaches the handler');
+
+  const ghost = await call('/api/island/ghost', edge({ 'x-ratio-tenant': T }));
+  assert.equal(ghost.status, 404);
+});
+
+test('islands: a storefront page with no island sections references no runtime (no 404)', async () => {
+  const res = await call('/pb-home', edge({ 'x-ratio-tenant': T }));
+  assert.ok(!/\/assets\/islands/.test(await res.text()), 'no dead islands.js reference');
 });
