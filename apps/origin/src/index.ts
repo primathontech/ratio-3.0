@@ -36,6 +36,7 @@ import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
 import { resolveEdgeSecret } from '@ratio/edge-core';
+import { logEvent } from './log';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -212,6 +213,15 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
           if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
             const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
+            // lines = what the backend echoed back: 0 means it took the call but added nothing
+            // (a wrong variant id for the cart API) — the "cart id but empty cart" signature.
+            logEvent('info', {
+              evt: 'cart_add',
+              tenant: tenantId,
+              ok: updated.items.length > 0,
+              variant: variantId,
+              lines: updated.items.length,
+            });
             if (updated.id) {
               c.header('set-cookie', cartCookie(updated.id)); // httpOnly, for the server
               // Enabled integrations mirror the token in their own cookie (e.g. the side-cart widget's
@@ -220,14 +230,29 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
               for (const ck of gokwikCartCookies(updated.id, ctx))
                 c.header('set-cookie', ck, { append: true });
             }
+          } else {
+            logEvent('warn', {
+              evt: 'cart_add',
+              tenant: tenantId,
+              ok: false,
+              variant: '',
+              lines: 0,
+            });
           }
         } else if (token) {
           const variantId = String(body.variantId || '');
           const quantity = Number(body.quantity ?? 1);
           if (variantId) await cart.setQuantity(token, variantId, quantity);
         }
-      } catch {
-        // A backend hiccup must not 500 the shopper — fall through and re-render the cart.
+      } catch (e) {
+        // A backend hiccup must not 500 the shopper — fall through and re-render the cart. But it must
+        // not be SILENT either (that swallow is what hid the empty-cart bug) — log it, always on.
+        logEvent('error', {
+          evt: 'commerce_error',
+          tenant: tenantId,
+          op: path === '/cart/add' ? 'add' : 'update',
+          err: e instanceof Error ? e.message : String(e),
+        });
       }
     }
     c.header('x-cache', 'no-store');
@@ -238,7 +263,13 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
   if (backend && token) {
     try {
       cart = await new CartService(backend).get(token);
-    } catch {
+    } catch (e) {
+      logEvent('warn', {
+        evt: 'commerce_error',
+        tenant: tenantId,
+        op: 'get',
+        err: e instanceof Error ? e.message : String(e),
+      });
       cart = emptyCart();
     }
   }
@@ -352,8 +383,15 @@ app.all('*', async (c) => {
     if (backend && token) {
       try {
         merchantCheckoutId = await new CartService(backend).createCheckout(token);
-      } catch {
+        logEvent('info', { evt: 'checkout', tenant: tenantId as string, ok: !!merchantCheckoutId });
+      } catch (e) {
         // Surface as an empty id — the client shows "checkout unavailable" rather than 500ing.
+        logEvent('error', {
+          evt: 'commerce_error',
+          tenant: tenantId as string,
+          op: 'checkout',
+          err: e instanceof Error ? e.message : String(e),
+        });
       }
     }
     c.header('x-cache', 'no-store');
