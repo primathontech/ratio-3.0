@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { resolvePage, interpolateParams, StubResolver } from '../resolve';
+import type { BindingResolver, ResolvedSource } from '../resolve';
 import { defaultRegistry } from '@ratio/builder-registry';
-import type { PageDoc } from '../doc';
+import type { PageDoc, DataSource } from '../doc';
 
 const registry = defaultRegistry();
 const resolver = new StubResolver();
@@ -75,4 +76,28 @@ test('the saved doc is not mutated — injection is render-only', async () => {
   };
   await resolvePage(doc, registry, resolver, { tenantId: 't' });
   assert.strictEqual((doc.sections[0].data.grid as Record<string, unknown>).products, undefined);
+});
+
+test('resolvePage fans out in parallel but caps concurrency at 6 (Workers connection window)', async () => {
+  // A probe resolver that records the max number of simultaneously in-flight fetches.
+  class ConcurrencyProbe implements BindingResolver {
+    inFlight = 0;
+    max = 0;
+    async fetch(): Promise<ResolvedSource> {
+      this.inFlight++;
+      this.max = Math.max(this.max, this.inFlight);
+      await new Promise((r) => setTimeout(r, 5)); // hold the "connection" so overlaps are real
+      this.inFlight--;
+      return { value: {}, tags: [] };
+    }
+  }
+  const probe = new ConcurrencyProbe();
+  const sources: Record<string, DataSource> = {};
+  for (let i = 0; i < 15; i++) sources[`s${i}`] = { type: 'PRODUCT', params: {} };
+  const doc: PageDoc = { path: '/', title: 'x', dataSources: sources, sections: [] };
+
+  await resolvePage(doc, registry, probe, { tenantId: 't' });
+
+  assert.ok(probe.max <= 6, `never more than 6 in flight (saw ${probe.max})`);
+  assert.strictEqual(probe.max, 6, `should saturate the window with 15 sources (saw ${probe.max})`);
 });

@@ -49,6 +49,31 @@ export function interpolateParams(
   return interpolate(params ?? {}, routeParams) as Record<string, unknown>;
 }
 
+// Cloudflare Workers can have ~6 subrequest connections awaiting response headers at once; a wider
+// fan-out just queues. So resolve sources in PARALLEL but never more than this many in flight — the
+// page's data fetch is one round-trip for ≤6 sources, two waves beyond, and the connection window
+// can never bite. (I/O wait is free CPU, so this only ever trades a little latency, never compute.)
+const RESOLVE_CONCURRENCY = 6;
+
+// Run `fn` over items with at most `limit` in flight; results keep INPUT order (so cache-tag order
+// is identical to the old serial resolve). A rejection propagates, same as the serial loop did.
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 // Resolve a page's data sources and inject the results into its data-backed sections. Returns a
 // render-only copy of the doc (config untouched on disk) plus the union of cache tags. A page with
 // no dataSources passes straight through — authored-only pages cost nothing.
@@ -64,9 +89,12 @@ export async function resolvePage(
   const routeParams = ctx.routeParams ?? {};
   const resolved: Record<string, ResolvedSource> = {};
   const tags: string[] = [];
-  for (const [key, src] of Object.entries(sources)) {
+  const pairs = await mapLimit(Object.entries(sources), RESOLVE_CONCURRENCY, async ([key, src]) => {
     const params = interpolateParams(src.params ?? {}, routeParams);
     const r = await resolver.fetch({ ...src, params }, ctx);
+    return [key, r] as const;
+  });
+  for (const [key, r] of pairs) {
     resolved[key] = r;
     tags.push(...r.tags);
   }
