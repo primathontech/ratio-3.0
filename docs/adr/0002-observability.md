@@ -22,13 +22,25 @@ CloudWatch); the **edge** is a Cloudflare Worker (Workers Logs + Analytics Engin
 Three tiers. Build tier 1 now; adopt OpenTelemetry deliberately for tiers 2–3.
 
 **Tier 1 — structured logs (this ADR, implemented).**
-The origin emits structured, allowlisted JSON events to stdout (`apps/origin/src/log.ts`), the same
-discipline as the edge access-log: a **fixed, non-sensitive field set** — a token, cookie, secret,
-raw body, or query string can NEVER enter an event, by construction. Every silent `catch {}` on the
-commerce path is replaced with an event. `cart_add` carries `lines` = the line count the backend
-echoed (`0` = the backend took the call but added nothing) — the datum that diagnoses the empty-cart
-class. Always on: live debugging becomes `aws logs tail /ecs/ratio-origin --filter '"evt":"cart_add"'`
+The origin logs with **pino** (the standard Node structured logger) via `apps/origin/src/log.ts` —
+not a hand-rolled `console.log`, so we get levels, an event timestamp, an injectable destination
+(tests don't monkeypatch a global), and redaction. JSON to stdout (12-factor: one stream; the
+aggregator alerts off the `lvl` field, not stderr-splitting). Every silent `catch {}` on the commerce
+path is replaced with an event (`cart_add`, `cart_update`, `checkout`, `commerce_error`); `cart_add`
+carries `lines` = the line count the backend echoed (`0` = took the call, added nothing) — the datum
+that diagnoses the empty-cart class. Always on: `aws logs tail /ecs/ratio-origin --filter '"reqId"'`
 — **query the logs, never redeploy to debug.**
+
+Two safety rules the code enforces, not just documents:
+
+- **Correlation.** A per-request `reqId` (adopted from the edge's `x-request-id` / `traceparent`
+  trace-id, else minted) is bound on a child logger and echoed on the response, so all events for one
+  request group together and correlate with the edge access log — and it's the seam tier-2 traces use.
+- **Content, not just schema.** A fixed field _schema_ does not bound field _content_: a backend's raw
+  error `message` is untrusted and can carry a token/PII. So commerce errors are mapped to a **closed
+  taxonomy** (`network` / `timeout` / `backend_rejected` / …) plus the error's type name — the raw
+  message is dropped. `redact` is a defense-in-depth backstop; typed per-event helpers pick their
+  fields explicitly (a runtime allowlist, not only the type system).
 
 **Tier 2 — OpenTelemetry tracing + metrics on the ORIGIN (target, next).**
 Adopt the OTel Node SDK on the origin: auto-instrument HTTP / `pg` / outbound `fetch`, so each request

@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { timingSafeEqual, createHash } from 'node:crypto';
+import { timingSafeEqual, createHash, randomUUID } from 'node:crypto';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 import { esc } from '@ratio/builder-core';
@@ -36,7 +36,15 @@ import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
 import { resolveEdgeSecret } from '@ratio/edge-core';
-import { logEvent } from './log';
+import {
+  logger,
+  requestLog,
+  logCartAdd,
+  logCartUpdate,
+  logCheckout,
+  logCommerceError,
+  type ReqLog,
+} from './log';
 
 // Private shared host (ADR-002/012). Tenant from trusted header only. Hono handlers
 // (Web fetch) so the same code runs on a Node container today and a Worker later.
@@ -195,10 +203,15 @@ async function renderOrderResponse(
   return c.html(html);
 }
 
-async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Promise<Response> {
+async function handleCart(
+  c: Context<Vars>,
+  tenant: CartTenant,
+  tenantId: string
+): Promise<Response> {
   const path = new URL(c.req.url).pathname;
   const backend = cartBackendFor(tenant.commerce);
   const token = readCartToken(c.req.header('cookie'));
+  const log = c.get('log');
 
   if (c.req.method === 'POST' && (path === '/cart/add' || path === '/cart/update')) {
     if (backend) {
@@ -213,10 +226,7 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
           if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
             const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
-            // lines = what the backend echoed back: 0 means it took the call but added nothing
-            // (a wrong variant id for the cart API) — the "cart id but empty cart" signature.
-            logEvent('info', {
-              evt: 'cart_add',
+            logCartAdd(log, {
               tenant: tenantId,
               ok: updated.items.length > 0,
               variant: variantId,
@@ -231,28 +241,18 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
                 c.header('set-cookie', ck, { append: true });
             }
           } else {
-            logEvent('warn', {
-              evt: 'cart_add',
-              tenant: tenantId,
-              ok: false,
-              variant: '',
-              lines: 0,
-            });
+            logCartAdd(log, { tenant: tenantId, ok: false, variant: '', lines: 0 });
           }
         } else if (token) {
           const variantId = String(body.variantId || '');
           const quantity = Number(body.quantity ?? 1);
           if (variantId) await cart.setQuantity(token, variantId, quantity);
+          logCartUpdate(log, { tenant: tenantId, ok: !!variantId, variant: variantId });
         }
       } catch (e) {
         // A backend hiccup must not 500 the shopper — fall through and re-render the cart. But it must
         // not be SILENT either (that swallow is what hid the empty-cart bug) — log it, always on.
-        logEvent('error', {
-          evt: 'commerce_error',
-          tenant: tenantId,
-          op: path === '/cart/add' ? 'add' : 'update',
-          err: e instanceof Error ? e.message : String(e),
-        });
+        logCommerceError(log, path === '/cart/add' ? 'add' : 'update', tenantId, e);
       }
     }
     c.header('x-cache', 'no-store');
@@ -264,24 +264,39 @@ async function handleCart(c: Context, tenant: CartTenant, tenantId: string): Pro
     try {
       cart = await new CartService(backend).get(token);
     } catch (e) {
-      logEvent('warn', {
-        evt: 'commerce_error',
-        tenant: tenantId,
-        op: 'get',
-        err: e instanceof Error ? e.message : String(e),
-      });
+      logCommerceError(log, 'get', tenantId, e);
       cart = emptyCart();
     }
   }
   return renderCartResponse(c, tenant, tenantId, cart);
 }
 
-export const app = new Hono();
+type Vars = { Variables: { reqId: string; log: ReqLog } };
+export const app = new Hono<Vars>();
+
+// Per-request correlation. Adopt the edge's id (x-request-id, or the traceparent trace-id) so origin
+// logs correlate with the edge access log; otherwise mint one. Bind it on a child logger for every
+// event, and echo it on the response so a failing request is traceable client-side.
+app.use('*', async (c, next) => {
+  const traceId = c.req.header('traceparent')?.split('-')[1];
+  const reqId =
+    c.req.header('x-request-id') ||
+    (traceId && /^[0-9a-f]{32}$/.test(traceId) ? traceId : '') ||
+    randomUUID();
+  c.set('reqId', reqId);
+  c.set('log', requestLog(logger, reqId));
+  c.header('x-request-id', reqId);
+  await next();
+});
 
 // Don't leak internal error strings to the customer-facing storefront in production.
-app.onError((e, c) =>
-  c.text(process.env.NODE_ENV === 'production' ? '500 — internal error' : '500 — ' + e.message, 500)
-);
+app.onError((e, c) => {
+  c.get('log')?.error({ evt: 'unhandled', errType: e.name });
+  return c.text(
+    process.env.NODE_ENV === 'production' ? '500 — internal error' : '500 — ' + e.message,
+    500
+  );
+});
 
 app.all('*', async (c) => {
   const path = new URL(c.req.url).pathname;
@@ -383,15 +398,10 @@ app.all('*', async (c) => {
     if (backend && token) {
       try {
         merchantCheckoutId = await new CartService(backend).createCheckout(token);
-        logEvent('info', { evt: 'checkout', tenant: tenantId as string, ok: !!merchantCheckoutId });
+        logCheckout(c.get('log'), { tenant: tenantId as string, ok: !!merchantCheckoutId });
       } catch (e) {
         // Surface as an empty id — the client shows "checkout unavailable" rather than 500ing.
-        logEvent('error', {
-          evt: 'commerce_error',
-          tenant: tenantId as string,
-          op: 'checkout',
-          err: e instanceof Error ? e.message : String(e),
-        });
+        logCommerceError(c.get('log'), 'checkout', tenantId as string, e);
       }
     }
     c.header('x-cache', 'no-store');

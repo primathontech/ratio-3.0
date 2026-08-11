@@ -1,38 +1,63 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { logEvent } from '../log';
+import {
+  createLogger,
+  requestLog,
+  logCartAdd,
+  logCartUpdate,
+  logCommerceError,
+  classifyError,
+} from '../log';
 
-// Capture what the logger writes to stdout (console.log is the sink).
-function capture(fn: () => void): string[] {
-  const out: string[] = [];
-  const orig = console.log;
-  console.log = (s?: unknown) => {
-    out.push(String(s));
-  };
-  try {
-    fn();
-  } finally {
-    console.log = orig;
-  }
-  return out;
+// Capture pino output via an injectable destination stream — no monkeypatching a global console.
+function capture() {
+  const lines: string[] = [];
+  const log = createLogger({ write: (s: string) => lines.push(s) });
+  return { log, records: () => lines.map((l) => JSON.parse(l)) };
 }
 
-test('logEvent emits one structured JSON line with the level + event fields', () => {
-  const lines = capture(() =>
-    logEvent('info', { evt: 'cart_add', tenant: 't1', ok: false, variant: 'v9', lines: 0 })
-  );
-  assert.equal(lines.length, 1);
-  const rec = JSON.parse(lines[0]);
-  assert.equal(rec.lvl, 'info');
-  assert.equal(rec.evt, 'cart_add');
-  assert.equal(rec.tenant, 't1');
-  assert.equal(rec.lines, 0); // the diagnostic datum for the empty-cart bug
+test('cart_add: structured line carries the reqId, a timestamp, and warns when nothing was added', () => {
+  const c = capture();
+  logCartAdd(requestLog(c.log, 'req-1'), { tenant: 't1', ok: false, variant: 'v9', lines: 0 });
+  const [r] = c.records();
+  assert.equal(r.evt, 'cart_add');
+  assert.equal(r.reqId, 'req-1'); // correlation id — group all events for one request
+  assert.equal(r.tenant, 't1');
+  assert.equal(r.lines, 0); // the diagnostic datum
+  assert.equal(r.lvl, 'warn'); // ok:false routes to warn
+  assert.equal(r.svc, 'origin');
+  assert.ok(typeof r.time === 'number', 'has an event timestamp');
 });
 
-test('logEvent carries ONLY the allowlisted fields — no room for a token/cookie/secret', () => {
-  const [line] = capture(() =>
-    logEvent('error', { evt: 'commerce_error', tenant: 't1', op: 'checkout', err: 'boom' })
+test('cart_update is instrumented too (not silently swallowed)', () => {
+  const c = capture();
+  logCartUpdate(requestLog(c.log, 'r'), { tenant: 't1', ok: true, variant: 'v1' });
+  assert.equal(c.records()[0].evt, 'cart_update');
+});
+
+test('commerce_error logs a CLOSED taxonomy code + errType — NEVER the raw backend message', () => {
+  const c = capture();
+  // A backend error whose message carries a secret + a credentialed URL (the exact leak risk).
+  const leaky = new Error('auth failed for key sk_live_ABC123 at https://api?token=SEKRIT');
+  logCommerceError(requestLog(c.log, 'r'), 'add', 't1', leaky);
+  const [r] = c.records();
+  assert.equal(r.evt, 'commerce_error');
+  assert.equal(r.op, 'add');
+  assert.equal(r.code, 'backend_error');
+  assert.equal(r.errType, 'Error');
+  const dump = JSON.stringify(r);
+  assert.ok(!dump.includes('sk_live'), 'the secret-bearing message is never logged');
+  assert.ok(!dump.includes('SEKRIT'));
+});
+
+test('classifyError maps network + timeout codes to a stable taxonomy', () => {
+  assert.equal(
+    classifyError(Object.assign(new Error('x'), { code: 'ECONNREFUSED' })).code,
+    'network'
   );
-  const rec = JSON.parse(line);
-  assert.deepEqual(Object.keys(rec).sort(), ['err', 'evt', 'lvl', 'op', 'tenant']);
+  assert.equal(
+    classifyError(Object.assign(new Error('x'), { name: 'AbortError' })).code,
+    'timeout'
+  );
+  assert.equal(classifyError(new Error('cart data missing')).code, 'empty_response');
 });
