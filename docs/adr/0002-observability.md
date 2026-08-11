@@ -53,11 +53,19 @@ Two safety rules the code enforces, not just documents:
   message is dropped. `redact` is a defense-in-depth backstop; typed per-event helpers pick their
   fields explicitly (a runtime allowlist, not only the type system).
 
-**Tier 2 — OpenTelemetry tracing + metrics on the ORIGIN (target, next).**
-Adopt the OTel Node SDK on the origin: auto-instrument HTTP / `pg` / outbound `fetch`, so each request
-is a trace — edge → origin → the GoKwik call — with span status + latency. A failed `addToCart`
-becomes a visible span, not a swallowed catch. Export via OTLP (backend TBD: X-Ray / Grafana /
-Honeycomb). Tier-1 events re-emit as OTel logs under the same trace id, so nothing is wasted.
+**Tier 2 — OpenTelemetry tracing on the ORIGIN (increment 1 implemented).**
+Tracing lives in its OWN package, **`@ratio/observability-tracing`** — separate from the logger so
+importing `@ratio/observability` doesn't load the heavy OTel SDK (same dependency-isolation principle
+as the edge split). `initTracing` exports via **OTLP**; the backend is **SigNoz** (our org standard,
+OTLP-native) — set `OTEL_EXPORTER_OTLP_ENDPOINT` + the ingestion key in `OTEL_EXPORTER_OTLP_HEADERS`.
+**OFF by default** (no endpoint → no provider → `withSpan` is a no-op, safe in hot paths).
+
+Increment 1 is **manual** instrumentation: the origin middleware opens an `origin.request` span that
+**continues the edge's W3C `traceparent`** (so edge → origin is one trace), and the GoKwik calls
+(`cart.add`/`cart.get`/`checkout.create`) are child spans with status + latency + attributes
+(`cart.lines` — the empty-cart signal shows in the trace too), all tied to `reqId`. Full
+**auto-instrumentation** (HTTP/`pg`/`fetch`) is the follow-up, once the ESM loader hook is wired into
+the Docker CMD. Later, tier-1 logs also ship to SigNoz via OTLP so logs + traces share one UI.
 
 **Tier 3 — authenticated on-demand live debug (target).**
 A per-request debug capability that is **always available but auth-gated** — the edge injects

@@ -36,6 +36,7 @@ import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
 import { resolveEdgeSecret } from '@ratio/edge-core';
+import { withSpan, withRequestSpan } from '@ratio/observability-tracing';
 import {
   logger,
   requestLog,
@@ -213,6 +214,7 @@ async function handleCart(
   const backend = cartBackendFor(tenant.commerce);
   const token = readCartToken(c.req.header('cookie'));
   const log = c.get('log');
+  const reqId = c.get('reqId');
 
   if (c.req.method === 'POST' && (path === '/cart/add' || path === '/cart/update')) {
     if (backend) {
@@ -226,7 +228,15 @@ async function handleCart(
           const handle = String(body.handle || '');
           if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
-            const updated = await cart.add(token, [{ variantId, quantity: 1 }]);
+            const updated = await withSpan(
+              'gokwik.cart.add',
+              { 'ratio.op': 'cart.add', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
+              async (span) => {
+                const u = await cart.add(token, [{ variantId, quantity: 1 }]);
+                span.setAttribute('ratio.cart.lines', u.items.length); // 0 = added nothing
+                return u;
+              }
+            );
             logCartAdd(log, {
               tenant: tenantId,
               ok: updated.items.length > 0,
@@ -266,7 +276,15 @@ async function handleCart(
   let cart: Cart = emptyCart();
   if (backend && token) {
     try {
-      cart = await new CartService(backend).get(token);
+      cart = await withSpan(
+        'gokwik.cart.get',
+        { 'ratio.op': 'cart.get', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
+        async (span) => {
+          const cc = await new CartService(backend).get(token);
+          span.setAttribute('ratio.cart.lines', cc.items.length);
+          return cc;
+        }
+      );
     } catch (e) {
       logCommerceError(log, 'get', tenantId, e);
       cart = emptyCart();
@@ -292,7 +310,14 @@ app.use('*', async (c, next) => {
   c.set('reqId', reqId);
   c.set('log', requestLog(logger, reqId));
   c.header('x-request-id', reqId);
-  await next();
+  // Continue the edge's trace (W3C traceparent) so edge→origin→GoKwik is one trace; child spans
+  // (the GoKwik calls below) nest under this. No-op when tracing is off (no OTLP endpoint).
+  await withRequestSpan(
+    'origin.request',
+    { 'ratio.reqId': reqId, 'http.request.method': c.req.method },
+    { traceparent: c.req.header('traceparent'), tracestate: c.req.header('tracestate') },
+    () => next()
+  );
 });
 
 // Don't leak internal error strings to the customer-facing storefront in production.
@@ -403,7 +428,19 @@ app.all('*', async (c) => {
     let merchantCheckoutId = '';
     if (backend && token) {
       try {
-        merchantCheckoutId = await new CartService(backend).createCheckout(token);
+        merchantCheckoutId = await withSpan(
+          'gokwik.checkout.create',
+          {
+            'ratio.op': 'checkout.create',
+            'ratio.tenant': tenantId as string,
+            'ratio.reqId': c.get('reqId'),
+          },
+          async (span) => {
+            const id = await new CartService(backend).createCheckout(token);
+            span.setAttribute('ratio.checkout.ok', !!id);
+            return id;
+          }
+        );
         logCheckout(c.get('log'), { tenant: tenantId as string, ok: !!merchantCheckoutId });
       } catch (e) {
         // Surface as an empty id — the client shows "checkout unavailable" rather than 500ing.
