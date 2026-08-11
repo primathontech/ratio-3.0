@@ -19,11 +19,9 @@ import { config } from './config';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
-import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
+import { PgThemeStore } from '@ratio/builder-core';
+import { storeSettingsRoutes } from './routes/store-settings';
 import { scaffoldStorefront } from '@ratio/builder-core';
-import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
-import { tenantTag } from '@ratio/builder-core';
-import { FONTS, BASE_SIZE, RADIUS, CONTAINER, type ThemeTokens } from '@ratio/builder-core';
 import { defaultRegistry } from '@ratio/builder-registry';
 import {
   cfConfig,
@@ -70,7 +68,7 @@ import { runAssistant, scopeForAssistant } from './assistant';
 // Auth is ADR-010: Clerk verifies identity, our memberships table authorizes per store.
 // createApp takes the verifier so tests can inject identity without calling Clerk. The
 // default accepts both human Clerk sessions and ADR-007 agent tokens on the same surface.
-type Vars = { Variables: { userId: string; scope?: string[]; auditTenant?: string } };
+import type { Vars } from './types';
 
 // Purge a set of surrogate tags at the LOCAL dev edge (best-effort, RATIO_LOCAL-gated). The dev
 // edge-sim indexes by tag; the deployed Cloudflare Worker does not (it 404s /__), so prod purge goes
@@ -155,30 +153,6 @@ function sectionCatalog() {
     // the section's commerce data binding (e.g. productGrid→'grid', product→'product'), or null
     dataBinding: (r.bindings ?? []).map((b) => b.name).find((n) => DATA_BINDINGS.has(n)) ?? null,
   }));
-}
-
-// Validate a theme at the boundary: brand colour is free-form hex, every other knob must be a key
-// of its fixed scale. Reject anything off-scale (don't silently drop) so the editor surfaces it.
-const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
-function validateTheme(input: unknown): ThemeTokens {
-  if (!input || typeof input !== 'object') throw new Error('theme must be an object');
-  const t = input as Record<string, unknown>;
-  const pick = (key: string, scale: Record<string, string>): string | undefined => {
-    const v = t[key];
-    if (v == null) return undefined;
-    if (typeof v !== 'string' || !(v in scale)) throw new Error(`invalid ${key}`);
-    return v;
-  };
-  if (t.color != null && (typeof t.color !== 'string' || !HEX.test(t.color)))
-    throw new Error('color must be a hex value');
-  return {
-    color: typeof t.color === 'string' ? t.color : undefined,
-    bodyFont: pick('bodyFont', FONTS),
-    headingFont: pick('headingFont', FONTS),
-    baseSize: pick('baseSize', BASE_SIZE),
-    radius: pick('radius', RADIUS),
-    container: pick('container', CONTAINER),
-  };
 }
 
 // Reserved platform labels: infra + auth surfaces that must never be self-served on the
@@ -583,143 +557,8 @@ export function createApp(
     return c.json({ entries });
   });
 
-  // The store's collections, for the editor's collection picker. Builds the tenant's commerce client
-  // (env service URLs + the tenant's own merchantId) and returns the CANONICAL collections envelope-
-  // navigated only — no shaping here (the SPA maps to {handle,title}). Empty when not connected.
-  app.get('/stores/:id/collections', requireMembership, async (c) => {
-    const urls = commerceUrlsFromEnv(process.env);
-    if (!urls) return c.json({ collections: [] });
-    const tenant = await forTenant(c.req.param('id')).getTenant();
-    const client = buildCustomClient(tenant?.commerce, urls);
-    if (!client) return c.json({ collections: [] });
-    const res = await client.getCollections({ first: 100 });
-    const data = res?.data;
-    const collections = Array.isArray(data) ? data : (data?.collections ?? []);
-    return c.json({ collections });
-  });
-
-  // The store's storefront theme (global style knobs) — read by the Theme Settings panel.
-  app.get('/stores/:id/theme', requireMembership, async (c) => {
-    const tenant = await forTenant(c.req.param('id')).getTenant();
-    if (!tenant) return c.json({ error: 'not found' }, 404);
-    return c.json({ theme: tenant.theme ?? {} });
-  });
-
-  // Save the theme. Validated against the fixed scales, persisted, then the tenant's pages are
-  // purged — the theme is baked into every cached shell, so a change invalidates all of them.
-  app.put('/stores/:id/theme', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    let theme: ThemeTokens;
-    try {
-      theme = validateTheme(await c.req.json().catch(() => ({})));
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'invalid theme' }, 400);
-    }
-    await forTenant(id).setTheme(theme);
-    await purgeEdgeTags([tenantTag(id)]); // local dev edge-sim (by tag)
-    // Prod: theme is baked into every page's shell, so purge all the store's page URLs.
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
-    c.set('auditTenant', id);
-    return c.json({ ok: true, theme, ...(edgePurged !== null && { edgePurged }) });
-  });
-
-  // Theme version history + the current published pointer (ADR-013 §13).
-  app.get('/stores/:id/theme/versions', requireMembership, async (c) => {
-    const id = c.req.param('id');
-    const [versions, published] = await Promise.all([
-      themeStore.listVersions(id),
-      themeStore.publishedVersion(id),
-    ]);
-    return c.json({ published, versions });
-  });
-
-  // Publish the whole theme atomically (promote drafts→live + snapshot an immutable version).
-  // Owner-only. `expectedBase` (the version the editor loaded) enables optimistic concurrency → 409.
-  app.post('/stores/:id/theme/publish', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as {
-      note?: string;
-      expectedBase?: number | null;
-    };
-    let result: { version: number };
-    try {
-      result = await themeStore.publishTheme(id, {
-        by: c.get('userId'),
-        note: body.note,
-        expectedBase: body.expectedBase,
-      });
-    } catch (e) {
-      if (e instanceof ThemeConflict)
-        return c.json({ error: e.message, expected: e.expected, actual: e.actual }, 409);
-      throw e;
-    }
-    await purgeEdgeTags([tenantTag(id)]);
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
-    c.set('auditTenant', id);
-    return c.json({
-      ok: true,
-      version: result.version,
-      ...(edgePurged !== null && { edgePurged }),
-    });
-  });
-
-  // Roll back to an earlier published version (repoint + restore live state). Owner-only.
-  app.post('/stores/:id/theme/rollback', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as { version?: number };
-    if (typeof body.version !== 'number')
-      return c.json({ error: 'version (number) is required' }, 400);
-    let result: { version: number };
-    try {
-      result = await themeStore.rollbackTheme(id, body.version);
-    } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'rollback failed' }, 404);
-    }
-    await purgeEdgeTags([tenantTag(id)]);
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
-    c.set('auditTenant', id);
-    return c.json({
-      ok: true,
-      version: result.version,
-      ...(edgePurged !== null && { edgePurged }),
-    });
-  });
-
-  // Commerce backend connection: the GoKwik merchant id that powers products/collections/cart.
-  app.get('/stores/:id/commerce', requireMembership, async (c) => {
-    const tenant = await forTenant(c.req.param('id')).getTenant();
-    if (!tenant) return c.json({ error: 'not found' }, 404);
-    return c.json({ merchantId: tenant.commerce?.merchantId ?? '' });
-  });
-
-  // Connect/update (or disconnect with an empty id) the commerce backend. Owner-only. Purge the
-  // store's pages — product/collection data is baked into the cached shells.
-  app.put('/stores/:id/commerce', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as { merchantId?: string };
-    const merchantId = String(body.merchantId ?? '').trim();
-    await forTenant(id).setCommerce(merchantId ? { merchantId } : null);
-    await purgeEdgeTags([tenantTag(id)]); // local dev edge-sim (by tag)
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
-    c.set('auditTenant', id);
-    return c.json({ ok: true, merchantId, ...(edgePurged !== null && { edgePurged }) });
-  });
+  // Store settings — theme, theme versions (§13), commerce, collections (routes/store-settings.ts).
+  app.route('/', storeSettingsRoutes({ pbStore, themeStore, purgeEdgeTags, purgeStoreUrls }));
 
   // --- Page builder (ADR-013 / D4 draft->publish). The editor's write surface: save a draft
   // (validated + version-pinned, live page untouched), then publish to promote draft->live and
