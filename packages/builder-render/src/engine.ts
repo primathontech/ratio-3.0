@@ -8,7 +8,17 @@
 // language surface (Liquid) removes the prototype-escape class; that's why Liquid, not Handlebars.
 
 import { Liquid } from 'liquidjs';
-import { createHash } from 'node:crypto';
+// A tiny non-crypto string hash (FNV-1a, 32-bit) for the compile-cache key. It only needs to be
+// stable + collision-cheap for template SOURCE, not cryptographic — and staying off node:crypto
+// keeps this renderer runnable on Cloudflare Workers (no Node built-ins) unchanged.
+function fnv1a(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
 
 export interface EngineLimits {
   renderLimit: number; // ms of render CPU before Liquid aborts
@@ -110,7 +120,7 @@ interface Compiled {
 const cache = new Map<string, Compiled>();
 
 function key(trusted: boolean, source: string): string {
-  return (trusted ? 't:' : 'u:') + createHash('sha256').update(source).digest('hex');
+  return (trusted ? 't:' : 'u:') + fnv1a(source);
 }
 
 // Compile once, reuse. Parse errors (bad syntax, disallowed filter, oversized source) throw here.
