@@ -51,19 +51,29 @@ app.use('*', async (c, next) => {
   // (proxyInit) and bound on the access-log line, so edge + origin logs join for the same request.
   const reqId = sanitizeReqId(c.req.header('x-request-id')) ?? crypto.randomUUID();
   c.set('reqId', reqId);
-  await next();
-  const common = {
-    tenantId: c.get('tenantId') ?? null,
-    status: c.res.status,
-    stale: c.res.headers.get('x-ratio-stale') === '1',
-    ms: Date.now() - start,
-  };
-  const path = new URL(c.req.url).pathname;
-  edgeLog
-    .child({ reqId })
-    .info(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
-  // Durable, queryable per-tenant metrics — no-op if the dataset isn't bound (local / unprovisioned).
-  c.env.METRICS?.writeDataPoint(buildMetricPoint({ ...common, path }));
+  let threw = false;
+  try {
+    await next();
+  } catch (e) {
+    threw = true;
+    throw e; // re-raise so app.onError still returns the branded 503
+  } finally {
+    // Log in a finally so a downstream throw is still recorded (otherwise the throw propagates past
+    // this line and the failed request never hits the access log). On a throw the response isn't built
+    // yet, so log the status app.onError will set (503, storeUnavailable) rather than the stale default.
+    const common = {
+      tenantId: c.get('tenantId') ?? null,
+      status: threw ? 503 : c.res.status,
+      stale: c.res.headers.get('x-ratio-stale') === '1',
+      ms: Date.now() - start,
+    };
+    const path = new URL(c.req.url).pathname;
+    edgeLog
+      .child({ reqId })
+      .info(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
+    // Durable, queryable per-tenant metrics — no-op if the dataset isn't bound (local / unprovisioned).
+    c.env.METRICS?.writeDataPoint(buildMetricPoint({ ...common, path }));
+  }
 });
 
 app.get('/health', (c) => c.json({ status: 'ok' }));

@@ -57,6 +57,22 @@ test('D-R8: exactly one access record is emitted per request, and no secrets lea
   assert.doesNotMatch(access[0], /token|abc123/, 'query string must not leak');
 });
 
+test('D-R8: a request that throws is still logged once, with the branded 503 status', async () => {
+  const lines: string[] = [];
+  const orig = console.log;
+  console.log = (...args: unknown[]) => lines.push(args.map(String).join(' '));
+  try {
+    // Empty env → resolveTenant's neon(undefined) throws → app.onError → 503. The middleware logs in a
+    // finally, so the failed request must NOT slip past the access log (that's the blind spot we fixed).
+    await app.fetch(new Request('https://acme.example/'), {} as never);
+  } finally {
+    console.log = orig;
+  }
+  const access = lines.filter((l) => l.includes('"t":"access"'));
+  assert.strictEqual(access.length, 1, 'the failed request is logged exactly once');
+  assert.strictEqual(JSON.parse(access[0]).status, 503);
+});
+
 test('a valid incoming x-request-id is adopted as the correlation id; junk is dropped + minted', async () => {
   const grab = async (id: string) => {
     const lines: string[] = [];
