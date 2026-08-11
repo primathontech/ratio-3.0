@@ -29,6 +29,9 @@ function ttlSeconds(res: Response): number | null {
   return m ? Number(m[1]) : null;
 }
 function isCacheable(res: Response): boolean {
+  // A response that sets a cookie is per-user by definition — it must never enter a shared cache that
+  // read-through then serves to everyone. Enforce it here rather than trusting the cache backend to.
+  if (res.headers.has('set-cookie')) return false;
   const ttl = ttlSeconds(res);
   return ttl !== null && ttl > 0;
 }

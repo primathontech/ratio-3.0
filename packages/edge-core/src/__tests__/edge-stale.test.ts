@@ -294,3 +294,20 @@ test('read-through never caches a no-store response (per-user /cart must not be 
   await fetchViaOrigin(req, 'https://origin/cart', { method: 'GET' }, cache, origin);
   assert.strictEqual(await cache.match(req), undefined, 'a no-store page must never be stored');
 });
+
+test('a Set-Cookie response is never cached even if it declares a TTL (per-user leak guard)', async () => {
+  const req = new Request('https://shop.example/');
+  const cache = memCache();
+  const origin = (async () =>
+    new Response('personalized', {
+      status: 200,
+      headers: { 'cache-control': 'public, s-maxage=300', 'set-cookie': 'sid=user-A' },
+    })) as unknown as typeof fetch;
+
+  await fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, origin);
+  assert.strictEqual(
+    await cache.match(req),
+    undefined,
+    'a Set-Cookie response must never be shared'
+  );
+});
