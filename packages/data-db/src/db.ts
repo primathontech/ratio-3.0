@@ -5,6 +5,13 @@ export interface DbConfig {
   // Managed Postgres (Neon) requires a VERIFIED TLS cert (H-4). insecureTls is an emergency-only
   // escape hatch (OFCE-407); the app decides it from its own env, never this library.
   insecureTls?: boolean;
+  // Pool lifetime — injected by the app because it depends on the process kind. A long-running
+  // service (origin) wants idle connections HELD (idleTimeoutMillis: 0) + TCP keepAlive so a normal
+  // traffic gap doesn't drop the connection: reopening one costs a TLS handshake + Neon compute wake
+  // (~1.3s), and that spike on a request's first query is what pushed renders past the edge timeout.
+  // A short-lived script/test leaves these unset so pg's default (10s idle close) still lets it exit.
+  idleTimeoutMillis?: number;
+  keepAlive?: boolean;
 }
 
 // This package is `type: module`, but its CommonJS importers (scripts, tests) load it through a
@@ -38,6 +45,10 @@ function real(): Pool {
   state.pool = new Pool({
     connectionString: state.config.connectionString,
     ssl: managedTls ? { rejectUnauthorized: !state.config.insecureTls } : undefined,
+    // Unset → pg defaults (10s idle close) so scripts/tests still exit. A service injects 0 + keepAlive
+    // to hold the connection through traffic gaps and avoid the reconnect-spike (see DbConfig).
+    idleTimeoutMillis: state.config.idleTimeoutMillis,
+    keepAlive: state.config.keepAlive,
   });
   // An idle client can emit 'error' (e.g. Neon drops it). With no listener Node crashes; the pool
   // discards the bad client on its own, so we only observe it (L-3).

@@ -46,8 +46,16 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   });
 }
 
-// Inject DB config before serving; the pool opens lazily on the first query.
-configureDb({ connectionString: config.databaseUrl, insecureTls: config.insecureTls });
+// Inject DB config before serving; the pool opens lazily on the first query. The origin is
+// long-running, so hold idle connections (idleTimeoutMillis: 0) and TCP-keepalive them — a dropped
+// connection's reconnect (TLS + Neon compute wake ~1.3s) on a request's first query was pushing
+// renders past the edge read timeout, surfacing as random "temporarily unavailable" 503s.
+configureDb({
+  connectionString: config.databaseUrl,
+  insecureTls: config.insecureTls,
+  idleTimeoutMillis: 0,
+  keepAlive: true,
+});
 
 // Fail fast: refuse to boot in production without a real edge secret (H2 hardening).
 resolveEdgeSecret(process.env);
