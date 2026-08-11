@@ -5,14 +5,10 @@ import { pool } from '@ratio/data-db';
 import { esc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
-import { resolvePage, StubResolver } from '@ratio/builder-core';
+import { resolvePage } from '@ratio/builder-core';
 import { fetchMainMenu, renderHeader } from '@ratio/builder-core';
 import { fetchFooter, renderFooter } from '@ratio/builder-core';
-import {
-  commerceResolverFromEnv,
-  buildCustomClient,
-  commerceUrlsFromEnv,
-} from '@ratio/builder-core';
+import { storefrontResolver, buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { storefrontHead } from '@ratio/builder-core';
 import {
   CartService,
@@ -67,10 +63,11 @@ const pbRegistry = defaultRegistry();
 // isolate (D40). Injecting it here keeps @ratio/builder-registry itself edge-safe (no static
 // worker_threads import) — a Worker simply never wires this and renders trusted sections only.
 setUntrustedRenderer(renderUntrusted);
-// Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
+// Data-binding resolver (the renderer's 2nd input). The real @shopkit/data-layer custom-backend
 // resolver when COMMERCE_* env is configured; otherwise the StubResolver (deterministic samples) so
-// local dev renders without a backend.
-const resolver = commerceResolverFromEnv(process.env) ?? new StubResolver();
+// local dev renders without a backend — but in production a missing COMMERCE_* throws here rather
+// than silently serving sample data (see storefrontResolver).
+const resolver = storefrontResolver(process.env);
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the backstop that
 // contains any HTML/color injection that slips through content validation; inline <style> is the

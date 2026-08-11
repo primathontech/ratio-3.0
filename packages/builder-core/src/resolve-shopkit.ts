@@ -6,6 +6,7 @@
 
 import { createCommerceClient } from '@shopkit/data-layer';
 import type { ICommerceClient, ICustomConfig, IResponse } from '@shopkit/data-layer';
+import { StubResolver } from './resolve';
 import type { BindingResolver, ResolveContext, ResolvedSource } from './resolve';
 import type { DataSource } from './doc';
 import { DATA_SOURCE_TYPES } from './doc';
@@ -126,4 +127,20 @@ export function customCommerceResolver(urls: CustomBackendUrls): ShopkitResolver
 export function commerceResolverFromEnv(env: NodeJS.ProcessEnv): ShopkitResolver | null {
   const urls = commerceUrlsFromEnv(env);
   return urls ? customCommerceResolver(urls) : null;
+}
+
+// The origin's resolver. The real resolver needs the platform URLs; without them we'd serve
+// StubResolver sample data. That's the intended convenience for local dev, but in PRODUCTION it's a
+// silent misconfiguration wearing a working storefront (the ratioproduction "Sample product N"
+// incident) — so refuse to boot rather than serve fake products. Anything other than production
+// (local, CI, tests) keeps the stub fallback.
+export function storefrontResolver(env: NodeJS.ProcessEnv): BindingResolver {
+  const real = commerceResolverFromEnv(env);
+  if (real) return real;
+  if (env.NODE_ENV === 'production') {
+    throw new Error(
+      'COMMERCE_*_API_URL is not configured — refusing to boot the origin with StubResolver sample data in production'
+    );
+  }
+  return new StubResolver();
 }
