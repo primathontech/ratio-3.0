@@ -22,7 +22,10 @@ export function proxyInit(
   // Forward the edge's request id so the origin's logs (and, later, traces) join to the edge access
   // log for the same request. The edge already validated/minted it (never the raw client header here).
   if (reqId) headers.set('x-request-id', reqId);
-  for (const h of ['content-type', 'accept', 'accept-language']) {
+  // 'cookie' carries the cart token (rt_cart) the origin reads on /cart, /checkout and cart writes;
+  // without it the origin is cookieless and every cart reads empty (the redirect: 'manual' below only
+  // gets the Set-Cookie to the browser — this gets the browser's cookie back to the origin).
+  for (const h of ['content-type', 'accept', 'accept-language', 'cookie']) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);
   }

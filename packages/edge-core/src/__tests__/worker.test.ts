@@ -87,6 +87,18 @@ test('proxyInit: forwards the edge reqId to the origin as x-request-id (edge↔o
   assert.strictEqual((without.headers as Headers).get('x-request-id'), null); // absent when not passed
 });
 
+test('proxyInit: forwards the client Cookie to the origin (cart-token round-trip)', () => {
+  // The origin reads the cart token from the rt_cart cookie. If the edge doesn't forward Cookie, the
+  // origin sees no token on GET /cart → readCartToken returns null → the cart renders empty even
+  // though the shopper just added an item. Local dev hits the origin directly (cookie flows), which is
+  // why this only bit in prod, where the edge sits in the path.
+  const req = new Request('http://edge/cart', {
+    headers: { cookie: 'rt_cart=tok-abc; go_sid=xyz' },
+  });
+  const h = proxyInit(req, 't_real', 'real-secret').headers as Headers;
+  assert.strictEqual(h.get('cookie'), 'rt_cart=tok-abc; go_sid=xyz');
+});
+
 test('proxyInit: passes origin redirects through to the browser instead of following them', () => {
   // A cart write answers 303 → /cart with the cart cookie. If the edge fetch FOLLOWS it (the fetch
   // default), the Set-Cookie is swallowed and the followed GET /cart is cookieless → empty cart.
