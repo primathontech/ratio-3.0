@@ -140,17 +140,19 @@ function cartBackendFor(commerce: CartTenant['commerce']): CartBackend | null {
 }
 
 async function renderCartResponse(
-  c: Context,
+  c: Context<Vars>,
   tenant: CartTenant,
   tenantId: string,
   cart: Cart
 ): Promise<Response> {
   const merchantId = tenant.commerce?.merchantId ?? '';
   const ix = composeGokwik(integrationContext(tenant.commerce, 'cart'));
-  const [menu, footer] = await Promise.all([
-    fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-  ]);
+  const [menu, footer] = await timed(c, 'nav', () =>
+    Promise.all([
+      fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+      fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+    ])
+  );
   const html = renderCartPage(cart, {
     siteName: tenant.name,
     styleHead: storefrontHead((tenant.theme ?? {}) as never),
@@ -169,7 +171,7 @@ async function renderCartResponse(
 // Order confirmation (thank-you) page. The checkout SDK redirects here after order-complete with the
 // order id/total/payment in the query; render them and expire the (now-spent) cart cookie.
 async function renderOrderResponse(
-  c: Context,
+  c: Context<Vars>,
   tenant: CartTenant,
   tenantId: string
 ): Promise<Response> {
@@ -177,10 +179,12 @@ async function renderOrderResponse(
   const url = new URL(c.req.url);
   const rawTotal = Number(url.searchParams.get('total'));
   const ix = composeGokwik(integrationContext(tenant.commerce, 'order'));
-  const [menu, footer] = await Promise.all([
-    fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-  ]);
+  const [menu, footer] = await timed(c, 'nav', () =>
+    Promise.all([
+      fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+      fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+    ])
+  );
   const html = renderOrderPage(
     {
       id: url.searchParams.get('id') ?? '',
@@ -295,8 +299,22 @@ async function handleCart(
   return renderCartResponse(c, tenant, tenantId, cart);
 }
 
-type Vars = { Variables: { reqId: string; log: ReqLog } };
+type Vars = { Variables: { reqId: string; log: ReqLog; timings: Record<string, number> } };
 export const app = new Hono<Vars>();
+
+// Time a labeled async step and accumulate its ms into the request's timing bag, emitted on the
+// `render` access log. Lets us see where the origin's wall-clock goes (db vs commerce data vs nav vs
+// compose) straight from the logs, without a tracing backend wired.
+async function timed<T>(c: Context<Vars>, key: string, fn: () => Promise<T>): Promise<T> {
+  const started = Date.now();
+  try {
+    return await fn();
+  } finally {
+    const bag = c.get('timings') ?? {};
+    bag[key] = (bag[key] ?? 0) + (Date.now() - started);
+    c.set('timings', bag);
+  }
+}
 
 // Per-request correlation. Adopt the edge's id (x-request-id, or the traceparent trace-id) so origin
 // logs correlate with the edge access log; otherwise mint one. Bind it on a child logger for every
@@ -311,7 +329,9 @@ app.use('*', async (c, next) => {
     randomUUID();
   c.set('reqId', reqId);
   c.set('log', requestLog(logger, reqId));
+  c.set('timings', {});
   c.header('x-request-id', reqId);
+  const started = Date.now();
   // Continue the edge's trace (W3C traceparent) so edge→origin→GoKwik is one trace; child spans
   // (the GoKwik calls below) nest under this. No-op when tracing is off (no OTLP endpoint).
   await withRequestSpan(
@@ -323,6 +343,16 @@ app.use('*', async (c, next) => {
       span.setAttribute('http.response.status_code', c.res.status); // so SigNoz can see 4xx/5xx
     }
   );
+  // One access record per request with the render wall-clock and its breakdown (db/data/nav/compose),
+  // so the origin's latency is readable straight from the logs. `ms` is the total; the timing bag
+  // keys are the steps that ran for this path (a cached/404/reserved path has fewer).
+  c.get('log').info({
+    evt: 'render',
+    path: new URL(c.req.url).pathname,
+    status: c.res.status,
+    ms: Date.now() - started,
+    ...c.get('timings'),
+  });
 });
 
 // Don't leak internal error strings to the customer-facing storefront in production.
@@ -388,7 +418,7 @@ app.all('*', async (c) => {
   }
 
   const repo = forTenant(tenantId as string); // throws (deny-by-default) if absent
-  const tenant = await repo.getTenant();
+  const tenant = await timed(c, 'db_tenant', () => repo.getTenant());
   if (!tenant) {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
@@ -466,43 +496,50 @@ app.all('*', async (c) => {
     // template serves it (one Collection template for every /collections/:handle, etc.). An
     // unrecognized path with a doc of its own still renders (pageType 'page').
     const matched: RouteMatch | null = matchRoute(canon);
-    let doc = await pageStore.getLive(tenantId as string, canon);
+    let doc = await timed(c, 'db_page', () => pageStore.getLive(tenantId as string, canon));
     let fromTemplate = false;
     if (!doc && matched && matched.templateKey !== canon) {
-      doc = await pageStore.getLive(tenantId as string, matched.templateKey);
+      doc = await timed(c, 'db_page', () =>
+        pageStore.getLive(tenantId as string, matched.templateKey)
+      );
       fromTemplate = true;
     }
     if (doc) {
       renders++; // the expensive path — a cache HIT must not reach here
       // Resolve data sources (collection/product) via the CMS, interpolating the router's params
       // ({{params.handle}}), then compose. composePage stays pure — data goes in already resolved.
-      const { doc: resolvedDoc, tags: dataTags } = await resolvePage(doc, pbRegistry, resolver, {
-        tenantId: tenantId as string,
-        routeParams: matched?.params,
-        commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
-      });
+      const { doc: resolvedDoc, tags: dataTags } = await timed(c, 'data', () =>
+        resolvePage(doc!, pbRegistry, resolver, {
+          tenantId: tenantId as string,
+          routeParams: matched?.params,
+          commerce: tenant.commerce, // per-merchant data-layer creds (from the tenant record)
+        })
+      );
       // Header nav is chrome (ours), its menu is DATA (commerce backend, per-tenant). fetchMainMenu
       // returns the live menu, or the JSON fallback on any failure (unconfigured / no menu / error).
       // Static, so it rides the tenantTag (a menu change purges the store's pages).
-      const menu = await fetchMainMenu(
-        tenant.commerce?.merchantId ?? '',
-        process.env.COMMERCE_NAV_API_URL ?? ''
-      );
-      // Footer is chrome too (ours), its menu is DATA (per-tenant). fetchFooter returns the live
-      // footer menu, or the JSON fallback on any failure (unconfigured / no menu / error).
-      const footer = await fetchFooter(
-        tenant.commerce?.merchantId ?? '',
-        process.env.COMMERCE_NAV_API_URL ?? ''
-      );
-      const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
-      const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
-        menu,
-        footer,
-        siteName: tenant.name,
-        headExtra: ix.head,
-        bodyEnd: ix.bodyEnd,
-        islandsRuntimeUrl: ISLANDS_URL,
+      const [menu, footer] = await timed(c, 'nav', async () => {
+        const m = await fetchMainMenu(
+          tenant.commerce?.merchantId ?? '',
+          process.env.COMMERCE_NAV_API_URL ?? ''
+        );
+        const f = await fetchFooter(
+          tenant.commerce?.merchantId ?? '',
+          process.env.COMMERCE_NAV_API_URL ?? ''
+        );
+        return [m, f] as const;
       });
+      const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
+      const composed = await timed(c, 'compose', () =>
+        composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
+          menu,
+          footer,
+          siteName: tenant.name,
+          headExtra: ix.head,
+          bodyEnd: ix.bodyEnd,
+          islandsRuntimeUrl: ISLANDS_URL,
+        })
+      );
       c.header('x-tenant', tenantId as string);
       c.header('x-handler', 'page-builder');
       c.header('x-page-type', matched?.pageType ?? 'page');
