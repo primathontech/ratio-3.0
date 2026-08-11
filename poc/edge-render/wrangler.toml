@@ -1,0 +1,11 @@
+name = "ofce491-edge-render-poc"
+main = "worker.ts"
+compatibility_date = "2026-01-01"
+# Intentionally NO `nodejs_compat` flag: this proves the trusted render path (composePage →
+# registry → LiquidJS) needs zero Node built-ins to run on Workers. If a node: import leaked in,
+# the worker would fail to start.
+
+# LiquidJS's DEFAULT export is its Node build (pulls in stream/string_decoder). Point it at the
+# browser/edge ESM build instead — the OFCE-491 finding: use liquid.browser.mjs on Workers.
+[alias]
+liquidjs = "liquidjs/dist/liquid.browser.mjs"
