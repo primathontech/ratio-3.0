@@ -14,6 +14,38 @@ function markStale(res: Response): Response {
   h.set('x-ratio-stale', '1');
   return new Response(res.body, { status: res.status, headers: h });
 }
+
+// Cacheability + freshness (read-through). A response is edge-cacheable only if it declares a positive
+// shared TTL (s-maxage, else max-age) — which excludes every no-store page (they carry none), so a
+// per-user /cart or /order is never stored or served from a shared cache. `x-ratio-cached-at` is the
+// wall-clock stamp written on put; freshness compares its age against the TTL, so only a still-fresh
+// copy short-circuits the origin (a stale one falls through to revalidate, and is served ONLY on a
+// later origin failure via markStale). The stamp is an internal header, stripped before the client.
+const CACHED_AT = 'x-ratio-cached-at';
+function ttlSeconds(res: Response): number | null {
+  const cc = res.headers.get('cache-control') ?? '';
+  if (/\b(no-store|private)\b/.test(cc)) return null;
+  const m = /\bs-maxage=(\d+)/.exec(cc) ?? /\bmax-age=(\d+)/.exec(cc);
+  return m ? Number(m[1]) : null;
+}
+function isCacheable(res: Response): boolean {
+  // A response that sets a cookie is per-user by definition — it must never enter a shared cache that
+  // read-through then serves to everyone. Enforce it here rather than trusting the cache backend to.
+  if (res.headers.has('set-cookie')) return false;
+  const ttl = ttlSeconds(res);
+  return ttl !== null && ttl > 0;
+}
+function stampCachedAt(res: Response, now: number): Response {
+  const h = new Headers(res.headers);
+  h.set(CACHED_AT, String(now));
+  return new Response(res.body, { status: res.status, headers: h });
+}
+function isFresh(res: Response, now: number): boolean {
+  const ttl = ttlSeconds(res);
+  const at = Number(res.headers.get(CACHED_AT));
+  if (ttl === null || !at) return false;
+  return (now - at) / 1000 < ttl;
+}
 // Origin call budget (ADR-008 D-R3). A hung origin (slow, not dead) is the common failure —
 // without a deadline the edge request hangs with it. Aborting on timeout turns "hung" into a
 // rejection, which the stale-if-error catch below already handles → the cached page serves fast.
@@ -34,6 +66,7 @@ export async function fetchViaOrigin(
 ): Promise<Response> {
   const isRead = req.method === 'GET' || req.method === 'HEAD';
   const canServeStale = isRead && !!cache;
+  const now = Date.now();
   // Reads race the read-survival budget (abort fast → serve stale); writes get a real budget.
   const budgetMs = isRead ? timeoutMs : ORIGIN_WRITE_TIMEOUT_MS;
   const serveStale = async (): Promise<Response | null> => {
@@ -41,6 +74,14 @@ export async function fetchViaOrigin(
     const stale = await cache!.match(req);
     return stale ? markStale(stale) : null;
   };
+
+  // Read-through: a still-FRESH cached copy serves without touching the origin — repeat views are
+  // edge-fast and the origin is shielded from the read-timeout entirely. A miss or a stale copy falls
+  // through to revalidate below (a stale copy is only served later on an actual origin failure).
+  if (canServeStale) {
+    const hit = await cache!.match(req);
+    if (hit && isFresh(hit, now)) return hit;
+  }
 
   // Breaker open → don't even attempt the dead origin; serve stale now, skipping the timeout wait.
   if (breaker && !breaker.canAttempt()) {
@@ -59,10 +100,12 @@ export async function fetchViaOrigin(
       if (stale) return stale;
     } else {
       breaker?.onSuccess();
-      if (canServeStale && res.ok) {
-        // put rejects on no-store / Set-Cookie responses — those simply aren't stale-servable.
+      // Store ONLY genuinely cacheable responses (a positive shared TTL) — never a no-store per-user
+      // page. Stamp the cache time so the read-through above can judge freshness. (put can still reject
+      // e.g. a Set-Cookie response; that's fine — it simply won't be cached.)
+      if (canServeStale && res.ok && isCacheable(res)) {
         try {
-          await cache!.put(req, res.clone());
+          await cache!.put(req, stampCachedAt(res.clone(), now));
         } catch {
           /* uncacheable — skip */
         }

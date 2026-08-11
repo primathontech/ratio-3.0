@@ -52,6 +52,7 @@ const INTERNAL_HEADERS = [
   'x-surrogate-keys',
   'x-render-count',
   'x-handler',
+  'x-ratio-cached-at', // internal freshness stamp for the read-through cache; never expose it
 ];
 export function publicHeaders(h: Headers): Headers {
   const out = new Headers(h);

@@ -233,3 +233,81 @@ test('a successful GET is stored so it can be served stale later', async () => {
   assert.strictEqual(await res.text(), 'fresh');
   assert.ok(await cache.match(req), 'response should be cached for stale fallback');
 });
+
+// ── Read-through (S4 Tier-1 upgrade): a FRESH cacheable copy serves without touching the origin, so
+// repeat views are edge-fast and the origin is shielded from the read-timeout entirely. ──
+const cacheableRes = (body: string, opts: { ageMs?: number; ttl?: number } = {}) =>
+  new Response(body, {
+    status: 200,
+    headers: {
+      'cache-control': `public, s-maxage=${opts.ttl ?? 300}, stale-while-revalidate=86400`,
+      // The freshness stamp fetchViaOrigin writes on put; seed it here to simulate an aged entry.
+      'x-ratio-cached-at': String(Date.now() - (opts.ageMs ?? 0)),
+    },
+  });
+
+test('read-through: a FRESH cacheable copy is served without calling the origin', async () => {
+  const req = new Request('https://shop.example/');
+  const cache = memCache({
+    req,
+    res: cacheableRes('<h1>cached</h1>', { ageMs: 10_000, ttl: 300 }),
+  });
+  let calls = 0;
+  const origin = (async () => {
+    calls += 1;
+    return new Response('origin', { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const res = await fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, origin);
+  assert.strictEqual(calls, 0, 'a fresh cache hit must NOT call the origin');
+  assert.strictEqual(await res.text(), '<h1>cached</h1>');
+});
+
+test('read-through: a STALE copy does not short-circuit — the origin is called for fresh content', async () => {
+  const req = new Request('https://shop.example/');
+  // 400s old but only 300s fresh → stale; must re-fetch rather than serve as fresh.
+  const cache = memCache({ req, res: cacheableRes('old', { ageMs: 400_000, ttl: 300 }) });
+  let calls = 0;
+  const origin = (async () => {
+    calls += 1;
+    return new Response('new', {
+      status: 200,
+      headers: { 'cache-control': 'public, s-maxage=300' },
+    });
+  }) as unknown as typeof fetch;
+
+  const res = await fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, origin);
+  assert.strictEqual(calls, 1, 'a stale copy must not be served as fresh');
+  assert.strictEqual(await res.text(), 'new');
+});
+
+test('read-through never caches a no-store response (per-user /cart must not be shared)', async () => {
+  const req = new Request('https://shop.example/cart');
+  const cache = memCache();
+  // A no-store page carries no Cache-Control TTL (only the origin's internal x-cache, stripped later).
+  const origin = (async () =>
+    new Response('user cart', {
+      status: 200,
+      headers: { 'x-cache': 'no-store' },
+    })) as unknown as typeof fetch;
+
+  await fetchViaOrigin(req, 'https://origin/cart', { method: 'GET' }, cache, origin);
+  assert.strictEqual(await cache.match(req), undefined, 'a no-store page must never be stored');
+});
+
+test('a Set-Cookie response is never cached even if it declares a TTL (per-user leak guard)', async () => {
+  const req = new Request('https://shop.example/');
+  const cache = memCache();
+  const origin = (async () =>
+    new Response('personalized', {
+      status: 200,
+      headers: { 'cache-control': 'public, s-maxage=300', 'set-cookie': 'sid=user-A' },
+    })) as unknown as typeof fetch;
+
+  await fetchViaOrigin(req, 'https://origin/', { method: 'GET' }, cache, origin);
+  assert.strictEqual(
+    await cache.match(req),
+    undefined,
+    'a Set-Cookie response must never be shared'
+  );
+});
