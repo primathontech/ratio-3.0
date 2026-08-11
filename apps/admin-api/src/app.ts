@@ -19,6 +19,7 @@ import { config } from './config';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
+import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
 import { scaffoldStorefront } from '@ratio/builder-core';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
@@ -101,6 +102,7 @@ async function purgeStoreUrls(id: string, paths: string[]): Promise<boolean | nu
 // Page-builder authoring (draft -> publish, D4): publish purges by the EXACT surrogate tag the
 // origin stamps on a page-builder response, so it invalidates precisely that page.
 const pbStore = new PgPageStore();
+const themeStore = new PgThemeStore();
 const pbRegistry = defaultRegistry();
 const pbPurge: PurgeLike = { invalidateByTags: (tags) => purgeEdgeTags(tags) };
 const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
@@ -623,6 +625,76 @@ export function createApp(
     );
     c.set('auditTenant', id);
     return c.json({ ok: true, theme, ...(edgePurged !== null && { edgePurged }) });
+  });
+
+  // Theme version history + the current published pointer (ADR-013 §13).
+  app.get('/stores/:id/theme/versions', requireMembership, async (c) => {
+    const id = c.req.param('id');
+    const [versions, published] = await Promise.all([
+      themeStore.listVersions(id),
+      themeStore.publishedVersion(id),
+    ]);
+    return c.json({ published, versions });
+  });
+
+  // Publish the whole theme atomically (promote drafts→live + snapshot an immutable version).
+  // Owner-only. `expectedBase` (the version the editor loaded) enables optimistic concurrency → 409.
+  app.post('/stores/:id/theme/publish', requireRole('owner'), async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      note?: string;
+      expectedBase?: number | null;
+    };
+    let result: { version: number };
+    try {
+      result = await themeStore.publishTheme(id, {
+        by: c.get('userId'),
+        note: body.note,
+        expectedBase: body.expectedBase,
+      });
+    } catch (e) {
+      if (e instanceof ThemeConflict)
+        return c.json({ error: e.message, expected: e.expected, actual: e.actual }, 409);
+      throw e;
+    }
+    await purgeEdgeTags([tenantTag(id)]);
+    const pages = await pbStore.listPages(id);
+    const edgePurged = await purgeStoreUrls(
+      id,
+      pages.map((p) => p.path)
+    );
+    c.set('auditTenant', id);
+    return c.json({
+      ok: true,
+      version: result.version,
+      ...(edgePurged !== null && { edgePurged }),
+    });
+  });
+
+  // Roll back to an earlier published version (repoint + restore live state). Owner-only.
+  app.post('/stores/:id/theme/rollback', requireRole('owner'), async (c) => {
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { version?: number };
+    if (typeof body.version !== 'number')
+      return c.json({ error: 'version (number) is required' }, 400);
+    let result: { version: number };
+    try {
+      result = await themeStore.rollbackTheme(id, body.version);
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : 'rollback failed' }, 404);
+    }
+    await purgeEdgeTags([tenantTag(id)]);
+    const pages = await pbStore.listPages(id);
+    const edgePurged = await purgeStoreUrls(
+      id,
+      pages.map((p) => p.path)
+    );
+    c.set('auditTenant', id);
+    return c.json({
+      ok: true,
+      version: result.version,
+      ...(edgePurged !== null && { edgePurged }),
+    });
   });
 
   // Commerce backend connection: the GoKwik merchant id that powers products/collections/cart.
