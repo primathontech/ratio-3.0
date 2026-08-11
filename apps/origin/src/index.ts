@@ -332,27 +332,35 @@ app.use('*', async (c, next) => {
   c.set('timings', {});
   c.header('x-request-id', reqId);
   const started = Date.now();
-  // Continue the edge's trace (W3C traceparent) so edge→origin→GoKwik is one trace; child spans
-  // (the GoKwik calls below) nest under this. No-op when tracing is off (no OTLP endpoint).
-  await withRequestSpan(
-    'origin.request',
-    { 'ratio.reqId': reqId, 'http.request.method': c.req.method },
-    { traceparent: c.req.header('traceparent'), tracestate: c.req.header('tracestate') },
-    async (span) => {
-      await next();
-      span.setAttribute('http.response.status_code', c.res.status); // so SigNoz can see 4xx/5xx
-    }
-  );
-  // One access record per request with the render wall-clock and its breakdown (db/data/nav/compose),
-  // so the origin's latency is readable straight from the logs. `ms` is the total; the timing bag
-  // keys are the steps that ran for this path (a cached/404/reserved path has fewer).
-  c.get('log').info({
-    evt: 'render',
-    path: new URL(c.req.url).pathname,
-    status: c.res.status,
-    ms: Date.now() - started,
-    ...c.get('timings'),
-  });
+  let threw = false;
+  try {
+    // Continue the edge's trace (W3C traceparent) so edge→origin→GoKwik is one trace; child spans
+    // (the GoKwik calls below) nest under this. No-op when tracing is off (no OTLP endpoint).
+    await withRequestSpan(
+      'origin.request',
+      { 'ratio.reqId': reqId, 'http.request.method': c.req.method },
+      { traceparent: c.req.header('traceparent'), tracestate: c.req.header('tracestate') },
+      async (span) => {
+        await next();
+        span.setAttribute('http.response.status_code', c.res.status); // so SigNoz can see 4xx/5xx
+      }
+    );
+  } catch (e) {
+    threw = true;
+    throw e; // re-raise so app.onError still produces the branded response
+  } finally {
+    // One access record per request — on the throw path too, since a slow request that then fails is
+    // exactly what we want timed. `ms` is the total; the timing bag holds the steps that ran for this
+    // path (a cached/404/reserved path has fewer). On a throw the response isn't built yet, so log the
+    // status app.onError will set (500) rather than the stale default.
+    c.get('log').info({
+      evt: 'render',
+      path: new URL(c.req.url).pathname,
+      status: threw ? 500 : c.res.status,
+      ms: Date.now() - started,
+      ...c.get('timings'),
+    });
+  }
 });
 
 // Don't leak internal error strings to the customer-facing storefront in production.
