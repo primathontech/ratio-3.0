@@ -13,11 +13,15 @@ export function originTarget(base: string, path: string, search: string): string
 export function proxyInit(
   req: Request,
   tenantId: string,
-  edgeSecret: string
+  edgeSecret: string,
+  reqId?: string
 ): RequestInit & { duplex?: 'half' } {
   const method = req.method;
   const hasBody = method !== 'GET' && method !== 'HEAD';
   const headers = new Headers({ 'x-edge-auth': edgeSecret, 'x-ratio-tenant': tenantId });
+  // Forward the edge's request id so the origin's logs (and, later, traces) join to the edge access
+  // log for the same request. The edge already validated/minted it (never the raw client header here).
+  if (reqId) headers.set('x-request-id', reqId);
   for (const h of ['content-type', 'accept', 'accept-language']) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);

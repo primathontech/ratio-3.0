@@ -30,11 +30,6 @@ export function buildAccessLog(input: {
     ms: Math.round(input.ms),
   };
 }
-export function logAccess(record: AccessLog): void {
-  // Structured JSON to the edge log sink — this is the logger, not stray debug output.
-  console.log(JSON.stringify(record));
-}
-
 // Durable metrics sink. On Cloudflare this is Workers Analytics Engine (queryable outside the
 // isolate). Minimal local interface (matches the TenantKV / EdgeCache style) so we don't depend on
 // the full workers-types.

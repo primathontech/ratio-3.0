@@ -43,6 +43,17 @@ jobs:
       - run: bun run lint
       - run: bun run format:check
       - run: bun run test # runs test:setup (ensure-test-db + migrate) then node --test
+      # Guard: the edge Worker bundle must stay Node-free — pino (Node-only) must never leak in via
+      # @ratio/observability. The dry-run build itself fails on an unpolyfilled Node import; on top of
+      # that, grep for pino's telltale Node writer `sonic-boom` (a real-bundle marker — the word "pino"
+      # appears in our source comments, so we can't grep for that). (ADR-0002.)
+      - name: Edge worker bundle stays Node-free (no pino)
+        working-directory: apps/edge
+        run: |
+          npx wrangler deploy --dry-run --outdir /tmp/edge-bundle
+          if grep -rliqE "sonic-boom|node:(fs|stream|worker_threads)" /tmp/edge-bundle; then
+            echo "::error::a Node-only dependency (pino/sonic-boom) leaked into the edge Worker bundle"; exit 1
+          fi
 
   deploy:
     needs: build

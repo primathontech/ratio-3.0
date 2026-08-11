@@ -80,6 +80,13 @@ test('proxyInit: POST forwards the body + content-type with duplex half', () => 
   assert.strictEqual(h.get('x-ratio-tenant'), 't_real'); // not the client-supplied value
 });
 
+test('proxyInit: forwards the edge reqId to the origin as x-request-id (edge↔origin correlation)', () => {
+  const withId = proxyInit(new Request('http://edge/'), 't', 's', 'rid-123');
+  assert.strictEqual((withId.headers as Headers).get('x-request-id'), 'rid-123');
+  const without = proxyInit(new Request('http://edge/'), 't', 's');
+  assert.strictEqual((without.headers as Headers).get('x-request-id'), null); // absent when not passed
+});
+
 test('proxyInit: passes origin redirects through to the browser instead of following them', () => {
   // A cart write answers 303 → /cart with the cart cookie. If the edge fetch FOLLOWS it (the fetch
   // default), the Set-Cookie is swallowed and the followed GET /cart is cookieless → empty cart.

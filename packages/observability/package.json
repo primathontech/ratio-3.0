@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/observability",
+  "version": "0.1.0",
+  "description": "Node logging (pino) for the container apps; shares conventions with @ratio/observability-core",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}

@@ -48,6 +48,7 @@
     "hono": "^4.12.31",
     "liquidjs": "^10.27.2",
     "pg": "^8.13.1",
+    "pino": "^10.3.1",
     "tldts": "^7.4.8"
   },
   "devDependencies": {

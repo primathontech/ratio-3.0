@@ -10,12 +10,12 @@ import {
   lookupTenant,
   buildAccessLog,
   buildMetricPoint,
-  logAccess,
   storeUnavailable,
   type EdgeCache,
   type TenantKV,
   type AnalyticsEngineDataset,
 } from '@ratio/edge-core';
+import { createLogger, sanitizeReqId } from '@ratio/observability-edge';
 
 // The portable edge logic lives in packages/edge-core (shared by every edge adapter, tested there).
 // This file is the CLOUDFLARE adapter: it wires Workers KV, caches.default, and fetch to edge-core
@@ -33,7 +33,11 @@ interface Env {
   METRICS?: AnalyticsEngineDataset;
 }
 
-const app = new Hono<{ Bindings: Env; Variables: { tenantId?: string } }>();
+const app = new Hono<{ Bindings: Env; Variables: { tenantId?: string; reqId: string } }>();
+
+// Workers-safe logger from the shared @ratio/observability package (pino can't run on Workers) — same
+// JSON shape/conventions as the Node services, so edge + origin logs correlate.
+const edgeLog = createLogger({ service: 'edge' });
 
 // D-R6: any unhandled error while serving (uncached origin failure, routing/DB failure, or an
 // unexpected throw) becomes the branded 503 — never a raw 500 or leaked internal detail.
@@ -43,6 +47,10 @@ app.onError(() => storeUnavailable());
 // every route incl. errors (onError produces a response, then this logs it).
 app.use('*', async (c, next) => {
   const start = Date.now();
+  // Correlation id: adopt a VALIDATED client x-request-id, else mint one. It's forwarded to the origin
+  // (proxyInit) and bound on the access-log line, so edge + origin logs join for the same request.
+  const reqId = sanitizeReqId(c.req.header('x-request-id')) ?? crypto.randomUUID();
+  c.set('reqId', reqId);
   await next();
   const common = {
     tenantId: c.get('tenantId') ?? null,
@@ -51,7 +59,9 @@ app.use('*', async (c, next) => {
     ms: Date.now() - start,
   };
   const path = new URL(c.req.url).pathname;
-  logAccess(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
+  edgeLog
+    .child({ reqId })
+    .info(buildAccessLog({ ...common, method: c.req.method, url: c.req.url }));
   // Durable, queryable per-tenant metrics — no-op if the dataset isn't bound (local / unprovisioned).
   c.env.METRICS?.writeDataPoint(buildMetricPoint({ ...common, path }));
 });
@@ -99,7 +109,7 @@ app.all('*', async (c) => {
   const res = await fetchViaOrigin(
     c.req.raw,
     originTarget(c.env.ORIGIN_URL, path, url.search),
-    proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? ''),
+    proxyInit(c.req.raw, tenantId, c.env.EDGE_SECRET ?? '', c.get('reqId')),
     cache,
     undefined,
     undefined,
