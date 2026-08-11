@@ -1,0 +1,65 @@
+<!doctype html>
+<!-- OFCE-491 · hardest-island demo: a shoppable hero. Open in a browser: hover a hotspot dot →
+     popover → pick a variant → Add to cart (optimistic count, then a mock server reconcile).
+     Runtime = Alpine only for THIS island (the server call is a plain fetch); htmx is the platform
+     baseline for OTHER islands (e.g. cart drawer via hx-post). In production these libs are
+     SELF-HOSTED in /assets/islands.js (CSP script-src 'self'), not CDN. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shoppable hero — OFCE-491 island</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0; }
+      .hero { position: relative; max-width: 900px; margin: 2rem auto; }
+      .hero img { width: 100%; display: block; border-radius: 12px; }
+      .dot { position: absolute; width: 28px; height: 28px; border-radius: 50%; border: 3px solid #fff;
+             background: #111; color: #fff; cursor: pointer; transform: translate(-50%, -50%);
+             box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+      .pop { position: absolute; z-index: 5; background: #fff; border: 1px solid #ddd; border-radius: 10px;
+             padding: 12px; width: 220px; box-shadow: 0 8px 24px rgba(0,0,0,.18); transform: translate(-50%, 12px); }
+      .pop h4 { margin: 0 0 4px; } .pop .price { color: #137333; font-weight: 600; }
+      .pop select, .pop button { width: 100%; margin-top: 8px; padding: 8px; }
+      .pop button { background: #111; color: #fff; border: 0; border-radius: 6px; cursor: pointer; }
+      .cart { position: fixed; top: 12px; right: 16px; background: #111; color: #fff; padding: 8px 14px;
+              border-radius: 20px; }
+    </style>
+    <script src="./shoppable-hero.island.js"></script>
+    <script defer src="https://unpkg.com/alpinejs@3/dist/cdn.min.js"></script>
+  </head>
+  <body>
+    <div class="cart" x-data>🛒 <span x-text="$store.cart.count"></span><span x-show="$store.cart.adding"> …</span></div>
+
+    <div
+      class="hero"
+      x-data="shoppableHero([
+        { x: 32, y: 40, product: { title: 'Linen Shirt', price: '₹1,499', variants: [{id: 101, label: 'S'},{id: 102, label: 'M'},{id: 103, label: 'L'}] } },
+        { x: 68, y: 66, product: { title: 'Canvas Tote', price: '₹899', variants: [{id: 201, label: 'One size'}] } }
+      ])"
+      @keydown.escape="close()"
+    >
+      <img src="https://picsum.photos/900/500" alt="Shop the look" />
+
+      <template x-for="(h, i) in hotspots" :key="i">
+        <button class="dot" :style="`left:${h.x}%; top:${h.y}%`" @click="open(i)" x-text="'+'"></button>
+      </template>
+
+      <div class="pop" x-show="active" x-cloak
+           :style="openIndex !== null ? `left:${hotspots[openIndex].x}%; top:${hotspots[openIndex].y}%` : ''"
+           @click.outside="close()">
+        <template x-if="active">
+          <div>
+            <h4 x-text="active.title"></h4>
+            <div class="price" x-text="active.price"></div>
+            <select x-model.number="variantId">
+              <template x-for="v in active.variants" :key="v.id">
+                <option :value="v.id" x-text="v.label"></option>
+              </template>
+            </select>
+            <button @click="$store.cart.add(variantId)" x-text="$store.cart.adding ? 'Adding…' : 'Add to cart'"></button>
+          </div>
+        </template>
+      </div>
+    </div>
+  </body>
+</html>

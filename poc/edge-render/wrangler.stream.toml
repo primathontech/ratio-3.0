@@ -1,0 +1,6 @@
+name = "ofce491-stream-poc"
+main = "stream-worker.ts"
+compatibility_date = "2026-01-01"
+
+[alias]
+liquidjs = "liquidjs/dist/liquid.browser.mjs"
