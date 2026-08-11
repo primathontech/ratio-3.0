@@ -1,4 +1,4 @@
-import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
@@ -13,34 +13,26 @@ import { storeSettingsRoutes } from './routes/store-settings';
 import { storeRoutes } from './routes/stores';
 import { pageBuilderRoutes } from './routes/page-builder';
 import { domainsRoutes } from './routes/domains';
+import { healthRoutes } from './routes/health';
+import { webhookRoutes } from './routes/webhooks';
+import { agentTokenRoutes } from './routes/agent-tokens';
+import { assistantRoutes } from './routes/assistant';
+import { auditRoutes } from './routes/audit';
 import { defaultRegistry } from '@ratio/builder-registry';
 import { cfConfig, purgeUrls, storeCacheUrls } from './domains';
 import {
   authMiddleware,
   csrfGuard,
-  requireMembership,
-  requireRole,
-  isPlatformAdmin,
   clerkVerifier,
   insecureDevClerkVerifier,
   agentVerifier,
   composeVerifiers,
-  mintAgentToken,
-  denyNarrowedScope,
   type Verifier,
 } from './auth';
-import { auditMiddleware, recentAudit } from './audit';
-import { openApiDocument } from './openapi';
+import { auditMiddleware } from './audit';
 import { createPgRateLimiter } from '@ratio/data-db';
-import {
-  createPgIdempotencyStore,
-  idempotencyKeyFor,
-  IdempotencyInProgressError,
-} from './idempotency';
+import { createPgIdempotencyStore, IdempotencyInProgressError } from './idempotency';
 import { createReadiness } from './readiness';
-import Anthropic from '@anthropic-ai/sdk';
-import { RatioControlPlane } from '@ratio/control-plane-client';
-import { runAssistant, scopeForAssistant } from './assistant';
 
 // Ratio CONTROL PLANE (ADR-014): the authenticated API the admin portal + AI agent
 // both drive. Data plane (edge + origin) is separate and public; this is the write path.
@@ -83,38 +75,6 @@ const themeStore = new PgThemeStore();
 const pbRegistry = defaultRegistry();
 const pbPurge: PurgeLike = { invalidateByTags: (tags) => purgeEdgeTags(tags) };
 const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
-
-// Commerce webhook: map a gokwik change event → the surrogate tags the origin stamps on rendered
-// pages (prod:<id> for products, col:<handle> for collections), so a product/price/collection edit
-// purges exactly the cached storefront pages that showed that data.
-function tagsForCommerceEvent(type: string, data: Record<string, unknown>): string[] {
-  const ids = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
-  switch (type) {
-    case 'product.updated':
-    case 'product.created':
-    case 'product.deleted':
-      return data.productId != null ? [`prod:${data.productId}`] : [];
-    case 'products.bulk_updated':
-    case 'inventory.updated':
-    case 'pricing.updated':
-      return ids(data.productIds).map((id) => `prod:${id}`);
-    case 'collection.updated':
-    case 'collection.created':
-    case 'collection.deleted':
-      return data.handle ? [`col:${data.handle}`] : [];
-    default:
-      return [];
-  }
-}
-
-// HMAC-SHA256 over the RAW body (re-serializing would change the bytes the sender signed).
-function verifyWebhookSignature(rawBody: string, signature: string | undefined, secret: string) {
-  if (!signature) return false;
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 // Section bindings that are backed by the commerce data layer — their presence tells the editor to
 // show a data-source picker (collection/product) instead of just field inputs.
@@ -307,70 +267,17 @@ export function createApp(
     return c.json({ error: detail }, 500);
   });
 
-  // Public liveness root — the ECS Express gateway health-checks GET / and expects 200.
-  app.get('/', (c) => c.json({ service: 'ratio-admin-api', status: 'ok' }));
-  app.get('/health', (c) => c.json({ status: 'ok' }));
-  // Readiness (vs liveness /health): probe the DB so an orchestrator doesn't route traffic
-  // to an instance that can't reach Postgres. Pre-auth so probes need no credentials (L-7).
-  app.get('/ready', async (c) => {
-    const ok = await readiness();
-    return c.json({ status: ok ? 'ready' : 'unavailable' }, ok ? 200 : 503);
-  });
+  // Liveness / readiness / contract / whoami (routes/health.ts).
+  app.route('/', healthRoutes({ readiness }));
 
-  // The API contract (ADR-016), source of truth for the generated SDK. Public so tooling
-  // and dev portals can read it without a token.
-  app.get('/openapi.json', (c) => c.json(openApiDocument));
-
-  // Who am I — also surfaces the caller's Clerk id (for PLATFORM_ADMIN_IDS setup).
-  app.get('/me', (c) => {
-    const userId = c.get('userId');
-    // isLocal (RATIO_LOCAL) lets the SPA show dev-only affordances — e.g. a local storefront link
-    // via the edge's ?store=<id> override — driven by the one run-environment flag, not a guess.
-    return c.json({ userId, isPlatformAdmin: isPlatformAdmin(userId), isLocal: config.local });
-  });
-
-  // Commerce change webhook (gokwik → cache invalidation). Public + HMAC-verified. Maps the event
-  // to the surrogate tags the origin stamped (prod:<id> / col:<handle>) and purges them, so a
-  // product/price/collection change invalidates exactly the cached storefront pages that showed it.
-  app.post('/webhooks/commerce', async (c) => {
-    const raw = await c.req.text();
-    const secret = process.env.WEBHOOK_SECRET;
-    if (secret && !verifyWebhookSignature(raw, c.req.header('x-webhook-signature'), secret)) {
-      return c.json({ error: 'invalid signature' }, 401);
-    }
-    let body: { type?: string; data?: Record<string, unknown> };
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      return c.json({ error: 'invalid json' }, 400);
-    }
-    if (!body.type) return c.json({ error: 'type is required' }, 400);
-    const tags = tagsForCommerceEvent(body.type, body.data ?? {});
-    await purgeEdgeTags(tags);
-    return c.json({ ok: true, type: body.type, purged: tags });
-  });
+  // Commerce webhook — public, HMAC-verified (routes/webhooks.ts).
+  app.route('/', webhookRoutes({ purgeEdgeTags }));
 
   // Store lifecycle — list / create / read / hard-delete (routes/stores.ts).
   app.route('/', storeRoutes({ pbStore, pageBuilder, platformSubdomainAllowed }));
 
-  // Mint a short-lived agent token scoped to THIS store (ADR-007 / OFCE-399), so the owner
-  // can delegate the AI agent access to the same API. Membership-gated; scope is exactly
-  // this tenant and inherits the caller's principal — it can only narrow, never widen.
-  app.post('/stores/:id/agent-tokens', requireRole('owner'), (c) => {
-    // Only a first-party human session may mint (M5): letting an agent token mint fresh agent
-    // tokens would defeat the short-lived guarantee — a single leaked token could renew itself
-    // indefinitely. Agent tokens carry a scope; human Clerk sessions don't.
-    if (c.get('scope')) {
-      return c.json({ error: 'agent tokens cannot mint agent tokens' }, 403);
-    }
-    const expiresIn = 3600;
-    const token = mintAgentToken({
-      sub: c.get('userId'),
-      scope: [c.req.param('id')],
-      exp: Math.floor(Date.now() / 1000) + expiresIn,
-    });
-    return c.json({ token, scope: [c.req.param('id')], expiresIn }, 201);
-  });
+  // Agent tokens — owner delegates scoped AI access (routes/agent-tokens.ts).
+  app.route('/', agentTokenRoutes());
 
   // OFCE-400 Model A: in-dashboard AI assistant. Claude runs a server-side tool-use loop
   // and drives the SAME control-plane the dashboard uses — not a forked code path (ADR-014
@@ -383,53 +290,11 @@ export function createApp(
     return app.fetch(new Request(url as string, { ...init, headers }));
   }) as typeof fetch;
 
-  app.post('/assistant', denyNarrowedScope, async (c) => {
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return c.json({ error: 'AI assistant is not configured (ANTHROPIC_API_KEY missing).' }, 503);
-    }
-    const { message, storeId, idempotencyKey } = (await c.req.json().catch(() => ({}))) as {
-      message?: string;
-      storeId?: string;
-      idempotencyKey?: string;
-    };
-    if (!message || !message.trim()) return c.json({ error: 'message is required' }, 400);
+  // AI assistant — server-side tool loop over this control plane (routes/assistant.ts).
+  app.route('/', assistantRoutes({ idem, viaSelf }));
 
-    // Dedupe by idempotency key (OFCE-412): a retry / refresh / double-submit re-uses the
-    // first run instead of firing the tool loop again and duplicating stores/pages. A client
-    // key (header or body) wins; otherwise fall back to a content-derived key (L-2) so callers
-    // that send no key still get dedup on an identical resubmit. Scoped per user throughout.
-    const rawKey = c.req.header('idempotency-key') || idempotencyKey;
-    const idemKey = idempotencyKeyFor({
-      userId: c.get('userId'),
-      storeId,
-      message,
-      clientKey: rawKey,
-    });
-
-    const result = await idem.run(idemKey, () => {
-      // Least privilege (N1): scope the token to the open store when there is one; only the
-      // onboarding entry point (no storeId) gets '*' so it can create a brand-new store.
-      const token = mintAgentToken({
-        sub: c.get('userId'),
-        scope: scopeForAssistant(storeId),
-        exp: Math.floor(Date.now() / 1000) + 900,
-      });
-      const client = new RatioControlPlane({
-        baseUrl: new URL(c.req.url).origin,
-        token,
-        fetch: viaSelf,
-      });
-      return runAssistant({ anthropic: new Anthropic(), client, message, storeId });
-    });
-    return c.json(result);
-  });
-
-  // Recent control-plane changes for a store (ADR-016 Phase 1 audit trail) — powers the
-  // dashboard's "Recent changes". Membership-gated; a read, so not itself audited.
-  app.get('/stores/:id/audit', requireMembership, async (c) => {
-    const entries = await recentAudit(c.req.param('id'));
-    return c.json({ entries });
-  });
+  // Audit trail — recent control-plane changes (routes/audit.ts).
+  app.route('/', auditRoutes());
 
   // Store settings — theme, theme versions (§13), commerce, collections (routes/store-settings.ts).
   app.route('/', storeSettingsRoutes({ pbStore, themeStore, purgeEdgeTags, purgeStoreUrls }));
