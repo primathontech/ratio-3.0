@@ -33,7 +33,8 @@ import {
   type CspDirectives,
   type IntegrationContext,
 } from '@ratio/gokwik';
-import { defaultRegistry } from '@ratio/builder-registry';
+import { defaultRegistry, setUntrustedRenderer } from '@ratio/builder-registry';
+import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
@@ -62,6 +63,10 @@ let renders = 0;
 // collection page at onboarding (scaffoldStorefront), so a fresh store renders out of the box.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
+// The origin runs on Node, so it can render untrusted merchant/app sections via the worker-thread
+// isolate (D40). Injecting it here keeps @ratio/builder-registry itself edge-safe (no static
+// worker_threads import) — a Worker simply never wires this and renders trusted sections only.
+setUntrustedRenderer(renderUntrusted);
 // Data-binding resolver (the renderer's 2nd input). Use the real @shopkit/data-layer custom-backend
 // resolver when COMMERCE_* env is configured; otherwise the StubResolver (deterministic samples) so
 // local dev renders without a backend.
