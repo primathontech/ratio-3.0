@@ -232,15 +232,17 @@ async function handleCart(
           const handle = String(body.handle || '');
           if (!variantId && handle) variantId = await cart.resolveVariant(handle);
           if (variantId) {
-            const updated = await withSpan(
-              'gokwik.cart.add',
-              { 'ratio.op': 'cart.add', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
-              async (span) => {
-                const u = await cart.add(token, [{ variantId, quantity: 1 }]);
-                span.setAttribute('ratio.cart.lines', u.items.length); // 0 = added nothing
-                return u;
-              },
-              SpanKind.CLIENT
+            const updated = await timed(c, 'commerce', () =>
+              withSpan(
+                'gokwik.cart.add',
+                { 'ratio.op': 'cart.add', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
+                async (span) => {
+                  const u = await cart.add(token, [{ variantId, quantity: 1 }]);
+                  span.setAttribute('ratio.cart.lines', u.items.length); // 0 = added nothing
+                  return u;
+                },
+                SpanKind.CLIENT
+              )
             );
             logCartAdd(log, {
               tenant: tenantId,
@@ -281,15 +283,17 @@ async function handleCart(
   let cart: Cart = emptyCart();
   if (backend && token) {
     try {
-      cart = await withSpan(
-        'gokwik.cart.get',
-        { 'ratio.op': 'cart.get', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
-        async (span) => {
-          const cc = await new CartService(backend).get(token);
-          span.setAttribute('ratio.cart.lines', cc.items.length);
-          return cc;
-        },
-        SpanKind.CLIENT
+      cart = await timed(c, 'commerce', () =>
+        withSpan(
+          'gokwik.cart.get',
+          { 'ratio.op': 'cart.get', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
+          async (span) => {
+            const cc = await new CartService(backend).get(token);
+            span.setAttribute('ratio.cart.lines', cc.items.length);
+            return cc;
+          },
+          SpanKind.CLIENT
+        )
       );
     } catch (e) {
       logCommerceError(log, 'get', tenantId, e);
@@ -352,14 +356,18 @@ app.use('*', async (c, next) => {
     // One access record per request — on the throw path too, since a slow request that then fails is
     // exactly what we want timed. `ms` is the total; the timing bag holds the steps that ran for this
     // path (a cached/404/reserved path has fewer). On a throw the response isn't built yet, so log the
-    // status app.onError will set (500) rather than the stale default.
-    c.get('log').info({
-      evt: 'render',
-      path: new URL(c.req.url).pathname,
-      status: threw ? 500 : c.res.status,
-      ms: Date.now() - started,
-      ...c.get('timings'),
-    });
+    // status app.onError will set (500) rather than the stale default. Skip the orchestrator probes
+    // (/health, /ready) — they fire on a fixed interval and would drown the real access log.
+    const path = new URL(c.req.url).pathname;
+    if (path !== '/health' && path !== '/ready') {
+      c.get('log').info({
+        evt: 'render',
+        path,
+        status: threw ? 500 : c.res.status,
+        ms: Date.now() - started,
+        ...c.get('timings'),
+      });
+    }
   }
 });
 
@@ -471,19 +479,21 @@ app.all('*', async (c) => {
     let merchantCheckoutId = '';
     if (backend && token) {
       try {
-        merchantCheckoutId = await withSpan(
-          'gokwik.checkout.create',
-          {
-            'ratio.op': 'checkout.create',
-            'ratio.tenant': tenantId as string,
-            'ratio.reqId': c.get('reqId'),
-          },
-          async (span) => {
-            const id = await new CartService(backend).createCheckout(token);
-            span.setAttribute('ratio.checkout.ok', !!id);
-            return id;
-          },
-          SpanKind.CLIENT
+        merchantCheckoutId = await timed(c, 'commerce', () =>
+          withSpan(
+            'gokwik.checkout.create',
+            {
+              'ratio.op': 'checkout.create',
+              'ratio.tenant': tenantId as string,
+              'ratio.reqId': c.get('reqId'),
+            },
+            async (span) => {
+              const id = await new CartService(backend).createCheckout(token);
+              span.setAttribute('ratio.checkout.ok', !!id);
+              return id;
+            },
+            SpanKind.CLIENT
+          )
         );
         logCheckout(c.get('log'), { tenant: tenantId as string, ok: !!merchantCheckoutId });
       } catch (e) {

@@ -1,13 +1,20 @@
 // Origin logging. The FOUNDATION (pino, correlation, redaction, classifyError) lives in the shared
 // @ratio/observability package; this file only builds the origin's logger and defines the origin's
 // DOMAIN events. Other apps do the same with their own events; the edge uses @ratio/observability-edge.
-import { createLogger, classifyError, type Logger } from '@ratio/observability';
+import { createLogger, classifyError, type Logger, type LoggerConfig } from '@ratio/observability';
 
 export { requestLog, sanitizeReqId } from '@ratio/observability';
 export type ReqLog = Logger;
 
 // An APP may read env (ADR-0001 — the package takes `level` as injected config, reads no process.env).
-export const logger = createLogger({ service: 'origin', level: process.env.LOG_LEVEL });
+// `let` + a live binding so a test can point it at a capturable destination; callers read it per use.
+export let logger = createLogger({ service: 'origin', level: process.env.LOG_LEVEL });
+
+// Test seam: swap in a logger writing to `dest` so a test can assert the emitted lines (the default
+// logger writes to fd 1 via sonic-boom, which a subprocess can't intercept). Test-only.
+export function setLoggerForTest(dest: NonNullable<LoggerConfig['dest']>): void {
+  logger = createLogger({ service: 'origin', dest });
+}
 
 // ── origin domain events. Typed helpers pick their fields explicitly (a runtime allowlist). ──
 
