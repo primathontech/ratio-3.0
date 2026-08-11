@@ -27,3 +27,22 @@ test('re-exports the shared core (classifyError) so callers have one import surf
     'network'
   );
 });
+
+test('log lines carry trace_id/span_id when inside an active span (logs↔traces correlation)', async () => {
+  const { NodeTracerProvider } = await import('@opentelemetry/sdk-trace-node');
+  const { trace } = await import('@opentelemetry/api');
+  const provider = new NodeTracerProvider();
+  provider.register();
+  try {
+    const c = capture();
+    await trace.getTracer('t').startActiveSpan('s', async (span) => {
+      c.log.info({ evt: 'x' });
+      span.end();
+    });
+    const [r] = c.records();
+    assert.ok(r.trace_id, 'trace_id stamped when in a span');
+    assert.ok(r.span_id, 'span_id stamped');
+  } finally {
+    await provider.shutdown();
+  }
+});

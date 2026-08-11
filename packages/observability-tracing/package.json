@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/observability-tracing",
+  "version": "0.1.0",
+  "description": "OpenTelemetry tracing (Node) — initTracing + withSpan; OTLP export (SigNoz). Kept separate so importing the logger doesn't load the OTel SDK",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}
