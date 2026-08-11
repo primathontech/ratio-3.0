@@ -1,9 +1,9 @@
 // Origin logging. The FOUNDATION (pino, correlation, redaction, classifyError) lives in the shared
 // @ratio/observability package; this file only builds the origin's logger and defines the origin's
-// DOMAIN events. Other apps do the same with their own events; the edge uses @ratio/observability/edge.
+// DOMAIN events. Other apps do the same with their own events; the edge uses @ratio/observability-edge.
 import { createLogger, classifyError, type Logger } from '@ratio/observability';
 
-export { requestLog } from '@ratio/observability';
+export { requestLog, sanitizeReqId } from '@ratio/observability';
 export type ReqLog = Logger;
 
 // An APP may read env (ADR-0001 — the package takes `level` as injected config, reads no process.env).

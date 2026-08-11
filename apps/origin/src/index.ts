@@ -39,6 +39,7 @@ import { resolveEdgeSecret } from '@ratio/edge-core';
 import {
   logger,
   requestLog,
+  sanitizeReqId,
   logCartAdd,
   logCartUpdate,
   logCheckout,
@@ -248,6 +249,9 @@ async function handleCart(
           const quantity = Number(body.quantity ?? 1);
           if (variantId) await cart.setQuantity(token, variantId, quantity);
           logCartUpdate(log, { tenant: tenantId, ok: !!variantId, variant: variantId });
+        } else {
+          // /cart/update with no cart token — nothing to update; log it rather than swallow.
+          logCartUpdate(log, { tenant: tenantId, ok: false, variant: '' });
         }
       } catch (e) {
         // A backend hiccup must not 500 the shopper — fall through and re-render the cart. But it must
@@ -278,10 +282,12 @@ export const app = new Hono<Vars>();
 // logs correlate with the edge access log; otherwise mint one. Bind it on a child logger for every
 // event, and echo it on the response so a failing request is traceable client-side.
 app.use('*', async (c, next) => {
-  const traceId = c.req.header('traceparent')?.split('-')[1];
+  // Adopt a VALIDATED id (x-request-id, else the traceparent trace-id) so origin logs join the edge
+  // access log; mint one otherwise. Validated because it's echoed + stamped on every line (untrusted
+  // if the origin is ever reached directly, before the edge-auth gate below).
   const reqId =
-    c.req.header('x-request-id') ||
-    (traceId && /^[0-9a-f]{32}$/.test(traceId) ? traceId : '') ||
+    sanitizeReqId(c.req.header('x-request-id')) ??
+    sanitizeReqId(c.req.header('traceparent')?.split('-')[1]) ??
     randomUUID();
   c.set('reqId', reqId);
   c.set('log', requestLog(logger, reqId));

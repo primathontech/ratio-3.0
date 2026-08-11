@@ -53,5 +53,27 @@ test('D-R8: exactly one access record is emitted per request, and no secrets lea
   const rec = JSON.parse(access[0]);
   assert.strictEqual(rec.path, '/health');
   assert.strictEqual(rec.status, 200);
+  assert.ok(rec.reqId, 'the access line carries a correlation id (minted when none supplied)');
   assert.doesNotMatch(access[0], /token|abc123/, 'query string must not leak');
+});
+
+test('a valid incoming x-request-id is adopted as the correlation id; junk is dropped + minted', async () => {
+  const grab = async (id: string) => {
+    const lines: string[] = [];
+    const orig = console.log;
+    console.log = (...a: unknown[]) => lines.push(a.map(String).join(' '));
+    try {
+      await app.fetch(
+        new Request('https://x.example/health', { headers: { 'x-request-id': id } }),
+        {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any
+      );
+    } finally {
+      console.log = orig;
+    }
+    return JSON.parse(lines.find((l) => l.includes('"t":"access"'))!).reqId as string;
+  };
+  assert.strictEqual(await grab('good-id_123'), 'good-id_123'); // valid → adopted
+  assert.notStrictEqual(await grab('bad id!'), 'bad id!'); // junk → dropped, a fresh one minted
 });

@@ -21,6 +21,14 @@ export function requestLog(base: Logger, reqId: string): Logger {
   return base.child({ reqId });
 }
 
+// A request/correlation id is echoed on responses and stamped on every log line, so a client-supplied
+// one is UNTRUSTED and must be bounded (charset + length) — else it's a log-forging / line-size vector.
+// Returns the id if it's a safe token, otherwise null (caller mints a fresh one).
+const REQ_ID_RE = /^[0-9A-Za-z_-]{1,64}$/;
+export function sanitizeReqId(raw: string | undefined | null): string | null {
+  return raw && REQ_ID_RE.test(raw) ? raw : null;
+}
+
 // Secret-bearing keys scrubbed as defense-in-depth. Events are built from closed field sets, but this
 // guards a future careless call site that spreads one in.
 export const REDACT_KEYS = ['token', 'cookie', 'authorization', 'password', 'secret'] as const;
