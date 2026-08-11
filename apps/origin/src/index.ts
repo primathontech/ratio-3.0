@@ -138,7 +138,7 @@ async function renderCartResponse(
   const ix = composeGokwik(integrationContext(tenant.commerce, 'cart'));
   const [menu, footer] = await Promise.all([
     fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
+    fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
   ]);
   const html = renderCartPage(cart, {
     siteName: tenant.name,
@@ -168,7 +168,7 @@ async function renderOrderResponse(
   const ix = composeGokwik(integrationContext(tenant.commerce, 'order'));
   const [menu, footer] = await Promise.all([
     fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    fetchFooter(merchantId, process.env.COMMERCE_FOOTER_API_URL ?? ''),
+    fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
   ]);
   const html = renderOrderPage(
     {
@@ -395,7 +395,7 @@ app.all('*', async (c) => {
       // footer menu, or the JSON fallback on any failure (unconfigured / no menu / error).
       const footer = await fetchFooter(
         tenant.commerce?.merchantId ?? '',
-        process.env.COMMERCE_FOOTER_API_URL ?? ''
+        process.env.COMMERCE_NAV_API_URL ?? ''
       );
       const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
       const composed = await composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {

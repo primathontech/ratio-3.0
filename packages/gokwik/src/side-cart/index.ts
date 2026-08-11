@@ -6,11 +6,11 @@ import { sideCartTag, readableCartCookie, type SideCartConfig } from './side-car
 // env. No defaults — a missing value leaves the integration off rather than guessing.
 function configFrom(ctx: IntegrationContext): Partial<SideCartConfig> {
   return {
-    scriptUrl: ctx.env.KWIKCART_SCRIPT_URL,
+    scriptUrl: ctx.env.GOKWIK_SIDECART_SCRIPT_URL,
     mid: ctx.merchantId,
     environment: ctx.env.GOKWIK_ENVIRONMENT,
-    currency: ctx.env.KWIKCART_CURRENCY,
-    currencyFormat: ctx.env.KWIKCART_CURRENCY_FORMAT,
+    currency: ctx.env.GOKWIK_CURRENCY,
+    currencyFormat: ctx.env.GOKWIK_CURRENCY_FORMAT,
   };
 }
 
