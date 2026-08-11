@@ -16,7 +16,15 @@ function parseOtlpHeaders(s?: string): Record<string, string> | undefined {
   const out: Record<string, string> = {};
   for (const pair of s.split(',')) {
     const i = pair.indexOf('=');
-    if (i > 0) out[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+    if (i <= 0) continue;
+    const raw = pair.slice(i + 1).trim();
+    let value = raw;
+    try {
+      value = decodeURIComponent(raw); // spec allows percent-encoded values
+    } catch {
+      /* malformed %xx — keep the raw value */
+    }
+    out[pair.slice(0, i).trim()] = value;
   }
   return Object.keys(out).length ? out : undefined;
 }
