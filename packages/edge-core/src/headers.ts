@@ -26,6 +26,11 @@ export function proxyInit(
     method,
     headers,
     body: hasBody ? req.body : undefined,
+    // Hand the origin's redirects to the browser rather than following them here. A cart write
+    // answers 303 → /cart with the cart-token Set-Cookie; if the edge fetch followed it, that cookie
+    // would be swallowed and the followed GET /cart would be cookieless → the shopper's cart shows
+    // empty. 'manual' returns the 3xx (with Set-Cookie) so the browser follows it WITH the token.
+    redirect: 'manual',
   };
   if (hasBody) init.duplex = 'half'; // required when streaming a request body
   return init;
