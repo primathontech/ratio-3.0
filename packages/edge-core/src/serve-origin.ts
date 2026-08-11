@@ -18,6 +18,11 @@ function markStale(res: Response): Response {
 // without a deadline the edge request hangs with it. Aborting on timeout turns "hung" into a
 // rejection, which the stale-if-error catch below already handles → the cached page serves fast.
 const ORIGIN_TIMEOUT_MS = 1500;
+// A write (POST /cart, /checkout, /api/island…) can never serve stale, so the fast read-survival
+// abort has no upside for it — it only turns a slow-but-succeeding mutation into a 503. Give writes
+// a real budget instead (well under Cloudflare's ~30s subrequest cap); a genuinely dead origin
+// still propagates honestly via the catch below.
+const ORIGIN_WRITE_TIMEOUT_MS = 10_000;
 export async function fetchViaOrigin(
   req: Request,
   target: string,
@@ -27,7 +32,10 @@ export async function fetchViaOrigin(
   timeoutMs: number = ORIGIN_TIMEOUT_MS,
   breaker?: CircuitBreaker
 ): Promise<Response> {
-  const canServeStale = (req.method === 'GET' || req.method === 'HEAD') && !!cache;
+  const isRead = req.method === 'GET' || req.method === 'HEAD';
+  const canServeStale = isRead && !!cache;
+  // Reads race the read-survival budget (abort fast → serve stale); writes get a real budget.
+  const budgetMs = isRead ? timeoutMs : ORIGIN_WRITE_TIMEOUT_MS;
   const serveStale = async (): Promise<Response | null> => {
     if (!canServeStale) return null;
     const stale = await cache!.match(req);
@@ -42,7 +50,7 @@ export async function fetchViaOrigin(
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), budgetMs);
   try {
     const res = await doFetch(target, { ...init, signal: controller.signal });
     if (res.status >= 500) {
