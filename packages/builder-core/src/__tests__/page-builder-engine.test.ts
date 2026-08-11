@@ -125,9 +125,55 @@ test('compose: sections render in order; title escapes; islands runtime ships; t
     page.html.indexOf('class="hero"') < page.html.indexOf('class="grid"'),
     'document order'
   );
-  assert.match(page.html, /<script src="\/assets\/islands\.js" defer>/);
+  assert.ok(
+    !/\/assets\/islands/.test(page.html),
+    'a page with no island sections must NOT reference the islands runtime (no dead 404)'
+  );
   assert.equal(page.tier, 'per-segment', 'grid uses money → per-segment beats hero static');
   assert.equal(page.cacheable, true);
+});
+
+test('compose: the islands runtime is referenced ONLY when the page has an island section', async () => {
+  const reg = defaultRegistry();
+  reg.register(
+    {
+      type: 'greeting',
+      template: '<p>Hello {{ user.name | escape }}</p>',
+      bindings: [{ name: 'user', tier: 'per-user' }],
+      island: { name: 'greeting' },
+    },
+    { trusted: false }
+  );
+  const RUNTIME = '/assets/islands.abc123.js';
+
+  // island page → the (versioned) runtime is shipped
+  const withIsland = await composePage(
+    {
+      path: '/',
+      sections: [
+        { id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } },
+        { id: 'g', type: 'greeting', data: {} },
+      ],
+    } as never,
+    reg,
+    {},
+    { islandsRuntimeUrl: RUNTIME }
+  );
+  assert.match(withIsland.html, /<script src="\/assets\/islands\.abc123\.js" defer><\/script>/);
+  assert.equal(withIsland.hasIsland, true, 'origin uses this to relax the CSP for the runtime');
+
+  // no island section → no runtime, even when a URL is available
+  const noIsland = await composePage(
+    {
+      path: '/',
+      sections: [{ id: 'h', type: 'hero', data: { hero: { heading: 'Hi' } } }],
+    } as never,
+    reg,
+    {},
+    { islandsRuntimeUrl: RUNTIME }
+  );
+  assert.ok(!/\/assets\/islands/.test(noIsland.html), 'no island → no runtime script');
+  assert.equal(noIsland.hasIsland, false, 'no island → strict CSP stays');
 });
 
 test('compose: an island section contributes ONLY its placeholder — per-user template never touches the shell', async () => {
