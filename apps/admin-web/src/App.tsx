@@ -339,6 +339,14 @@ function hostsOf(store: Store): string[] {
   return store.hosts ?? (store.host ? [store.host] : []);
 }
 
+function initials(name: string): string {
+  const letters = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0]);
+  return (letters.slice(0, 2).join('') || '?').toUpperCase();
+}
+
 function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
   const hosts = hostsOf(store);
   // *.localhost is the dev alias (added at onboard when RATIO_LOCAL); the real domains are the rest.
@@ -347,7 +355,10 @@ function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void;
   return (
     <div className="card store-card">
       <div className="top">
-        <div>
+        <span className="avatar avatar-sq" aria-hidden>
+          {initials(store.name)}
+        </span>
+        <div style={{ minWidth: 0 }}>
           {/* The store name is the primary action (a real button — keyboard/SR correct);
               host links are siblings, not nested inside an interactive element (M-2/L-4). */}
           <button type="button" className="name store-open" onClick={onOpen}>
