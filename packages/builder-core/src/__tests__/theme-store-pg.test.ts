@@ -1,5 +1,5 @@
 // The DB-backed side of ThemeStore, against the real test DB + MinIO: publish records an immutable
-// version and flips the store's live pointer, and loadLiveCompiled serves that version's compiled
+// version and flips the tenant's live pointer, and loadLiveCompiled serves that version's compiled
 // bundle (what the origin calls on a cache miss). Needs DATABASE_URL (a migrated test DB, applied via
 // `bun run migrate`) and S3_TEST_ENDPOINT (`docker compose up -d minio`).
 import { test, before, after } from 'node:test';
@@ -19,8 +19,8 @@ const credentials = {
 const common = { endpoint, forcePathStyle: true, credentials, region: 'us-east-1' };
 const skip = endpoint ? false : 'set S3_TEST_ENDPOINT (MinIO) with a migrated DATABASE_URL';
 
-const STORE = 'store_mca_test';
-const THEME = 'store_mca_test_main';
+const TENANT = 't_mca_bundle';
+const THEME = 't_mca_bundle_main';
 const identity: CompileFn = (s) => s;
 const files: ThemeFiles = { 'sections/hero.liquid': '<h1>{{ hero.heading }}</h1>' };
 const changed: ThemeFiles = { ...files, 'assets/theme.css': 'body{color:red}' };
@@ -35,21 +35,22 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  await pool.query('DELETE FROM store_live_theme WHERE store_id = $1', [STORE]);
   await pool.query('DELETE FROM theme WHERE id = $1', [THEME]); // cascades bundle versions + files
+  await pool.query('DELETE FROM tenants WHERE id = $1', [TENANT]);
+  await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'MCA Bundle Test')`, [TENANT]);
   store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
-  await store.ensureTheme(STORE, THEME);
+  await store.ensureTheme(TENANT, THEME);
 });
 
 after(async () => {
   if (skip) return;
-  await pool.query('DELETE FROM store_live_theme WHERE store_id = $1', [STORE]);
   await pool.query('DELETE FROM theme WHERE id = $1', [THEME]);
+  await pool.query('DELETE FROM tenants WHERE id = $1', [TENANT]);
   await pool.end();
 });
 
 test('loadLiveCompiled is null before publishing', { skip }, async () => {
-  assert.equal(await store.loadLiveCompiled(STORE), null);
+  assert.equal(await store.loadLiveCompiled(TENANT), null);
 });
 
 test(
@@ -59,7 +60,7 @@ test(
     await store.saveDraft({ themeId: THEME }, files);
     const r1 = await store.publish({ themeId: THEME }, { compile: identity, by: 'tester' });
     assert.equal(r1.version, 1);
-    assert.deepEqual(await store.loadLiveCompiled(STORE), files);
+    assert.deepEqual(await store.loadLiveCompiled(TENANT), files);
   }
 );
 
@@ -67,22 +68,22 @@ test('a second publish bumps the version and moves the pointer', { skip }, async
   await store.saveDraft({ themeId: THEME }, changed);
   const r2 = await store.publish({ themeId: THEME }, { compile: identity });
   assert.equal(r2.version, 2);
-  assert.deepEqual(await store.loadLiveCompiled(STORE), changed);
+  assert.deepEqual(await store.loadLiveCompiled(TENANT), changed);
 });
 
 test(
   'rollback flips the pointer back to an earlier version, and forward again',
   { skip },
   async () => {
-    await store.rollback(STORE, 1);
-    assert.deepEqual(await store.loadLiveCompiled(STORE), files);
-    await store.rollback(STORE, 2);
-    assert.deepEqual(await store.loadLiveCompiled(STORE), changed);
+    await store.rollback(TENANT, 1);
+    assert.deepEqual(await store.loadLiveCompiled(TENANT), files);
+    await store.rollback(TENANT, 2);
+    assert.deepEqual(await store.loadLiveCompiled(TENANT), changed);
   }
 );
 
 test('rollback to an unknown version throws', { skip }, async () => {
-  await assert.rejects(() => store.rollback(STORE, 999), /unknown version/);
+  await assert.rejects(() => store.rollback(TENANT, 999), /unknown version/);
 });
 
 test('publish on an unknown theme throws', { skip }, async () => {

@@ -66,17 +66,17 @@ export class ThemeStore {
     return { sourceHash, compiledHash };
   }
 
-  // Create a store's theme record if it does not exist (onboarding / first edit).
-  async ensureTheme(storeId: string, themeId: string, name = 'Theme'): Promise<void> {
+  // Create a tenant's theme record if it does not exist (onboarding / first edit).
+  async ensureTheme(tenantId: string, themeId: string, name = 'Theme'): Promise<void> {
     assertThemeId(themeId);
     await pool.query(
-      'INSERT INTO theme (id, store_id, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
-      [themeId, storeId, name]
+      'INSERT INTO theme (id, tenant_id, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
+      [themeId, tenantId, name]
     );
   }
 
   // Publish: freeze the bundles, then (atomically) record a new immutable version and flip the
-  // store's live pointer to it. Bundle writes happen before the transaction — an aborted publish
+  // tenant's live pointer to it. Bundle writes happen before the transaction — an aborted publish
   // only leaves unreferenced (harmless, content-addressed) bundles in S3.
   async publish(ref: ThemeRef, opts: { compile: CompileFn; by?: string }): Promise<PublishResult> {
     assertThemeId(ref.themeId);
@@ -84,13 +84,13 @@ export class ThemeStore {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // Lock the theme row so concurrent publishes serialize on the version bump, and read its store.
-      const t = await client.query<{ store_id: string }>(
-        'SELECT store_id FROM theme WHERE id = $1 FOR UPDATE',
+      // Lock the theme row so concurrent publishes serialize on the version bump, and read its tenant.
+      const t = await client.query<{ tenant_id: string }>(
+        'SELECT tenant_id FROM theme WHERE id = $1 FOR UPDATE',
         [ref.themeId]
       );
       if (t.rowCount === 0) throw new Error(`unknown theme '${ref.themeId}'`);
-      const storeId = t.rows[0].store_id;
+      const tenantId = t.rows[0].tenant_id;
       const next = await client.query<{ v: string }>(
         'SELECT COALESCE(MAX(version), 0) + 1 AS v FROM theme_bundle_version WHERE theme_id = $1',
         [ref.themeId]
@@ -101,12 +101,11 @@ export class ThemeStore {
          VALUES ($1, $2, $3, $4, $5)`,
         [ref.themeId, version, sourceHash, compiledHash, opts.by ?? null]
       );
-      await client.query(
-        `INSERT INTO store_live_theme (store_id, theme_id, version) VALUES ($1, $2, $3)
-         ON CONFLICT (store_id)
-         DO UPDATE SET theme_id = EXCLUDED.theme_id, version = EXCLUDED.version, updated_at = now()`,
-        [storeId, ref.themeId, version]
+      const ptr = await client.query(
+        'UPDATE tenants SET live_theme_id = $2, live_theme_version = $3 WHERE id = $1',
+        [tenantId, ref.themeId, version]
       );
+      if (ptr.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
       await client.query('COMMIT');
       return { version, sourceHash, compiledHash };
     } catch (e) {
@@ -117,27 +116,28 @@ export class ThemeStore {
     }
   }
 
-  // Roll the store back to an earlier published version of its current live theme — an instant
+  // Roll the tenant back to an earlier published version of its current live theme — an instant
   // pointer move (the immutable bundles are all still in S3). Verifies the version exists.
-  async rollback(storeId: string, version: number): Promise<void> {
+  async rollback(tenantId: string, version: number): Promise<void> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const lt = await client.query<{ theme_id: string }>(
-        'SELECT theme_id FROM store_live_theme WHERE store_id = $1 FOR UPDATE',
-        [storeId]
+      const cur = await client.query<{ live_theme_id: string | null }>(
+        'SELECT live_theme_id FROM tenants WHERE id = $1 FOR UPDATE',
+        [tenantId]
       );
-      if (lt.rowCount === 0) throw new Error(`store '${storeId}' has no published theme`);
-      const themeId = lt.rows[0].theme_id;
+      if (cur.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
+      const themeId = cur.rows[0].live_theme_id;
+      if (!themeId) throw new Error(`tenant '${tenantId}' has no published theme`);
       const v = await client.query(
         'SELECT 1 FROM theme_bundle_version WHERE theme_id = $1 AND version = $2',
         [themeId, version]
       );
       if (v.rowCount === 0) throw new Error(`unknown version ${version} for theme '${themeId}'`);
-      await client.query(
-        'UPDATE store_live_theme SET version = $2, updated_at = now() WHERE store_id = $1',
-        [storeId, version]
-      );
+      await client.query('UPDATE tenants SET live_theme_version = $2 WHERE id = $1', [
+        tenantId,
+        version,
+      ]);
       await client.query('COMMIT');
     } catch (e) {
       await client.query('ROLLBACK');
@@ -147,15 +147,16 @@ export class ThemeStore {
     }
   }
 
-  // What the origin calls on a cache miss: the compiled bundle of the store's live version, or null
-  // if the store has never published.
-  async loadLiveCompiled(storeId: string): Promise<ThemeFiles | null> {
+  // What the origin calls on a cache miss: the compiled bundle of the tenant's live version, or null
+  // if the tenant has never published.
+  async loadLiveCompiled(tenantId: string): Promise<ThemeFiles | null> {
     const { rows } = await pool.query<{ compiled_hash: string }>(
       `SELECT bv.compiled_hash
-         FROM store_live_theme lt
-         JOIN theme_bundle_version bv ON bv.theme_id = lt.theme_id AND bv.version = lt.version
-        WHERE lt.store_id = $1`,
-      [storeId]
+         FROM tenants t
+         JOIN theme_bundle_version bv
+           ON bv.theme_id = t.live_theme_id AND bv.version = t.live_theme_version
+        WHERE t.id = $1`,
+      [tenantId]
     );
     const hash = rows[0]?.compiled_hash;
     return hash ? this.loadCompiled(hash) : null;

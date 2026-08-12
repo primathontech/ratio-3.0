@@ -1,21 +1,21 @@
 -- Merchant code access — S3 bundle theme store (LLD BC0/BC1). Theme file BYTES live in S3 as
 -- compressed bundles; Postgres holds ONLY lean metadata: the draft file index, the immutable version
--- records (which point at S3 bundle hashes), and the store's live pointer. This is the greenfield
--- bundle store; it lives ALONGSIDE the legacy pages/theme_versions (page-doc) model, not replacing it
--- yet (LLD BC1 divergence).
+-- records (which point at S3 bundle hashes), and the live pointer. Keyed by `tenant_id` to match the
+-- schema-wide convention. Lives ALONGSIDE the legacy pages/theme_versions (page-doc) model for now
+-- (LLD BC1); that trio retires once the origin renders from bundles.
 
--- A store's theme. A store may keep several themes; exactly one is live (see store_live_theme).
+-- A tenant's theme. A tenant may keep several themes; exactly one is live (tenants.live_theme_*).
 CREATE TABLE IF NOT EXISTS theme (
-  id           text        PRIMARY KEY,             -- '{store}_{slug}'
-  store_id     text        NOT NULL,
+  id           text        PRIMARY KEY,             -- '{tenant}_{slug}'
+  tenant_id    text        NOT NULL,
   name         text        NOT NULL DEFAULT 'Theme',
   base_version integer,                             -- library base version forked from (merge ancestor)
   created_at   timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS theme_store_idx ON theme (store_id);
+CREATE INDEX IF NOT EXISTS theme_tenant_idx ON theme (tenant_id);
 
 -- Lean draft file index (NO bytes): path -> content hash + revision. The bytes are in the S3 draft
--- source bundle; this drives listing/diff in the editor and optimistic-lock saves.
+-- source bundle; this drives editor list/diff and optimistic-lock saves.
 CREATE TABLE IF NOT EXISTS theme_file (
   theme_id     text        NOT NULL REFERENCES theme(id) ON DELETE CASCADE,
   path         text        NOT NULL,
@@ -38,10 +38,6 @@ CREATE TABLE IF NOT EXISTS theme_bundle_version (
   PRIMARY KEY (theme_id, version)
 );
 
--- The live pointer: which theme + version a store serves right now.
-CREATE TABLE IF NOT EXISTS store_live_theme (
-  store_id   text        PRIMARY KEY,
-  theme_id   text        NOT NULL,
-  version    integer     NOT NULL,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
+-- The live pointer, folded onto the tenant (1:1) — same shape as the legacy published_theme_version.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS live_theme_id      text;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS live_theme_version integer;
