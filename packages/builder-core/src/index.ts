@@ -15,6 +15,7 @@ export * from './scaffold';
 export * from './store';
 export * from './store-pg';
 export * from './storefront';
+export * from './theme-render';
 export * from './theme-store';
 export * from './theme-versions';
 export * from './tags';
