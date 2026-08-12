@@ -4,6 +4,8 @@ import { ClerkProvider } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { App } from './App';
 import { ThemeProvider, useTheme } from './theme';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -14,7 +16,7 @@ if (!publishableKey) throw new Error('VITE_CLERK_PUBLISHABLE_KEY is not set');
 function clerkAppearance(isDark: boolean) {
   return {
     baseTheme: isDark ? dark : undefined,
-    variables: { colorPrimary: isDark ? '#818cf8' : '#4f46e5', borderRadius: '8px' },
+    variables: { colorPrimary: isDark ? '#3b82f6' : '#2563eb', borderRadius: '8px' },
   };
 }
 
