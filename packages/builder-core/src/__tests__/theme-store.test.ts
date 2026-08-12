@@ -48,9 +48,9 @@ test('saveDraft → readDraft round-trips the files', { skip }, async () => {
   assert.deepEqual(await store.readDraft(ref), files);
 });
 
-test('publish freezes source + compiled bundles, loadable by hash', { skip }, async () => {
+test('freezeBundles writes source + compiled bundles, loadable by hash', { skip }, async () => {
   await store.saveDraft(ref, files);
-  const { sourceHash, compiledHash } = await store.publish(ref, { compile: identity });
+  const { sourceHash, compiledHash } = await store.freezeBundles(ref, { compile: identity });
   // identity compile → the compiled bundle equals the source bundle → same content address.
   assert.equal(compiledHash, sourceHash);
   assert.deepEqual(await store.loadSource(sourceHash), files);
@@ -60,7 +60,7 @@ test('publish freezes source + compiled bundles, loadable by hash', { skip }, as
 test('a real compile transform yields a different compiled hash', { skip }, async () => {
   await store.saveDraft(ref, files);
   const compile: CompileFn = (s) => ({ ...s, 'BUILT.txt': 'compiled marker' });
-  const { sourceHash, compiledHash } = await store.publish(ref, { compile });
+  const { sourceHash, compiledHash } = await store.freezeBundles(ref, { compile });
   assert.notEqual(compiledHash, sourceHash);
   const compiled = await store.loadCompiled(compiledHash);
   assert.equal(compiled?.['BUILT.txt'], 'compiled marker');
