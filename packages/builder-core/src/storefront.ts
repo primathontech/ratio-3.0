@@ -70,8 +70,8 @@ function rootVars(t: ThemeTokens): string {
 const BASE = `
 *,*::before,*::after{box-sizing:border-box}
 :root{
-  --accent:#4f46e5;--accent-ink:#fff;--ink:#18181b;--muted:#6b7280;--bg:#fff;
-  --surface:#f6f6f8;--border:#e7e7ec;--radius:14px;--maxw:1120px;--base:16px;
+  --accent:#2563eb;--accent-ink:#fff;--ink:#0f172a;--muted:#475569;--bg:#fff;
+  --surface:#f1f5f9;--border:#e2e8f0;--radius:14px;--maxw:1120px;--base:16px;
   --font:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --font-heading:var(--font);
 }
