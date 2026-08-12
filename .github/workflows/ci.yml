@@ -150,6 +150,10 @@ jobs:
           # from repo variables, so it's the source of truth and can't drift off the task def. With
           # any of these absent the origin silently serves StubResolver sample products and the
           # GoKwik widgets stay off — so they must be re-applied on every revision, not set once.
+          # DATABASE_URL is here too (from the secret, same source the edge + migrate use): without it
+          # the jq-merge INHERITS whatever DATABASE_URL was already on the task def, so a changed
+          # secret would silently NOT reach the origin — exactly the drift that stranded the origin on
+          # the old DB region during the Neon move. Re-applying it every roll keeps all three in sync.
           ORIGIN_ENV=$(jq -cn \
             --arg COMMERCE_PRODUCT_API_URL   "${{ vars.COMMERCE_PRODUCT_API_URL }}" \
             --arg COMMERCE_CART_API_URL      "${{ vars.COMMERCE_CART_API_URL }}" \
@@ -160,6 +164,7 @@ jobs:
             --arg GOKWIK_ENVIRONMENT           "${{ vars.GOKWIK_ENVIRONMENT }}" \
             --arg GOKWIK_CURRENCY              "${{ vars.GOKWIK_CURRENCY }}" \
             --arg GOKWIK_CURRENCY_FORMAT       "${{ vars.GOKWIK_CURRENCY_FORMAT }}" \
+            --arg DATABASE_URL                 "${{ secrets.DATABASE_URL }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
