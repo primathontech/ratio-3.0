@@ -13,3 +13,17 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # S3-compatible object store for local dev + tests (theme bundles + assets, LLD BC0). The same
+  # @ratio/data-objects S3ObjectStore code talks to this locally and to AWS S3 in prod — only the
+  # endpoint/credentials differ.
+  minio:
+    image: minio/minio:latest
+    container_name: s2poc-minio
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: poc
+      MINIO_ROOT_PASSWORD: poc12345
+    ports:
+      - '9000:9000' # S3 API
+      - '9001:9001' # web console
