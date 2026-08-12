@@ -28,17 +28,26 @@ const draftKey = (themeId: string) => `themes/${themeId}/draft/source.gz`;
 const sourceKey = (hash: string) => `versions/source/${hash}.gz`;
 const compiledKey = (hash: string) => `versions/compiled/${hash}.gz`;
 
+// themeId is interpolated into S3 keys, so it must be a plain slug — reject anything with path
+// separators or traversal before it can escape a theme's namespace in the shared bucket.
+const THEME_ID_RE = /^[A-Za-z0-9_-]+$/;
+function assertThemeId(themeId: string): void {
+  if (!THEME_ID_RE.test(themeId)) throw new Error(`invalid theme id: '${themeId}'`);
+}
+
 export class ThemeStore {
   constructor(private readonly objects: ObjectStore) {}
 
   // Read the editable draft's source files (empty theme if never written).
   async readDraft(ref: ThemeRef): Promise<ThemeFiles> {
+    assertThemeId(ref.themeId);
     const blob = await this.objects.get(draftKey(ref.themeId));
     return blob ? unpackBundle(Buffer.from(blob)) : {};
   }
 
   // Write the whole editable draft as one source bundle; returns its content hash.
   async saveDraft(ref: ThemeRef, files: ThemeFiles): Promise<{ hash: string }> {
+    assertThemeId(ref.themeId);
     await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
     return { hash: bundleId(files) };
   }
@@ -59,6 +68,7 @@ export class ThemeStore {
 
   // Create a store's theme record if it does not exist (onboarding / first edit).
   async ensureTheme(storeId: string, themeId: string, name = 'Theme'): Promise<void> {
+    assertThemeId(themeId);
     await pool.query(
       'INSERT INTO theme (id, store_id, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
       [themeId, storeId, name]
@@ -69,6 +79,7 @@ export class ThemeStore {
   // store's live pointer to it. Bundle writes happen before the transaction — an aborted publish
   // only leaves unreferenced (harmless, content-addressed) bundles in S3.
   async publish(ref: ThemeRef, opts: { compile: CompileFn; by?: string }): Promise<PublishResult> {
+    assertThemeId(ref.themeId);
     const { sourceHash, compiledHash } = await this.freezeBundles(ref, opts);
     const client = await pool.connect();
     try {

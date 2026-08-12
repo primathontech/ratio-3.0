@@ -48,3 +48,22 @@ test('an empty theme round-trips and has a stable id', () => {
   assert.deepEqual(unpackBundle(packBundle(empty)), empty);
   assert.equal(bundleId(empty), bundleId({}));
 });
+
+test('preserves a file literally named __proto__ (no silent drop)', () => {
+  const files: ThemeFiles = Object.create(null);
+  files['a.liquid'] = 'x';
+  files['__proto__'] = 'proto content';
+  const round = unpackBundle(packBundle(files));
+  assert.equal(round['__proto__'], 'proto content');
+  assert.equal(round['a.liquid'], 'x');
+  assert.notEqual(
+    bundleId(files),
+    bundleId({ 'a.liquid': 'x' }),
+    'the __proto__ file is hashed in'
+  );
+});
+
+test('unpackBundle rejects a bundle that decompresses past the cap (zip-bomb guard)', () => {
+  const blob = packBundle({ 'big.txt': 'x'.repeat(5000) });
+  assert.throws(() => unpackBundle(blob, 1000)); // cap below the ~5 KB payload
+});
