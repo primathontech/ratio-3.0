@@ -28,7 +28,11 @@ const common = {
   logOverride: { 'require-resolve-not-external': 'silent' },
 };
 
-await build({ ...common, entryPoints: ['apps/origin/src/server.ts'], outfile: 'dist/origin/server.js' });
+await build({
+  ...common,
+  entryPoints: ['apps/origin/src/server.ts'],
+  outfile: 'dist/origin/server.js',
+});
 // The untrusted-render isolate spawns ./worker.mjs relative to the bundle (new URL(...,import.meta.url)),
 // so it MUST sit next to origin/server.js. Its own bundle inlines liquidjs.
 await build({
