@@ -88,6 +88,10 @@
       "name": "@ratio/data-db",
       "version": "0.1.0",
     },
+    "packages/data-objects": {
+      "name": "@ratio/data-objects",
+      "version": "0.1.0",
+    },
     "packages/data-provisioning": {
       "name": "@ratio/data-provisioning",
       "version": "0.1.0",
@@ -449,6 +453,8 @@
     "@ratio/control-plane-client": ["@ratio/control-plane-client@workspace:packages/control-plane-client"],
 
     "@ratio/data-db": ["@ratio/data-db@workspace:packages/data-db"],
+
+    "@ratio/data-objects": ["@ratio/data-objects@workspace:packages/data-objects"],
 
     "@ratio/data-provisioning": ["@ratio/data-provisioning@workspace:packages/data-provisioning"],
 
