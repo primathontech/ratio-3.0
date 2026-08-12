@@ -841,6 +841,25 @@ h3 {
   color: var(--muted);
 }
 
+/* In-store workspace: section nav + one panel at a time --------------------- */
+.workspace {
+  display: grid;
+  grid-template-columns: 212px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+.ws-nav {
+  position: sticky;
+  top: 72px;
+  padding: 10px 8px;
+}
+.ws-nav .nav-group:last-child {
+  margin-bottom: 0;
+}
+.ws-content {
+  min-width: 0;
+}
+
 /* Editor two-pane -------------------------------------------------------- */
 .editor {
   display: grid;
