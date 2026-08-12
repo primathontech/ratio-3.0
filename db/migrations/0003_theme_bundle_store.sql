@@ -41,3 +41,10 @@ CREATE TABLE IF NOT EXISTS theme_bundle_version (
 -- The live pointer, folded onto the tenant (1:1) — same shape as the legacy published_theme_version.
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS live_theme_id      text;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS live_theme_version integer;
+
+-- The two pointer columns are one logical value: both set (live) or both null (never published).
+-- Enforce it so a stray partial write can't leave a half-set pointer (id set, version null → the
+-- loadLiveCompiled join silently returns nothing). Drop-then-add keeps the migration re-runnable.
+ALTER TABLE tenants DROP CONSTRAINT IF EXISTS tenants_live_theme_pair_ck;
+ALTER TABLE tenants ADD CONSTRAINT tenants_live_theme_pair_ck
+  CHECK ((live_theme_id IS NULL) = (live_theme_version IS NULL));

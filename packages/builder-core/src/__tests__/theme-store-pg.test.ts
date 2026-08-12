@@ -92,3 +92,13 @@ test('publish on an unknown theme throws', { skip }, async () => {
     /unknown theme/
   );
 });
+
+test('a half-set live pointer is rejected by the DB (all-or-nothing)', { skip }, async () => {
+  await assert.rejects(
+    () =>
+      pool.query(
+        `INSERT INTO tenants (id, name, live_theme_id) VALUES ('t_mca_halfptr', 'Half', 'x')`
+      ),
+    /tenants_live_theme_pair_ck|check constraint/
+  );
+});
