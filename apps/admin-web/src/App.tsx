@@ -24,6 +24,7 @@ import {
 } from './ui';
 import { PageBuilderPanel } from './pagebuilder';
 import { ThemeSettingsPanel } from './theme-settings';
+import { CommandPalette, type Command } from './command-palette';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -338,6 +339,14 @@ function hostsOf(store: Store): string[] {
   return store.hosts ?? (store.host ? [store.host] : []);
 }
 
+function initials(name: string): string {
+  const letters = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0]);
+  return (letters.slice(0, 2).join('') || '?').toUpperCase();
+}
+
 function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
   const hosts = hostsOf(store);
   // *.localhost is the dev alias (added at onboard when RATIO_LOCAL); the real domains are the rest.
@@ -346,7 +355,10 @@ function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void;
   return (
     <div className="card store-card">
       <div className="top">
-        <div>
+        <span className="avatar avatar-sq" aria-hidden>
+          {initials(store.name)}
+        </span>
+        <div style={{ minWidth: 0 }}>
           {/* The store name is the primary action (a real button — keyboard/SR correct);
               host links are siblings, not nested inside an interactive element (M-2/L-4). */}
           <button type="button" className="name store-open" onClick={onOpen}>
@@ -400,7 +412,7 @@ function CreateStoreDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [f, setF] = useState({ name: '', host: '', color: '#4f46e5', merchantId: '' });
+  const [f, setF] = useState({ name: '', host: '', color: '#2563eb', merchantId: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
@@ -484,10 +496,99 @@ function CreateStoreDialog({
 /* Page manager ----------------------------------------------------------- */
 function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: () => void }) {
   const hosts = hostsOf(store);
+  const owner = store.role === 'owner';
   // Move focus to the store heading when this view opens so keyboard/SR users aren't dropped
   // to <body> on the transition (M5 / WCAG 2.4.3).
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => headingRef.current?.focus(), []);
+
+  // The store's panels, grouped into a left-nav workspace so one shows at a time (each loads its
+  // own data on demand). Owner-only sections are filtered here AND enforced server-side. The API
+  // enforces the same roles regardless of the UI.
+  const groups: {
+    title: string;
+    items: { key: string; label: string; node: React.ReactNode }[];
+  }[] = [
+    {
+      title: 'Design',
+      items: [
+        { key: 'theme', label: 'Theme', node: <ThemeSettingsPanel api={api} store={store} /> },
+        { key: 'pages', label: 'Pages', node: <PageBuilderPanel api={api} store={store} /> },
+        ...(owner
+          ? [
+              {
+                key: 'versions',
+                label: 'Versions',
+                node: <ThemeVersionsPanel api={api} store={store} />,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      title: 'Store',
+      items: [
+        { key: 'domains', label: 'Domains', node: <DomainsPanel api={api} store={store} /> },
+        ...(owner
+          ? [
+              {
+                key: 'commerce',
+                label: 'Commerce',
+                node: <CommercePanel api={api} store={store} />,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      title: 'Platform',
+      items: [
+        {
+          key: 'access',
+          label: 'Agent access',
+          node: <AgentAccessPanel api={api} store={store} />,
+        },
+        { key: 'audit', label: 'Audit log', node: <AuditPanel api={api} store={store} /> },
+      ],
+    },
+    ...(owner
+      ? [
+          {
+            title: 'Danger',
+            items: [
+              {
+                key: 'danger',
+                label: 'Delete store',
+                node: <DangerPanel api={api} store={store} onDeleted={onBack} />,
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+  const flat = groups.flatMap((g) => g.items);
+  const [active, setActive] = useState('theme');
+  const current = flat.find((s) => s.key === active) ?? flat[0];
+
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const commands: Command[] = [
+    ...flat.map((s) => ({
+      label: `Go to ${s.label}`,
+      group: 'Section',
+      run: () => setActive(s.key),
+    })),
+    { label: 'Back to all stores', group: 'Navigate', run: onBack },
+  ];
 
   return (
     <>
@@ -495,7 +596,7 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
         <Icon.back size={15} /> All stores
       </button>
       <div className="page-head">
-        <div>
+        <div className="head-text">
           <h1 ref={headingRef} tabIndex={-1} style={{ outline: 'none' }}>
             {store.name}
           </h1>
@@ -510,26 +611,45 @@ function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: (
             </p>
           )}
         </div>
+        <button
+          className="cmdk-trigger"
+          onClick={() => setPaletteOpen(true)}
+          aria-haspopup="dialog"
+        >
+          <span className="label">Jump to a section…</span>
+          <span className="kbd">⌘K</span>
+        </button>
       </div>
 
-      <ThemeSettingsPanel api={api} store={store} />
+      <div className="workspace">
+        <nav className="card ws-nav" aria-label="Store sections">
+          {groups.map((g) => (
+            <div className="nav-group" key={g.title}>
+              <div className="nav-group-title">{g.title}</div>
+              {g.items.map((s) => (
+                <button
+                  key={s.key}
+                  className={s.key === active ? 'nav-item active' : 'nav-item'}
+                  aria-current={s.key === active ? 'page' : undefined}
+                  onClick={() => setActive(s.key)}
+                >
+                  <span className="bar" />
+                  <span style={{ flex: 1 }}>{s.label}</span>
+                </button>
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="ws-content fade-in" key={active}>
+          {current?.node}
+        </div>
+      </div>
 
-      {/* Owner-only: publish the whole theme as an immutable version + roll back (ADR-013 §13). */}
-      {store.role === 'owner' && <ThemeVersionsPanel api={api} store={store} />}
-
-      {/* Owner-only: connect the GoKwik commerce backend so products/collections resolve. */}
-      {store.role === 'owner' && <CommercePanel api={api} store={store} />}
-
-      <PageBuilderPanel api={api} store={store} />
-
-      <DomainsPanel api={api} store={store} />
-
-      <AgentAccessPanel api={api} store={store} />
-
-      <AuditPanel api={api} store={store} />
-
-      {/* Owner-only, and the API enforces the same (requireRole('owner')) regardless of the UI. */}
-      {store.role === 'owner' && <DangerPanel api={api} store={store} onDeleted={onBack} />}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
     </>
   );
 }

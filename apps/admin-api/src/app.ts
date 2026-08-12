@@ -434,7 +434,7 @@ export function createApp(
       );
     }
     if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
-      return c.json({ error: 'color must be a hex value like #4f46e5' }, 400);
+      return c.json({ error: 'color must be a hex value like #2563eb' }, 400);
     }
     // Host format at the boundary (H1) — symmetric with POST /stores/:id/domains. Blocks junk
     // domain rows in the global routing table. (This does NOT prove ownership of a custom
