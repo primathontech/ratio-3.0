@@ -116,12 +116,12 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
             <div className="row" style={{ alignItems: 'center', gap: 10 }}>
               <input
                 type="color"
-                value={theme.color || '#4f46e5'}
+                value={theme.color || '#2563eb'}
                 onChange={(e) => set('color', e.target.value)}
                 aria-label="Brand colour"
               />
               <span className="mono" style={{ fontSize: 13 }}>
-                {theme.color || '#4f46e5'}
+                {theme.color || '#2563eb'}
               </span>
             </div>
           </label>

@@ -412,7 +412,7 @@ function CreateStoreDialog({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [f, setF] = useState({ name: '', host: '', color: '#4f46e5', merchantId: '' });
+  const [f, setF] = useState({ name: '', host: '', color: '#2563eb', merchantId: '' });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) =>
