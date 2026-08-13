@@ -164,7 +164,6 @@ function AuthedRoutes() {
           <Route index element={<HomePage />} />
           <Route path="theme" element={<ThemePage />} />
           <Route path="pages" element={<PagesPage />} />
-          <Route path="versions" element={<VersionsPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
           <Route path="access" element={<AccessPage />} />
@@ -209,17 +208,51 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
+// Theme = brand settings + version history, as tabs (Versions is owner-only).
 function ThemePage() {
   const { api, store } = useMerchant();
-  return <ThemeSettingsPanel api={api} store={store} />;
+  const owner = store.role === 'owner';
+  const [tab, setTab] = useState<'settings' | 'versions'>('settings');
+  return (
+    <div
+      className="fade-in"
+      style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1180 }}
+    >
+      <div className="page-head" style={{ marginBottom: 0 }}>
+        <div className="head-text">
+          <h1>Theme</h1>
+          <p className="muted">Your storefront's brand settings and published versions.</p>
+        </div>
+        <div className="seg">
+          <button
+            className={tab === 'settings' ? 'on' : ''}
+            aria-pressed={tab === 'settings'}
+            onClick={() => setTab('settings')}
+          >
+            Settings
+          </button>
+          {owner && (
+            <button
+              className={tab === 'versions' ? 'on' : ''}
+              aria-pressed={tab === 'versions'}
+              onClick={() => setTab('versions')}
+            >
+              Versions
+            </button>
+          )}
+        </div>
+      </div>
+      {tab === 'versions' && owner ? (
+        <ThemeVersionsPanel api={api} store={store} />
+      ) : (
+        <ThemeSettingsPanel api={api} store={store} />
+      )}
+    </div>
+  );
 }
 function PagesPage() {
   const { api, store } = useMerchant();
   return <PageBuilderPanel api={api} store={store} />;
-}
-function VersionsPage() {
-  const { api, store } = useMerchant();
-  return <ThemeVersionsPanel api={api} store={store} />;
 }
 function DomainsPage() {
   const { api, store } = useMerchant();

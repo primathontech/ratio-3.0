@@ -325,15 +325,20 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Build',
+    title: 'Design',
     items: [
-      { label: 'Theme editor', route: 'theme', hint: 'G T', real: true },
-      { label: 'Content', route: 'pages', real: true },
-      { label: 'Versions', route: 'versions', real: true, ownerOnly: true },
+      { label: 'Pages', route: 'pages', real: true },
+      // Theme also holds version history (published/rollback) as a tab.
+      { label: 'Theme', route: 'theme', hint: 'G T', real: true },
+    ],
+  },
+  {
+    title: 'Settings',
+    items: [
       { label: 'Domains', route: 'domains', real: true },
-      { label: 'Commerce', route: 'commerce', real: true, ownerOnly: true },
-      { label: 'Agent access', route: 'access', real: true },
-      { label: 'Audit log', route: 'audit', real: true },
+      { label: 'Checkout', route: 'commerce', real: true, ownerOnly: true },
+      { label: 'API access', route: 'access', real: true },
+      { label: 'Activity', route: 'audit', real: true },
     ],
   },
 ];
