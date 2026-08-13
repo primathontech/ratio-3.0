@@ -20,6 +20,10 @@ export interface Tenant {
   status: string;
   theme: TenantTheme;
   commerce?: TenantCommerce | null; // per-merchant data-layer config (null until connected)
+  // Live bundle-theme pointer (BC1). Null until the store publishes a bundle theme; when set, the
+  // origin renders via the compiled bundle for that version instead of the legacy page store.
+  liveThemeId?: string | null;
+  liveThemeVersion?: number | null;
 }
 // THE ONE GATE (ADR-001 D-MT3). The only way to touch tenant data is forTenant(id).
 // Every query injects tenant_id here; a caller cannot express a query without one,
@@ -31,7 +35,9 @@ export function forTenant(tenantId: string) {
   return {
     async getTenant(): Promise<Tenant | null> {
       const { rows } = await pool.query<Tenant>(
-        'SELECT id, name, status, theme, commerce FROM tenants WHERE id = $1',
+        `SELECT id, name, status, theme, commerce,
+                live_theme_id AS "liveThemeId", live_theme_version AS "liveThemeVersion"
+           FROM tenants WHERE id = $1`,
         [tenantId]
       );
       return rows[0] || null;

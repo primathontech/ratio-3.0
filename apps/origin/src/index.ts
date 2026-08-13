@@ -32,6 +32,9 @@ import {
 import { defaultRegistry, setUntrustedRenderer } from '@ratio/builder-registry';
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
+import { S3ObjectStore } from '@ratio/data-objects';
+import { ThemeStore, renderThemePage } from '@ratio/builder-core';
+import { config } from './config';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
 import { matchRoute, type RouteMatch } from '@ratio/builder-core';
@@ -80,6 +83,13 @@ setUntrustedRenderer(renderUntrusted);
 // local dev renders without a backend — but in production a missing COMMERCE_* throws here rather
 // than silently serving sample data (see storefrontResolver).
 const resolver = storefrontResolver(process.env);
+
+// Bundle theme store (BC1), only when configured (BUNDLE_S3_BUCKET). When present, a store that has
+// published a bundle theme renders from its compiled bundle; otherwise the origin uses only the
+// legacy page store. Fetches the compiled bundle once per version into an in-memory LRU.
+const themeStore = config.bundleStore
+  ? new ThemeStore(new S3ObjectStore(config.bundleStore))
+  : null;
 
 // Islands (Track 5): the ONLY per-user path. The cached shell carries inert placeholders that a
 // small first-party runtime hydrates from /api/island/*. The runtime is content-addressed so a
@@ -503,6 +513,29 @@ app.all('*', async (c) => {
     }
     c.header('x-cache', 'no-store');
     return c.json({ merchantCheckoutId });
+  }
+
+  // Bundle theme render (BC1): a store that has published a bundle theme renders from its compiled
+  // bundle — theme (merchant Liquid) sections run in the isolate. Falls through to the legacy page
+  // store when the store has no bundle theme, or the bundle has no template for this URL.
+  if (themeStore && tenant.liveThemeId) {
+    const canon = canonicalPath(path);
+    const page = canon === '/' ? 'index' : canon.replace(/^\//, '');
+    const compiled = await timed(c, 'bundle', () =>
+      themeStore.loadLiveCompiled(tenantId as string)
+    );
+    if (compiled && compiled[`templates/${page}.json`] != null) {
+      const sections = await timed(c, 'compose', () =>
+        renderThemePage(compiled, page, { theme: (liquid, data) => renderUntrusted(liquid, data) })
+      );
+      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;
+      c.header('x-tenant', tenantId as string);
+      c.header('x-handler', 'theme-bundle');
+      c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
+      c.header('x-cache', 'no-store'); // caching + purge tags land with the data-binding slice
+      setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
+      return c.html(html);
+    }
   }
 
   // Page-builder render path — the sole renderer. A published PageDoc for the URL (exact or a
