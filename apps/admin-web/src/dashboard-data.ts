@@ -325,19 +325,19 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     ],
   },
   {
-    title: 'Design',
+    title: 'Storefront',
     items: [
       { label: 'Pages', route: 'pages', real: true },
       // Theme also holds version history (published/rollback) as a tab.
       { label: 'Theme', route: 'theme', hint: 'G T', real: true },
+      { label: 'Domains', route: 'domains', real: true },
     ],
   },
   {
     title: 'Settings',
     items: [
-      { label: 'Domains', route: 'domains', real: true },
-      { label: 'Checkout', route: 'commerce', real: true, ownerOnly: true },
-      { label: 'API access', route: 'access', real: true },
+      { label: 'Payments', route: 'commerce', real: true, ownerOnly: true },
+      { label: 'Developers', route: 'access', real: true },
       { label: 'Activity', route: 'audit', real: true },
     ],
   },
