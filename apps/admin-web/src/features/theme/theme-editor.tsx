@@ -248,6 +248,13 @@ export function ThemeCodeEditor({
     .filter((p) => p.startsWith('templates/') && p.endsWith('.json'))
     .map((p) => p.slice('templates/'.length, -'.json'.length))
     .sort((a, b) => (a === 'index' ? -1 : b === 'index' ? 1 : a.localeCompare(b)));
+  // If the selected preview page's template was deleted/renamed, fall back to a valid one so the
+  // dropdown never shows a blank/invalid selection.
+  useEffect(() => {
+    if (templatePages.length > 0 && !templatePages.includes(previewPage)) {
+      setPreviewPage(templatePages[0]);
+    }
+  }, [templatePages, previewPage]);
   const ready = status === 'ready';
 
   return (
@@ -505,16 +512,21 @@ export function ThemeCodeEditor({
                         className="wb-preview-page"
                         aria-label="Preview page"
                         value={previewPage}
+                        disabled={templatePages.length === 0}
                         onChange={(e) => {
                           setPreviewPage(e.target.value);
                           void runPreview(files, e.target.value);
                         }}
                       >
-                        {templatePages.map((p) => (
-                          <option key={p} value={p}>
-                            {pageLabel(p)}
-                          </option>
-                        ))}
+                        {templatePages.length === 0 ? (
+                          <option value="">No pages</option>
+                        ) : (
+                          templatePages.map((p) => (
+                            <option key={p} value={p}>
+                              {pageLabel(p)}
+                            </option>
+                          ))
+                        )}
                       </select>
                       <button
                         className="btn-icon"
