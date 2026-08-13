@@ -81,8 +81,9 @@ export function ThemeCodeEditor({
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
+  const [showExplorer, setShowExplorer] = useState(true);
   const [showSearch, setShowSearch] = useState(false);
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewErr, setPreviewErr] = useState('');
   const [previewing, setPreviewing] = useState(false);
@@ -305,7 +306,12 @@ export function ThemeCodeEditor({
           <div className="wb-body">
             {/* Activity bar */}
             <div className="wb-activitybar">
-              <button className="active" title="Explorer" aria-label="Explorer">
+              <button
+                className={showExplorer ? 'active' : ''}
+                title="Explorer"
+                aria-label="Explorer"
+                onClick={() => setShowExplorer((v) => !v)}
+              >
                 <Icon.files size={22} />
               </button>
               <button
@@ -319,137 +325,142 @@ export function ThemeCodeEditor({
             </div>
 
             {/* Explorer */}
-            <aside className="wb-sidebar">
-              <div className="wb-sidebar-title">
-                <span>Explorer</span>
-              </div>
-              <div className="wb-ws">
-                <span className="wb-ws-name">{store.name}</span>
-                <div className="wb-ws-actions">
-                  <button
-                    className="btn-icon"
-                    title="New file"
-                    aria-label="New file"
-                    onClick={() => {
-                      setAdding(true);
-                      setNewPath('');
-                    }}
-                  >
-                    <Icon.newFile size={15} />
-                  </button>
-                  <button
-                    className="btn-icon"
-                    title="Collapse folders"
-                    aria-label="Collapse folders"
-                    onClick={collapseAll}
-                  >
-                    <Icon.collapseAll size={15} />
-                  </button>
+            {showExplorer && (
+              <aside className="wb-sidebar">
+                <div className="wb-sidebar-title">
+                  <span>Explorer</span>
                 </div>
-              </div>
+                <div className="wb-ws">
+                  <span className="wb-ws-name">{store.name}</span>
+                  <div className="wb-ws-actions">
+                    <button
+                      className="btn-icon"
+                      title="New file"
+                      aria-label="New file"
+                      onClick={() => {
+                        setAdding(true);
+                        setNewPath('');
+                      }}
+                    >
+                      <Icon.newFile size={15} />
+                    </button>
+                    <button
+                      className="btn-icon"
+                      title="Collapse folders"
+                      aria-label="Collapse folders"
+                      onClick={collapseAll}
+                    >
+                      <Icon.collapseAll size={15} />
+                    </button>
+                  </div>
+                </div>
 
-              {showSearch && (
-                <input
-                  className="input wb-search"
-                  placeholder="Filter files…"
-                  value={filter}
-                  autoFocus
-                  onChange={(e) => setFilter(e.target.value)}
-                />
-              )}
+                {showSearch && (
+                  <input
+                    className="input wb-search"
+                    placeholder="Filter files…"
+                    value={filter}
+                    autoFocus
+                    onChange={(e) => setFilter(e.target.value)}
+                  />
+                )}
 
-              <div className="wb-tree">
-                {shown.length === 0 ? (
-                  <div className="muted tree-empty">{filter ? 'No matches' : 'No files yet'}</div>
-                ) : (
-                  <ul className="tree-list">
-                    {groups.map((g) => {
-                      const open = !collapsed.has(g.folder);
-                      return (
-                        <li key={g.folder || '/'}>
-                          {g.folder && (
-                            <button
-                              className="tree-folder"
-                              aria-expanded={open}
-                              onClick={() => toggleFolder(g.folder)}
-                            >
-                              <span className="caret">{open ? '▾' : '▸'}</span>
-                              {g.folder}
-                            </button>
-                          )}
-                          {open && (
-                            <ul className={g.folder ? 'tree-files nested' : 'tree-files'}>
-                              {g.files.map((f) => {
-                                const glyph = fileGlyph(f.path);
-                                return (
-                                  <li key={f.path} className={f.path === selected ? 'active' : ''}>
-                                    <button
-                                      className="tree-item"
-                                      onClick={() => setSelected(f.path)}
+                <div className="wb-tree">
+                  {shown.length === 0 ? (
+                    <div className="muted tree-empty">{filter ? 'No matches' : 'No files yet'}</div>
+                  ) : (
+                    <ul className="tree-list">
+                      {groups.map((g) => {
+                        const open = !collapsed.has(g.folder);
+                        return (
+                          <li key={g.folder || '/'}>
+                            {g.folder && (
+                              <button
+                                className="tree-folder"
+                                aria-expanded={open}
+                                onClick={() => toggleFolder(g.folder)}
+                              >
+                                <span className="caret">{open ? '▾' : '▸'}</span>
+                                {g.folder}
+                              </button>
+                            )}
+                            {open && (
+                              <ul className={g.folder ? 'tree-files nested' : 'tree-files'}>
+                                {g.files.map((f) => {
+                                  const glyph = fileGlyph(f.path);
+                                  return (
+                                    <li
+                                      key={f.path}
+                                      className={f.path === selected ? 'active' : ''}
                                     >
-                                      <span className={`fi ${glyph.cls}`}>{glyph.text}</span>
-                                      {f.name}
-                                    </button>
-                                    {confirmDelete === f.path ? (
-                                      <span className="row" style={{ gap: 2 }}>
-                                        <button
-                                          className="btn-icon danger"
-                                          aria-label={`Confirm delete ${f.path}`}
-                                          onClick={() => {
-                                            deleteFile(f.path);
-                                            setConfirmDelete(null);
-                                          }}
-                                        >
-                                          <Icon.check />
-                                        </button>
+                                      <button
+                                        className="tree-item"
+                                        onClick={() => setSelected(f.path)}
+                                      >
+                                        <span className={`fi ${glyph.cls}`}>{glyph.text}</span>
+                                        {f.name}
+                                      </button>
+                                      {confirmDelete === f.path ? (
+                                        <span className="row" style={{ gap: 2 }}>
+                                          <button
+                                            className="btn-icon danger"
+                                            aria-label={`Confirm delete ${f.path}`}
+                                            onClick={() => {
+                                              deleteFile(f.path);
+                                              setConfirmDelete(null);
+                                            }}
+                                          >
+                                            <Icon.check />
+                                          </button>
+                                          <button
+                                            className="btn-icon"
+                                            aria-label="Cancel delete"
+                                            onClick={() => setConfirmDelete(null)}
+                                          >
+                                            ✕
+                                          </button>
+                                        </span>
+                                      ) : (
                                         <button
                                           className="btn-icon"
-                                          aria-label="Cancel delete"
-                                          onClick={() => setConfirmDelete(null)}
+                                          aria-label={`Delete ${f.path}`}
+                                          onClick={() => setConfirmDelete(f.path)}
                                         >
-                                          ✕
+                                          <Icon.trash />
                                         </button>
-                                      </span>
-                                    ) : (
-                                      <button
-                                        className="btn-icon"
-                                        aria-label={`Delete ${f.path}`}
-                                        onClick={() => setConfirmDelete(f.path)}
-                                      >
-                                        <Icon.trash />
-                                      </button>
-                                    )}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-                {adding && (
-                  <div className="wb-add">
-                    <input
-                      className="input"
-                      placeholder="sections/new.liquid"
-                      value={newPath}
-                      autoFocus
-                      onChange={(e) => setNewPath(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') addFile();
-                        if (e.key === 'Escape') {
-                          addCancelled.current = true;
-                          setAdding(false);
-                        }
-                      }}
-                      onBlur={addFile}
-                    />
-                  </div>
-                )}
-              </div>
-            </aside>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  {adding && (
+                    <div className="wb-add">
+                      <input
+                        className="input"
+                        placeholder="sections/new.liquid"
+                        value={newPath}
+                        autoFocus
+                        onChange={(e) => setNewPath(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') addFile();
+                          if (e.key === 'Escape') {
+                            addCancelled.current = true;
+                            setAdding(false);
+                          }
+                        }}
+                        onBlur={addFile}
+                      />
+                    </div>
+                  )}
+                </div>
+              </aside>
+            )}
 
             {/* Editor + preview */}
             <div className="wb-main">
