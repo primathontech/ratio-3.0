@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { App } from './App';
@@ -35,7 +36,9 @@ function Root() {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
-      <Root />
+      <BrowserRouter>
+        <Root />
+      </BrowserRouter>
     </ThemeProvider>
   </StrictMode>
 );

@@ -1,42 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import type { Api, Store } from './api';
 import { useTheme } from './theme';
 import { Icon } from './ui';
 import { NAV, type NavItem } from './dashboard-data';
 import { AskRatio } from './ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
+import { resolveStore, storeSlug, useStoreData } from './store-context';
 
-export interface ShellNav {
-  go: (route: string) => void;
-  enterStore: (store: Store) => void;
-}
-
-// The signed-in merchant shell: left sidebar (store switcher + nav) + top bar + routed main +
-// the Ask Ratio rail. Layout/routing live here; the parent supplies the per-route content via
-// `renderRoute` so the real store panels stay where they're defined (no circular imports).
-export function AppShell({
-  api,
-  stores,
-  isPlatformAdmin,
-  onCreate,
-  onChanged,
-  renderRoute,
-}: {
-  api: Api;
-  stores: Store[];
-  isPlatformAdmin: boolean;
-  onCreate: () => void;
-  onChanged: () => void;
-  renderRoute: (route: string, store: Store, nav: ShellNav) => React.ReactNode;
-}) {
+// The merchant shell for a single store (/stores/:storeId/*): sidebar + top bar + Ask rail, with
+// the route content in <Outlet>. The current store lives in the URL.
+export function MerchantLayout() {
+  const { storeId } = useParams();
+  const { api, stores, me, reload, openCreate } = useStoreData();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { resolved, cycle } = useTheme();
-  const [route, setRoute] = useState('home');
-  // Track the selected store by id, not index: a reload (create/delete/assistant action) can reorder
-  // or shrink `stores`, and an index would silently point at a different store.
-  const [storeId, setStoreId] = useState<string>(stores[0]?.id);
-  // 1200px is the single breakpoint: at/above it the Ask rail is a column, below it an overlay
-  // drawer. Keep the initial-open check and the overlay logic on the same threshold as the CSS.
+
   const [askOpen, setAskOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1200 : true
   );
@@ -51,35 +31,10 @@ export function AppShell({
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-
-  const current = stores.find((s) => s.id === storeId) ?? stores[0];
-  const owner = current?.role === 'owner';
-
-  // Move focus to the main region on route / store change so keyboard + SR users aren't stranded on
-  // a now-hidden control (WCAG 2.4.3).
+  // Focus the main region on navigation so keyboard/SR users aren't stranded (WCAG 2.4.3).
   useEffect(() => {
     mainRef.current?.focus();
-  }, [route, current?.id]);
-
-  const groups = useMemo(
-    () =>
-      NAV.map((g) => ({
-        title: g.title,
-        items: g.items.filter(
-          (it) => (!it.ownerOnly || owner) && (!it.adminOnly || isPlatformAdmin)
-        ),
-      })).filter((g) => g.items.length > 0),
-    [owner, isPlatformAdmin]
-  );
-
-  const nav: ShellNav = {
-    go: (r) => setRoute(r),
-    enterStore: (s) => {
-      setStoreId(s.id);
-      setRoute('home');
-    },
-  };
-
+  }, [location.pathname]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -93,15 +48,32 @@ export function AppShell({
     return () => window.removeEventListener('keydown', onKey);
   }, [narrow]);
 
+  const store = resolveStore(stores, storeId);
+  if (!store) return <Navigate to="/" replace />;
+  const owner = store.role === 'owner';
+  const slug = storeSlug(store);
+
+  const pathFor = (route: string) =>
+    route === 'admin'
+      ? '/admin'
+      : route === 'home'
+        ? `/stores/${slug}`
+        : `/stores/${slug}/${route}`;
+
+  const groups = NAV.map((g) => ({
+    title: g.title,
+    items: g.items.filter(
+      (it) => (!it.ownerOnly || owner) && (!it.adminOnly || me?.isPlatformAdmin)
+    ),
+  })).filter((g) => g.items.length > 0);
+
   const commands: Command[] = groups.flatMap((g) =>
     g.items.map((it) => ({
       label: `Go to ${it.label}`,
       group: g.title,
-      run: () => setRoute(it.route),
+      run: () => navigate(pathFor(it.route)),
     }))
   );
-
-  const showAsk = askOpen && route !== 'admin';
 
   return (
     <div className="app-shell">
@@ -110,17 +82,18 @@ export function AppShell({
           className="sidebar-brand"
           aria-label={
             stores.length > 1
-              ? `Current store: ${current?.name}. Activate to switch store.`
-              : current?.name
+              ? `Current store: ${store.name}. Activate to switch store.`
+              : store.name
           }
-          onClick={() => {
-            const i = stores.findIndex((s) => s.id === current?.id);
-            setStoreId(stores[(i + 1) % stores.length].id);
-          }}
+          onClick={() =>
+            navigate(
+              `/stores/${storeSlug(stores[(stores.findIndex((s) => s.id === store.id) + 1) % stores.length])}`
+            )
+          }
         >
           <span className="logo">R</span>
           <span className="brand-meta">
-            <span className="brand-name">{current?.name ?? 'Ratio'}</span>
+            <span className="brand-name">{store.name}</span>
             <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
           </span>
           {stores.length > 1 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>⌄</span>}
@@ -131,16 +104,16 @@ export function AppShell({
             <div className="nav-group" key={g.title}>
               <div className="nav-group-title">{g.title}</div>
               {g.items.map((it: NavItem) => (
-                <button
+                <NavLink
                   key={it.route}
-                  className={it.route === route ? 'nav-item active' : 'nav-item'}
-                  aria-current={it.route === route ? 'page' : undefined}
-                  onClick={() => setRoute(it.route)}
+                  to={pathFor(it.route)}
+                  end={it.route === 'home'}
+                  className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
                 >
                   <span className="bar" />
                   <span style={{ flex: 1 }}>{it.label}</span>
                   {it.hint && <span className="hint">{it.hint}</span>}
-                </button>
+                </NavLink>
               ))}
             </div>
           ))}
@@ -151,7 +124,7 @@ export function AppShell({
           <p style={{ margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--muted)' }}>
             Spin up another storefront — it goes live instantly.
           </p>
-          <button className="btn btn-primary btn-sm" style={{ marginTop: 2 }} onClick={onCreate}>
+          <button className="btn btn-primary btn-sm" style={{ marginTop: 2 }} onClick={openCreate}>
             <Icon.plus /> New store
           </button>
         </div>
@@ -181,7 +154,7 @@ export function AppShell({
               {resolved === 'dark' ? 'Light' : 'Dark'}
             </button>
             <button
-              className={showAsk ? 'btn btn-primary' : 'btn btn-ghost'}
+              className={askOpen ? 'btn btn-primary' : 'btn btn-ghost'}
               onClick={() => setAskOpen((o) => !o)}
             >
               Ask Ratio
@@ -190,26 +163,25 @@ export function AppShell({
           </div>
         </header>
 
-        <div className={showAsk ? 'shell-body with-ask' : 'shell-body'}>
+        <div className={askOpen ? 'shell-body with-ask' : 'shell-body'}>
           <main
             className="container"
             style={{ overflow: 'auto', outline: 'none' }}
             ref={mainRef}
             tabIndex={-1}
           >
-            {current && renderRoute(route, current, nav)}
+            <Outlet context={{ api, store }} />
           </main>
-          {showAsk && (
+          {askOpen && (
             <>
-              {/* Click-away backdrop only when the rail is an overlay drawer (< 1200px). */}
               {narrow && (
                 <div className="ask-backdrop" onClick={() => setAskOpen(false)} aria-hidden />
               )}
               <AskRatio
                 api={api}
-                storeId={current?.id ?? null}
+                storeId={store.id}
                 overlay={narrow}
-                onChanged={onChanged}
+                onChanged={reload}
                 onClose={() => setAskOpen(false)}
               />
             </>
@@ -217,6 +189,81 @@ export function AppShell({
         </div>
       </div>
 
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        commands={commands}
+      />
+    </div>
+  );
+}
+
+// The platform (super-admin) view (/admin): no store sidebar, its own top bar, Merchants in Outlet.
+export function PlatformLayout() {
+  const { stores } = useStoreData();
+  const navigate = useNavigate();
+  const { resolved, cycle } = useTheme();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const first = stores[0];
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const commands: Command[] = first
+    ? [
+        {
+          label: 'Merchant view',
+          group: 'Navigate',
+          run: () => navigate(`/stores/${storeSlug(first)}`),
+        },
+      ]
+    : [];
+
+  return (
+    <div className="app-shell no-sidebar">
+      <div className="main-area">
+        <header className="appbar">
+          <span className="brand">
+            <span className="logo">R</span>
+            Ratio Platform
+            <span className="badge badge-accent">Super admin</span>
+          </span>
+          <div className="right">
+            <button
+              className="cmdk-trigger"
+              style={{ flex: 'none', width: 220, marginLeft: 'auto' }}
+              onClick={() => setPaletteOpen(true)}
+              aria-haspopup="dialog"
+            >
+              <span className="label">Search platform…</span>
+              <span className="kbd">⌘K</span>
+            </button>
+            <button className="btn btn-ghost" onClick={cycle}>
+              {resolved === 'dark' ? 'Light' : 'Dark'}
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() => first && navigate(`/stores/${storeSlug(first)}`)}
+            >
+              Merchant view
+            </button>
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </header>
+        <div className="shell-body">
+          <main className="container" style={{ overflow: 'auto' }}>
+            <Outlet />
+          </main>
+        </div>
+      </div>
       <CommandPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
