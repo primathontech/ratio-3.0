@@ -328,7 +328,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     title: 'Storefront',
     items: [
       { label: 'Pages', route: 'pages', real: true },
-      // Theme also holds version history (published/rollback) as a tab.
+      // Theme holds settings + code editor + version history (published/rollback) as tabs.
       { label: 'Theme', route: 'theme', hint: 'G T', real: true },
       { label: 'Domains', route: 'domains', real: true },
     ],

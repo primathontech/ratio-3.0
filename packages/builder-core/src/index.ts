@@ -18,5 +18,6 @@ export * from './storefront';
 export * from './theme-render';
 export * from './theme-store';
 export * from './theme-compose';
+export * from './default-theme';
 export * from './theme-versions';
 export * from './tags';

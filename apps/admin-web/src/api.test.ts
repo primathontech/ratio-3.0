@@ -267,4 +267,78 @@ describe('admin api client', () => {
       status: 409,
     });
   });
+
+  test('getBundleDraft GETs the draft endpoint and unwraps the files map', async () => {
+    let seen: Request | undefined;
+    const files = { 'index.liquid': 'HELLO', 'theme.css': 'body{}' };
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { files }, (r) => (seen = r))
+    );
+    expect(await api.getBundleDraft('s1')).toEqual(files);
+    expect(seen?.method).toBe('GET');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/draft');
+  });
+
+  test('getBundleDraft defaults to an empty map when files is absent', async () => {
+    const api = createApi('http://api', async () => 't', fakeFetch(200, {}));
+    expect(await api.getBundleDraft('s1')).toEqual({});
+  });
+
+  test('saveBundleDraft PUTs the files wrapped in { files }', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, hash: 'h1' }, (r) => (seen = r))
+    );
+    const files = { 'index.liquid': 'X' };
+    await api.saveBundleDraft('s1', files);
+    expect(seen?.method).toBe('PUT');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/draft');
+    expect(await seen!.json()).toEqual({ files });
+  });
+
+  test('scaffoldBundleDraft POSTs to scaffold and unwraps the seeded files', async () => {
+    let seen: Request | undefined;
+    const files = { 'layout/theme.liquid': '<html></html>' };
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { files, seeded: true }, (r) => (seen = r))
+    );
+    expect(await api.scaffoldBundleDraft('s1')).toEqual(files);
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/scaffold');
+  });
+
+  test('publishBundle POSTs to the bundle publish endpoint', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, version: 1 }, (r) => (seen = r))
+    );
+    expect(await api.publishBundle('s1')).toEqual({ ok: true, version: 1 });
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/publish');
+  });
+
+  test('publishBundle surfaces a 400 (no draft) as ApiError', async () => {
+    const api = createApi('http://api', async () => 't', fakeFetch(400, { error: 'no draft' }));
+    await expect(api.publishBundle('s1')).rejects.toMatchObject({ name: 'ApiError', status: 400 });
+  });
+
+  test('rollbackBundle POSTs the target version', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, version: 2 }, (r) => (seen = r))
+    );
+    await api.rollbackBundle('s1', 2);
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/rollback');
+    expect(await seen!.json()).toEqual({ version: 2 });
+  });
 });

@@ -22,8 +22,10 @@ const verify = async (token: string) =>
         ? { userId: CAROL }
         : null;
 
-// An in-memory ObjectStore — the bundle bytes live here instead of S3/MinIO.
-function memStore(): ObjectStore {
+// An in-memory ObjectStore — the bundle bytes live here instead of S3/MinIO. `clear()` wipes it
+// between tests (the DB rows are reset in beforeEach; the object bytes must be reset too, else a draft
+// saved by one test leaks into the next).
+function memStore(): ObjectStore & { clear: () => void } {
   const mem = new Map<string, Uint8Array>();
   return {
     put: async (k, b) => {
@@ -35,10 +37,12 @@ function memStore(): ObjectStore {
     delete: async (k) => {
       mem.delete(k);
     },
+    clear: () => mem.clear(),
   };
 }
 
-const app = createApp(verify, { bundleThemes: new ThemeStore(memStore()) });
+const objects = memStore();
+const app = createApp(verify, { bundleThemes: new ThemeStore(objects) });
 // A second app with NO bundle store wired — exercises the 503 gate.
 const appNoStore = createApp(verify, { bundleThemes: null });
 
@@ -88,6 +92,7 @@ before(async () => {
   );
 });
 beforeEach(async () => {
+  objects.clear();
   await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [MAIN]);
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [ID]);
   await pool.query(
@@ -179,6 +184,20 @@ test('a member (non-owner) can save/preview a draft but cannot publish or rollba
   assert.strictEqual(pub.status, 403);
   const rb = await call(app, 'POST', `/stores/${ID}/theme/bundle/rollback`, carol, { version: 1 });
   assert.strictEqual(rb.status, 403);
+});
+
+test('scaffold seeds a default starter theme when empty, and is a no-op once files exist', async () => {
+  const first = await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  assert.strictEqual(first.status, 200);
+  const body1 = (await first.json()) as { files: Record<string, string>; seeded: boolean };
+  assert.strictEqual(body1.seeded, true);
+  assert.ok(body1.files['layout/theme.liquid'], 'seeds a layout');
+  assert.ok(body1.files['templates/index.json'], 'seeds a home template');
+
+  // Second call: the theme already has files → returns them, does not re-seed.
+  const second = await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const body2 = (await second.json()) as { seeded: boolean };
+  assert.strictEqual(body2.seeded, false);
 });
 
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {

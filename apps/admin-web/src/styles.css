@@ -974,6 +974,152 @@ h3 {
   border-radius: var(--radius-sm);
   background: #fff;
 }
+/* Theme code editor: a narrow file tree beside the code pane. */
+/* Theme code editor: a VS Code-style IDE panel — an Explorer sidebar joined to the Monaco editor. */
+.ide {
+  display: flex;
+  height: 66vh;
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.ide-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+.ide-sidebar-head {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ide-tree {
+  flex: 1;
+  overflow: auto;
+  padding: 0 6px 8px;
+}
+.ide-tree .tree-list,
+.tree-files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ide-sidebar .tree-files li {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--radius-sm);
+}
+.ide-sidebar .tree-files li:hover {
+  background: var(--surface-3);
+}
+.ide-sidebar .tree-files li.active {
+  background: var(--accent-weak);
+}
+.tree-files.nested {
+  padding-left: 12px;
+}
+.ide-add {
+  padding: 8px;
+  border-top: 1px solid var(--line);
+}
+.ide-editor {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.ide-empty {
+  margin: auto;
+  padding: 24px;
+  font-size: 13px;
+}
+.code-host {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.tree-item {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 5px 6px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-empty {
+  padding: 8px;
+  font-size: 12px;
+}
+.tree-folder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 6px 6px 3px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.tree-folder .caret {
+  display: inline-block;
+  width: 10px;
+  font-size: 9px;
+}
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 4px;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.btn-icon:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+.btn-icon.danger {
+  color: var(--danger, #c0392b);
+}
+@media (max-width: 720px) {
+  .ide {
+    flex-direction: column;
+    height: auto;
+  }
+  .ide-sidebar {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .code-host {
+    height: 58vh;
+  }
+}
 .preview-bar {
   display: flex;
   align-items: center;
