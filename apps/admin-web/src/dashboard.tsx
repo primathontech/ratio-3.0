@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import {
   CHART,
   CHECKLIST,
@@ -45,6 +46,8 @@ const initials = (n: string) =>
 // The merchant "home" — reference Sophie dashboard. All numbers are placeholder demo data (see
 // dashboard-data). `storeName` and the range are the only live bits of state.
 export function DashboardHome({ storeName }: { storeName: string }) {
+  const { user } = useUser();
+  const firstName = user?.firstName;
   const [range, setRange] = useState<RangeKey>('7d');
   const [done, setDone] = useState<Record<string, boolean>>({ products: true });
   const pct = Math.round((Object.values(done).filter(Boolean).length / CHECKLIST.length) * 100);
@@ -54,7 +57,7 @@ export function DashboardHome({ storeName }: { storeName: string }) {
     <div className="dash fade-in">
       <div className="page-head">
         <div className="head-text">
-          <h1>Good morning</h1>
+          <h1>Good morning{firstName ? `, ${firstName}` : ''}</h1>
           <p>
             Ratio watched <strong>{storeName}</strong> overnight. Revenue is pacing 12% ahead of
             last week.
@@ -92,7 +95,7 @@ export function DashboardHome({ storeName }: { storeName: string }) {
           style={{ padding: '18px 20px 14px', display: 'flex', flexDirection: 'column', gap: 16 }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <h2>Sales</h2>
+            <h3 style={{ fontSize: 20 }}>Sales</h3>
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{RANGE_LABEL[range]}</span>
             <div style={{ flex: 1 }} />
             <span className="legend">
@@ -196,7 +199,7 @@ export function DashboardHome({ storeName }: { storeName: string }) {
             borderBottom: '1px solid var(--line)',
           }}
         >
-          <h2>Recent orders</h2>
+          <h3 style={{ fontSize: 20 }}>Recent orders</h3>
           <span className="pill pill-warn">3 need review</span>
         </div>
         <div className="table-wrap">
