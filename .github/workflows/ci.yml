@@ -37,7 +37,7 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
@@ -68,7 +68,7 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11
       - run: bun install --frozen-lockfile
       # Only apply schema to prod. There is no seed — real stores come from onboarding.
       - name: Migrate Neon
@@ -237,7 +237,7 @@ jobs:
       # the build job, then run its scripts with `bun run --cwd`.
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11
       - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/admin-web typecheck
       - run: bun run --cwd apps/admin-web test

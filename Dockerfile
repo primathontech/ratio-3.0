@@ -6,7 +6,7 @@
 # ships ONLY those bundles on a slim Node. Two wins over the old `npx tsx <source>` image: no
 # runtime TS-compile (killed the first-request cold-start), and no node_modules/source in the image
 # (much smaller). Packages stay source-.ts for the tsx dev loop + the edge — only this build compiles.
-FROM oven/bun:1 AS build
+FROM oven/bun:1.3.11 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 # Every workspace manifest must be present so `bun install` resolves the @ratio/* workspaces.

@@ -37,7 +37,7 @@ jobs:
           node-version: 22
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11
       - run: bun install --frozen-lockfile
       # All ${{ inputs.* }} / secrets go through env (shell vars), never interpolated into
       # the run script — otherwise an input like "$(...)" executes on the runner, which
