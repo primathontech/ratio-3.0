@@ -26,7 +26,7 @@ import { SuperAdmin } from './superadmin';
 import { DashboardHome } from './dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './app-shell';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { StoreDataProvider, useMerchant, useStoreData, type Me } from './store-context';
+import { StoreDataProvider, storeSlug, useMerchant, useStoreData, type Me } from './store-context';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -183,7 +183,7 @@ function AuthedRoutes() {
 function RoleRedirect() {
   const { stores, me } = useStoreData();
   if (me?.isPlatformAdmin) return <Navigate to="/admin" replace />;
-  return <Navigate to={`/stores/${stores[0].id}`} replace />;
+  return <Navigate to={`/stores/${storeSlug(stores[0])}`} replace />;
 }
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
@@ -198,7 +198,11 @@ function SuperAdminPage() {
   const { stores, openCreate } = useStoreData();
   const navigate = useNavigate();
   return (
-    <SuperAdmin stores={stores} onOpen={(s) => navigate(`/stores/${s.id}`)} onCreate={openCreate} />
+    <SuperAdmin
+      stores={stores}
+      onOpen={(s) => navigate(`/stores/${storeSlug(s)}`)}
+      onCreate={openCreate}
+    />
   );
 }
 function HomePage() {

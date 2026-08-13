@@ -6,7 +6,7 @@ import { Icon } from './ui';
 import { NAV, type NavItem } from './dashboard-data';
 import { AskRatio } from './ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
-import { useStoreData } from './store-context';
+import { resolveStore, storeSlug, useStoreData } from './store-context';
 
 // The merchant shell for a single store (/stores/:storeId/*): sidebar + top bar + Ask rail, with
 // the route content in <Outlet>. The current store lives in the URL.
@@ -48,16 +48,17 @@ export function MerchantLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, [narrow]);
 
-  const store = stores.find((s) => s.id === storeId);
+  const store = resolveStore(stores, storeId);
   if (!store) return <Navigate to="/" replace />;
   const owner = store.role === 'owner';
+  const slug = storeSlug(store);
 
   const pathFor = (route: string) =>
     route === 'admin'
       ? '/admin'
       : route === 'home'
-        ? `/stores/${store.id}`
-        : `/stores/${store.id}/${route}`;
+        ? `/stores/${slug}`
+        : `/stores/${slug}/${route}`;
 
   const groups = NAV.map((g) => ({
     title: g.title,
@@ -86,7 +87,7 @@ export function MerchantLayout() {
           }
           onClick={() =>
             navigate(
-              `/stores/${stores[(stores.findIndex((s) => s.id === store.id) + 1) % stores.length].id}`
+              `/stores/${storeSlug(stores[(stores.findIndex((s) => s.id === store.id) + 1) % stores.length])}`
             )
           }
         >
@@ -217,7 +218,13 @@ export function PlatformLayout() {
   }, []);
 
   const commands: Command[] = first
-    ? [{ label: 'Merchant view', group: 'Navigate', run: () => navigate(`/stores/${first.id}`) }]
+    ? [
+        {
+          label: 'Merchant view',
+          group: 'Navigate',
+          run: () => navigate(`/stores/${storeSlug(first)}`),
+        },
+      ]
     : [];
 
   return (
@@ -229,22 +236,22 @@ export function PlatformLayout() {
             Ratio Platform
             <span className="badge badge-accent">Super admin</span>
           </span>
-          <button
-            className="cmdk-trigger"
-            style={{ flex: 'none', width: 220, marginLeft: 'auto' }}
-            onClick={() => setPaletteOpen(true)}
-            aria-haspopup="dialog"
-          >
-            <span className="label">Search platform…</span>
-            <span className="kbd">⌘K</span>
-          </button>
           <div className="right">
+            <button
+              className="cmdk-trigger"
+              style={{ flex: 'none', width: 220, marginLeft: 'auto' }}
+              onClick={() => setPaletteOpen(true)}
+              aria-haspopup="dialog"
+            >
+              <span className="label">Search platform…</span>
+              <span className="kbd">⌘K</span>
+            </button>
             <button className="btn btn-ghost" onClick={cycle}>
               {resolved === 'dark' ? 'Light' : 'Dark'}
             </button>
             <button
               className="btn btn-ghost"
-              onClick={() => first && navigate(`/stores/${first.id}`)}
+              onClick={() => first && navigate(`/stores/${storeSlug(first)}`)}
             >
               Merchant view
             </button>
