@@ -29,7 +29,7 @@ import {
   type CspDirectives,
   type IntegrationContext,
 } from '@ratio/gokwik';
-import { defaultRegistry, setUntrustedRenderer } from '@ratio/builder-registry';
+import { defaultRegistry, setUntrustedRenderer, renderSection } from '@ratio/builder-registry';
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
@@ -530,7 +530,17 @@ app.all('*', async (c) => {
           renderThemePage(
             compiled,
             page,
-            { theme: (liquid, data) => renderUntrusted(liquid, data) },
+            {
+              // Theme sections: the bundle's Liquid, sandboxed in the isolate. Platform sections:
+              // no Liquid in the bundle — resolve the type to the current first-party record and
+              // render it in-process (trusted code), so a page can mix both flavors.
+              theme: (liquid, data) => renderUntrusted(liquid, data),
+              platform: (type, data) => {
+                const rec = pbRegistry.get(type);
+                if (!rec) throw new Error(`unknown platform section '${type}'`);
+                return renderSection(rec, data);
+              },
+            },
             { resolver, ctx: { tenantId: tenantId as string, commerce: tenant.commerce } }
           )
         );

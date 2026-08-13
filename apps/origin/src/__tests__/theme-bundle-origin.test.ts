@@ -26,6 +26,8 @@ const THEME = 'themebundle_o1_main';
 const T2 = 'themebundle_o2';
 const T3 = 'themebundle_o3';
 const THEME3 = 'themebundle_o3_main';
+const T4 = 'themebundle_o4';
+const THEME4 = 'themebundle_o4_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -38,8 +40,9 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [T, T2, T3]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
-  for (const id of [THEME, THEME3]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [T, T2, T3, T4]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3, THEME4])
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
   ]);
@@ -50,6 +53,9 @@ before(async () => {
     "INSERT INTO tenants (id, name, status) VALUES ($1, 'Broken Bundle', 'active')",
     [T3]
   );
+  await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Mixed Bundle', 'active')", [
+    T4,
+  ]);
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -68,12 +74,30 @@ before(async () => {
   await store.ensureTheme(T3, THEME3);
   await store.saveDraft({ themeId: THEME3 }, { 'templates/index.json': 'NOT JSON' });
   await store.publish({ themeId: THEME3 }, { compile: (s) => s });
+
+  // A bundle mixing a PLATFORM section (heading — first-party code, no Liquid in the bundle) and a
+  // THEME section (promo — Liquid in the bundle).
+  await store.ensureTheme(T4, THEME4);
+  await store.saveDraft(
+    { themeId: THEME4 },
+    {
+      'sections/promo.liquid': '<p class="promo">{{ msg }}</p>',
+      'templates/index.json': JSON.stringify({
+        sections: [
+          { type: 'heading', data: { heading: { text: 'Featured' } } },
+          { type: 'promo', data: { msg: 'Hi there' } },
+        ],
+      }),
+    }
+  );
+  await store.publish({ themeId: THEME4 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  for (const id of [THEME, THEME3]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3, THEME4])
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [T, T2, T3, T4]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
 test(
@@ -114,3 +138,18 @@ test('a broken bundle degrades to the legacy path, not a 500', { skip }, async (
   assert.notEqual(res.status, 500);
   assert.notEqual(res.headers.get('x-handler'), 'theme-bundle');
 });
+
+test(
+  'renders a page mixing a platform (code) section and a theme (Liquid) section',
+  {
+    skip,
+  },
+  async () => {
+    const res = await call('/', edge({ 'x-ratio-tenant': T4 }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+    const body = await res.text();
+    assert.match(body, /<h2 class="heading">Featured<\/h2>/); // platform section, rendered from code
+    assert.match(body, /<p class="promo">Hi there<\/p>/); // theme section, rendered from bundle Liquid
+  }
+);
