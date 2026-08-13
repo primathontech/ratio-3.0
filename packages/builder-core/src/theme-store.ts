@@ -35,8 +35,35 @@ function assertThemeId(themeId: string): void {
   if (!THEME_ID_RE.test(themeId)) throw new Error(`invalid theme id: '${themeId}'`);
 }
 
+// A tiny insertion-ordered LRU. Compiled bundles are content-addressed (immutable), so caching them
+// by hash is always safe — a repeat load skips the object-store round-trip (LLD BC3). Values are
+// treated read-only by callers.
+class Lru<K, V> {
+  private readonly map = new Map<K, V>();
+  constructor(private readonly max: number) {}
+  get(key: K): V | undefined {
+    const v = this.map.get(key);
+    if (v !== undefined) {
+      this.map.delete(key);
+      this.map.set(key, v);
+    }
+    return v;
+  }
+  set(key: K, value: V): void {
+    if (this.map.has(key)) this.map.delete(key);
+    this.map.set(key, value);
+    if (this.map.size > this.max) this.map.delete(this.map.keys().next().value as K);
+  }
+}
+
 export class ThemeStore {
-  constructor(private readonly objects: ObjectStore) {}
+  private readonly compiledCache: Lru<string, ThemeFiles>;
+  constructor(
+    private readonly objects: ObjectStore,
+    opts: { compiledCacheMax?: number } = {}
+  ) {
+    this.compiledCache = new Lru(opts.compiledCacheMax ?? 32);
+  }
 
   // Read the editable draft's source files (empty theme if never written).
   async readDraft(ref: ThemeRef): Promise<ThemeFiles> {
@@ -75,11 +102,24 @@ export class ThemeStore {
     );
   }
 
-  // Publish: freeze the bundles, then (atomically) record a new immutable version and flip the
-  // tenant's live pointer to it. Bundle writes happen before the transaction — an aborted publish
-  // only leaves unreferenced (harmless, content-addressed) bundles in S3.
-  async publish(ref: ThemeRef, opts: { compile: CompileFn; by?: string }): Promise<PublishResult> {
+  // Publish: freeze the bundles, then (atomically) record a new immutable version and — unless
+  // makeLive is false — flip the tenant's live pointer to it. Cutting a version is separable from
+  // making it live so a store can keep several themes without every publish hijacking the pointer.
+  // The theme is checked BEFORE freezing so a doomed publish writes no orphan bundles to S3; the
+  // remaining bundle writes on an aborted transaction are unreferenced (harmless, content-addressed).
+  // NOTE: there is no "promote an existing version to live" primitive yet — rollback needs the tenant
+  // to already have a live pointer. So a theme first published with makeLive:false becomes live only
+  // via a later makeLive:true publish. That primitive lands with multi-theme selection (not needed
+  // while a store has one live theme).
+  async publish(
+    ref: ThemeRef,
+    opts: { compile: CompileFn; by?: string; makeLive?: boolean }
+  ): Promise<PublishResult> {
     assertThemeId(ref.themeId);
+    const makeLive = opts.makeLive ?? true;
+    const exists = await pool.query('SELECT 1 FROM theme WHERE id = $1', [ref.themeId]);
+    if (exists.rowCount === 0) throw new Error(`unknown theme '${ref.themeId}'`);
+
     const { sourceHash, compiledHash } = await this.freezeBundles(ref, opts);
     const client = await pool.connect();
     try {
@@ -101,11 +141,13 @@ export class ThemeStore {
          VALUES ($1, $2, $3, $4, $5)`,
         [ref.themeId, version, sourceHash, compiledHash, opts.by ?? null]
       );
-      const ptr = await client.query(
-        'UPDATE tenants SET live_theme_id = $2, live_theme_version = $3 WHERE id = $1',
-        [tenantId, ref.themeId, version]
-      );
-      if (ptr.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
+      if (makeLive) {
+        const ptr = await client.query(
+          'UPDATE tenants SET live_theme_id = $2, live_theme_version = $3 WHERE id = $1',
+          [tenantId, ref.themeId, version]
+        );
+        if (ptr.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
+      }
       await client.query('COMMIT');
       return { version, sourceHash, compiledHash };
     } catch (e) {
@@ -162,10 +204,20 @@ export class ThemeStore {
     return hash ? this.loadCompiled(hash) : null;
   }
 
-  // Load a compiled bundle by its content hash (what the origin renders), or null if absent.
+  // Load a compiled bundle by its content hash (what the origin renders), or null if absent. Cached
+  // in the per-instance LRU — the hash is a content address, so a hit is always current. Frozen
+  // before caching: the value is shared across requests, so an accidental mutation must throw rather
+  // than silently corrupt the cached (and hash-addressed) bundle. Render is read-only; a path that
+  // needs to edit a compiled tree must clone it.
   async loadCompiled(compiledHash: string): Promise<ThemeFiles | null> {
+    const cached = this.compiledCache.get(compiledHash);
+    if (cached) return cached;
     const blob = await this.objects.get(compiledKey(compiledHash));
-    return blob ? unpackBundle(Buffer.from(blob)) : null;
+    if (!blob) return null;
+    const files = unpackBundle(Buffer.from(blob));
+    Object.freeze(files);
+    this.compiledCache.set(compiledHash, files);
+    return files;
   }
 
   // Load a source bundle by its content hash (for merges / re-editing an old version), or null.

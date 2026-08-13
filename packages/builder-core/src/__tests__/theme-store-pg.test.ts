@@ -5,10 +5,29 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { S3ObjectStore } from '@ratio/data-objects';
+import { S3ObjectStore, type ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 import { ThemeStore, type CompileFn } from '../theme-store';
 import type { ThemeFiles } from '../bundle';
+
+// Wraps a real store to count writes — used to prove a doomed publish never touches S3.
+class CountingStore implements ObjectStore {
+  puts = 0;
+  constructor(private readonly inner: ObjectStore) {}
+  put(key: string, body: Uint8Array, opts?: { contentType?: string }) {
+    this.puts++;
+    return this.inner.put(key, body, opts);
+  }
+  get(key: string) {
+    return this.inner.get(key);
+  }
+  head(key: string) {
+    return this.inner.head(key);
+  }
+  delete(key: string) {
+    return this.inner.delete(key);
+  }
+}
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const bucket = process.env.S3_TEST_BUCKET ?? 's2poc-test';
@@ -92,6 +111,50 @@ test('publish on an unknown theme throws', { skip }, async () => {
     /unknown theme/
   );
 });
+
+// OFCE-604 #6: validate the theme exists BEFORE writing bundles, so a doomed publish leaves no
+// orphaned (though harmless, content-addressed) objects in S3.
+test('publish on an unknown theme writes no bundles (no S3 orphans)', { skip }, async () => {
+  const counting = new CountingStore(new S3ObjectStore({ bucket, ...common }));
+  const s = new ThemeStore(counting);
+  await assert.rejects(
+    () => s.publish({ themeId: 'does_not_exist' }, { compile: identity }),
+    /unknown theme/
+  );
+  assert.equal(counting.puts, 0);
+});
+
+// OFCE-604 #5: cutting a version must be separable from making it live — otherwise a store that
+// keeps several themes can't record a version without hijacking the live pointer.
+test(
+  'publish with makeLive:false records a version without moving the live pointer',
+  {
+    skip,
+  },
+  async () => {
+    const before = await pool.query<{ live_theme_id: string; live_theme_version: number }>(
+      'SELECT live_theme_id, live_theme_version FROM tenants WHERE id = $1',
+      [TENANT]
+    );
+    const OTHER = 't_mca_bundle_alt';
+    await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
+    await store.ensureTheme(TENANT, OTHER, 'Alt');
+    await store.saveDraft({ themeId: OTHER }, files);
+    const r = await store.publish({ themeId: OTHER }, { compile: identity, makeLive: false });
+    assert.equal(r.version, 1);
+    const v = await pool.query(
+      'SELECT 1 FROM theme_bundle_version WHERE theme_id = $1 AND version = 1',
+      [OTHER]
+    );
+    assert.equal(v.rowCount, 1);
+    const after = await pool.query(
+      'SELECT live_theme_id, live_theme_version FROM tenants WHERE id = $1',
+      [TENANT]
+    );
+    assert.deepEqual(after.rows[0], before.rows[0]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
+  }
+);
 
 test('a half-set live pointer is rejected by the DB (all-or-nothing)', { skip }, async () => {
   await assert.rejects(
