@@ -322,22 +322,18 @@ export const NAV: { title: string; items: NavItem[] }[] = [
       { label: 'Analytics', route: 'analytics' },
       { label: 'Marketing', route: 'marketing' },
       { label: 'Discounts', route: 'discounts' },
-      { label: 'Content', route: 'pages', real: true },
     ],
   },
   {
     title: 'Build',
     items: [
       { label: 'Theme editor', route: 'theme', hint: 'G T', real: true },
+      { label: 'Content', route: 'pages', real: true },
       { label: 'Versions', route: 'versions', real: true, ownerOnly: true },
       { label: 'Domains', route: 'domains', real: true },
       { label: 'Commerce', route: 'commerce', real: true, ownerOnly: true },
       { label: 'Agent access', route: 'access', real: true },
       { label: 'Audit log', route: 'audit', real: true },
     ],
-  },
-  {
-    title: 'Platform',
-    items: [{ label: 'Super admin', route: 'admin', hint: 'G A', real: true, adminOnly: true }],
   },
 ];
