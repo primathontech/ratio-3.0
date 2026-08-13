@@ -118,6 +118,55 @@ export const Icon = {
       </>,
       size
     ),
+  // VS Code-style workbench icons.
+  files: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M14 3H8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7z" />
+        <path d="M14 3v4h4" />
+      </>,
+      size
+    ),
+  search: ({ size }: IconProps) =>
+    svg(
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="M21 21l-4.3-4.3" />
+      </>,
+      size
+    ),
+  newFile: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+        <path d="M14 3v5h5M12 12v5M9.5 14.5h5" />
+      </>,
+      size
+    ),
+  newFolder: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+        <path d="M12 11v5M9.5 13.5h5" />
+      </>,
+      size
+    ),
+  collapseAll: ({ size }: IconProps) => svg(<path d="M5 8l4 4 4-4M5 14l4 4 4-4" />, size),
+  refresh: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5" />
+      </>,
+      size
+    ),
+  file: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" />
+        <path d="M14 3v5h5" />
+      </>,
+      size
+    ),
 };
 
 /* Spinner ---------------------------------------------------------------- */

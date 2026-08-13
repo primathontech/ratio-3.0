@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, type Api, type Store, type ThemeFiles } from './api';
 import { EmptyState, Icon, Spinner, useToast } from './ui';
 import { storefrontUrl } from './store-context';
 import { CodeEditor } from './code-editor';
+import './theme-editor.css';
 
 type Status = 'loading' | 'ready' | 'disabled' | 'error';
 
 // Group flat file paths into one level of folders (like a Shopify theme: sections/, snippets/,
-// templates/, …), with root-level files last. One level covers real theme layouts; deeper nesting is
-// a later polish.
+// templates/, …), with root-level files last. One level covers real theme layouts.
 function groupByFolder(
   paths: string[]
 ): { folder: string; files: { path: string; name: string }[] }[] {
@@ -29,17 +29,45 @@ function groupByFolder(
     }));
 }
 
-// The merchant theme CODE editor (OFCE-601): file tree + code editor + save/publish, on the store's
-// working bundle theme. Distinct from the token-based Theme Settings panel. Live-draft preview and a
-// version-history/rollback panel are follow-ups (rollback needs a bundle versions endpoint).
+// A small VS Code-Seti-style file glyph (text badge + colour class) by extension.
+function fileGlyph(path: string): { text: string; cls: string } {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  if (ext === 'js' || ext === 'mjs' || ext === 'ts') return { text: 'JS', cls: 'fi-js' };
+  if (ext === 'json') return { text: '{}', cls: 'fi-json' };
+  if (ext === 'css') return { text: '#', cls: 'fi-css' };
+  if (ext === 'html' || ext === 'htm') return { text: '<>', cls: 'fi-html' };
+  if (ext === 'liquid') return { text: '≈', cls: 'fi-liquid' };
+  return { text: '•', cls: 'fi-default' };
+}
+
+function languageLabel(path: string): string {
+  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+  return (
+    {
+      js: 'JavaScript',
+      mjs: 'JavaScript',
+      ts: 'TypeScript',
+      json: 'JSON',
+      css: 'CSS',
+      liquid: 'Liquid',
+      html: 'HTML',
+    }[ext] ?? 'Plain Text'
+  );
+}
+
+// The merchant theme code editor (OFCE-601): a VS Code-style workbench — activity bar, Explorer, Monaco
+// editor, live preview, status bar — over the store's working bundle theme. `onBack` renders it as a
+// full-screen route (its own chrome-less page); without it, it renders inline.
 export function ThemeCodeEditor({
   api,
   store,
   isLocal,
+  onBack,
 }: {
   api: Api;
   store: Store;
   isLocal: boolean;
+  onBack?: () => void;
 }) {
   const toast = useToast();
   const [files, setFiles] = useState<ThemeFiles>({});
@@ -49,8 +77,18 @@ export function ThemeCodeEditor({
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [newPath, setNewPath] = useState('');
+  const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewErr, setPreviewErr] = useState('');
+  const [previewing, setPreviewing] = useState(false);
+  // Set when the new-file input is cancelled (Escape), so the unmount-triggered blur doesn't re-create
+  // the file the user just cancelled.
+  const addCancelled = useRef(false);
   const canPublish = store.role === 'owner';
 
   function toggleFolder(folder: string) {
@@ -61,6 +99,24 @@ export function ThemeCodeEditor({
       return next;
     });
   }
+
+  // Render the given files server-side (the storefront's own render path) into the preview iframe.
+  const runPreview = useCallback(
+    async (f: ThemeFiles) => {
+      setPreviewing(true);
+      try {
+        const res = await api.previewBundle(store.id, f);
+        setPreviewErr(res.error ?? '');
+        setPreviewHtml(res.error ? '' : (res.html ?? ''));
+      } catch (e) {
+        setPreviewErr(e instanceof Error ? e.message : 'Preview failed');
+        setPreviewHtml('');
+      } finally {
+        setPreviewing(false);
+      }
+    },
+    [api, store.id]
+  );
 
   const load = useCallback(() => {
     setStatus('loading');
@@ -73,9 +129,9 @@ export function ThemeCodeEditor({
         setFiles(f);
         setSelected((s) => s ?? Object.keys(f).sort()[0] ?? null);
         setStatus('ready');
+        void runPreview(f);
       })
       .catch((e: unknown) => {
-        // 503 = the bundle store isn't configured for this environment (BUNDLE_S3_BUCKET unset).
         if (e instanceof ApiError && e.status === 503) {
           setStatus('disabled');
           return;
@@ -83,7 +139,7 @@ export function ThemeCodeEditor({
         setErrMsg(e instanceof Error ? e.message : 'Could not load the theme');
         setStatus('error');
       });
-  }, [api, store.id]);
+  }, [api, store.id, runPreview]);
   useEffect(load, [load]);
 
   function editFile(path: string, content: string) {
@@ -92,8 +148,17 @@ export function ThemeCodeEditor({
   }
 
   function addFile() {
+    if (addCancelled.current) {
+      addCancelled.current = false;
+      setAdding(false);
+      setNewPath('');
+      return;
+    }
     const path = newPath.trim();
-    if (!path) return;
+    if (!path) {
+      setAdding(false);
+      return;
+    }
     if (path in files) {
       toast('That file already exists', 'error');
       return;
@@ -101,6 +166,7 @@ export function ThemeCodeEditor({
     setFiles((f) => ({ ...f, [path]: '' }));
     setSelected(path);
     setNewPath('');
+    setAdding(false);
     setDirty(true);
   }
 
@@ -112,6 +178,16 @@ export function ThemeCodeEditor({
     });
     setSelected((s) => (s === path ? null : s));
     setDirty(true);
+  }
+
+  function collapseAll() {
+    setCollapsed(
+      new Set(
+        Object.keys(files)
+          .filter((p) => p.includes('/'))
+          .map((p) => p.slice(0, p.indexOf('/')))
+      )
+    );
   }
 
   async function save(): Promise<boolean> {
@@ -129,7 +205,10 @@ export function ThemeCodeEditor({
   }
 
   async function saveDraft() {
-    if (await save()) toast('Draft saved', 'ok');
+    if (await save()) {
+      toast('Draft saved', 'ok');
+      void runPreview(files);
+    }
   }
 
   async function publish() {
@@ -137,7 +216,6 @@ export function ThemeCodeEditor({
       toast('Add a file before publishing', 'error');
       return;
     }
-    // Publish serves the saved draft, so flush any pending edits first.
     if (dirty && !(await save())) return;
     setBusy(true);
     try {
@@ -151,15 +229,35 @@ export function ThemeCodeEditor({
   }
 
   const url = storefrontUrl(store, isLocal);
-  const paths = Object.keys(files).sort();
-  const groups = groupByFolder(paths);
+  const allPaths = Object.keys(files);
+  const shown = filter
+    ? allPaths.filter((p) => p.toLowerCase().includes(filter.toLowerCase()))
+    : allPaths;
+  const groups = groupByFolder(shown.sort());
   const ready = status === 'ready';
 
   return (
-    <div className="card pane">
-      <div className="pane-head">
-        <h2>Theme code {dirty && <span className="muted">· unsaved</span>}</h2>
+    <div className={onBack ? 'wb' : 'wb wb-inline'}>
+      {/* Title bar: navigation + save/publish (VS Code's menu bar sits here; we keep actions). */}
+      <div className="wb-titlebar">
+        <div className="wb-title-left">
+          {onBack && (
+            <button className="btn btn-ghost btn-sm" onClick={onBack}>
+              <Icon.back /> Back
+            </button>
+          )}
+          <span className="wb-title-name">
+            {store.name} — Theme code {dirty && <span className="wb-dirty">●</span>}
+          </span>
+        </div>
         <div className="row" style={{ gap: 8 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => setShowPreview((v) => !v)}
+            disabled={!ready}
+          >
+            {showPreview ? 'Hide preview' : 'Show preview'}
+          </button>
           {url && (
             <a className="btn btn-ghost btn-sm" href={url} target="_blank" rel="noreferrer">
               View live <Icon.external />
@@ -176,121 +274,240 @@ export function ThemeCodeEditor({
         </div>
       </div>
 
-      {status === 'loading' && <Spinner />}
+      {status === 'loading' && (
+        <div className="wb-center">
+          <Spinner />
+        </div>
+      )}
 
       {status === 'disabled' && (
-        <EmptyState emoji="🔒" title="Theme code editing isn't enabled here">
-          This environment has no theme bundle store configured. Set <code>BUNDLE_S3_BUCKET</code>{' '}
-          (and its S3 credentials) on the admin API to edit theme code.
-        </EmptyState>
+        <div className="wb-center">
+          <EmptyState emoji="🔒" title="Theme code editing isn't enabled here">
+            This environment has no theme bundle store configured. Set <code>BUNDLE_S3_BUCKET</code>{' '}
+            (and its S3 credentials) on the admin API to edit theme code.
+          </EmptyState>
+        </div>
       )}
 
       {status === 'error' && (
-        <EmptyState emoji="⚠️" title="Couldn't load the theme">
-          <p className="muted">{errMsg}</p>
-          <button className="btn btn-sm" onClick={load}>
-            Retry
-          </button>
-        </EmptyState>
+        <div className="wb-center">
+          <EmptyState emoji="⚠️" title="Couldn't load the theme">
+            <p className="muted">{errMsg}</p>
+            <button className="btn btn-sm" onClick={load}>
+              Retry
+            </button>
+          </EmptyState>
+        </div>
       )}
 
       {ready && (
-        <div className="ide">
-          <aside className="ide-sidebar">
-            <div className="ide-sidebar-head">Explorer</div>
-            <div className="ide-tree">
-              {paths.length === 0 ? (
-                <div className="muted tree-empty">No files yet</div>
-              ) : (
-                <ul className="tree-list">
-                  {groups.map((g) => {
-                    const open = !collapsed.has(g.folder);
-                    return (
-                      <li key={g.folder || '/'}>
-                        {g.folder && (
-                          <button
-                            className="tree-folder"
-                            aria-expanded={open}
-                            onClick={() => toggleFolder(g.folder)}
-                          >
-                            <span className="caret">{open ? '▾' : '▸'}</span>
-                            {g.folder}
-                          </button>
-                        )}
-                        {open && (
-                          <ul className={g.folder ? 'tree-files nested' : 'tree-files'}>
-                            {g.files.map((f) => (
-                              <li key={f.path} className={f.path === selected ? 'active' : ''}>
-                                <button className="tree-item" onClick={() => setSelected(f.path)}>
-                                  {f.name}
-                                </button>
-                                {confirmDelete === f.path ? (
-                                  <span className="row" style={{ gap: 2 }}>
-                                    <button
-                                      className="btn-icon danger"
-                                      aria-label={`Confirm delete ${f.path}`}
-                                      onClick={() => {
-                                        deleteFile(f.path);
-                                        setConfirmDelete(null);
-                                      }}
-                                    >
-                                      <Icon.check />
-                                    </button>
-                                    <button
-                                      className="btn-icon"
-                                      aria-label="Cancel delete"
-                                      onClick={() => setConfirmDelete(null)}
-                                    >
-                                      ✕
-                                    </button>
-                                  </span>
-                                ) : (
-                                  <button
-                                    className="btn-icon"
-                                    aria-label={`Delete ${f.path}`}
-                                    onClick={() => setConfirmDelete(f.path)}
-                                  >
-                                    <Icon.trash />
-                                  </button>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-            <div className="ide-add row" style={{ gap: 6 }}>
-              <input
-                className="input"
-                placeholder="new/file.liquid"
-                value={newPath}
-                onChange={(e) => setNewPath(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && addFile()}
-              />
-              <button className="btn btn-sm" onClick={addFile} aria-label="Add file">
-                <Icon.plus />
+        <>
+          <div className="wb-body">
+            {/* Activity bar */}
+            <div className="wb-activitybar">
+              <button className="active" title="Explorer" aria-label="Explorer">
+                <Icon.files size={22} />
+              </button>
+              <button
+                className={showSearch ? 'active' : ''}
+                title="Search files"
+                aria-label="Search files"
+                onClick={() => setShowSearch((v) => !v)}
+              >
+                <Icon.search size={22} />
               </button>
             </div>
-          </aside>
 
-          <div className="ide-editor">
-            {selected && files[selected] !== undefined ? (
-              <CodeEditor
-                path={selected}
-                initialValue={files[selected]}
-                onChange={(v) => editFile(selected, v)}
-              />
-            ) : (
-              <div className="ide-empty muted">
-                Select a file to edit, or add one to get started.
+            {/* Explorer */}
+            <aside className="wb-sidebar">
+              <div className="wb-sidebar-title">
+                <span>Explorer</span>
               </div>
-            )}
+              <div className="wb-ws">
+                <span className="wb-ws-name">{store.name}</span>
+                <div className="wb-ws-actions">
+                  <button
+                    className="btn-icon"
+                    title="New file"
+                    aria-label="New file"
+                    onClick={() => {
+                      setAdding(true);
+                      setNewPath('');
+                    }}
+                  >
+                    <Icon.newFile size={15} />
+                  </button>
+                  <button
+                    className="btn-icon"
+                    title="Collapse folders"
+                    aria-label="Collapse folders"
+                    onClick={collapseAll}
+                  >
+                    <Icon.collapseAll size={15} />
+                  </button>
+                </div>
+              </div>
+
+              {showSearch && (
+                <input
+                  className="input wb-search"
+                  placeholder="Filter files…"
+                  value={filter}
+                  autoFocus
+                  onChange={(e) => setFilter(e.target.value)}
+                />
+              )}
+
+              <div className="wb-tree">
+                {shown.length === 0 ? (
+                  <div className="muted tree-empty">{filter ? 'No matches' : 'No files yet'}</div>
+                ) : (
+                  <ul className="tree-list">
+                    {groups.map((g) => {
+                      const open = !collapsed.has(g.folder);
+                      return (
+                        <li key={g.folder || '/'}>
+                          {g.folder && (
+                            <button
+                              className="tree-folder"
+                              aria-expanded={open}
+                              onClick={() => toggleFolder(g.folder)}
+                            >
+                              <span className="caret">{open ? '▾' : '▸'}</span>
+                              {g.folder}
+                            </button>
+                          )}
+                          {open && (
+                            <ul className={g.folder ? 'tree-files nested' : 'tree-files'}>
+                              {g.files.map((f) => {
+                                const glyph = fileGlyph(f.path);
+                                return (
+                                  <li key={f.path} className={f.path === selected ? 'active' : ''}>
+                                    <button
+                                      className="tree-item"
+                                      onClick={() => setSelected(f.path)}
+                                    >
+                                      <span className={`fi ${glyph.cls}`}>{glyph.text}</span>
+                                      {f.name}
+                                    </button>
+                                    {confirmDelete === f.path ? (
+                                      <span className="row" style={{ gap: 2 }}>
+                                        <button
+                                          className="btn-icon danger"
+                                          aria-label={`Confirm delete ${f.path}`}
+                                          onClick={() => {
+                                            deleteFile(f.path);
+                                            setConfirmDelete(null);
+                                          }}
+                                        >
+                                          <Icon.check />
+                                        </button>
+                                        <button
+                                          className="btn-icon"
+                                          aria-label="Cancel delete"
+                                          onClick={() => setConfirmDelete(null)}
+                                        >
+                                          ✕
+                                        </button>
+                                      </span>
+                                    ) : (
+                                      <button
+                                        className="btn-icon"
+                                        aria-label={`Delete ${f.path}`}
+                                        onClick={() => setConfirmDelete(f.path)}
+                                      >
+                                        <Icon.trash />
+                                      </button>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                {adding && (
+                  <div className="wb-add">
+                    <input
+                      className="input"
+                      placeholder="sections/new.liquid"
+                      value={newPath}
+                      autoFocus
+                      onChange={(e) => setNewPath(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') addFile();
+                        if (e.key === 'Escape') {
+                          addCancelled.current = true;
+                          setAdding(false);
+                        }
+                      }}
+                      onBlur={addFile}
+                    />
+                  </div>
+                )}
+              </div>
+            </aside>
+
+            {/* Editor + preview */}
+            <div className="wb-main">
+              <div className="wb-editor">
+                {selected && files[selected] !== undefined ? (
+                  <CodeEditor
+                    path={selected}
+                    initialValue={files[selected]}
+                    onChange={(v) => editFile(selected, v)}
+                  />
+                ) : (
+                  <div className="wb-welcome">
+                    <div className="wb-welcome-mark">{'</>'}</div>
+                    <p>Select a file from the Explorer to start editing.</p>
+                    <p className="muted">
+                      Your theme lives in <code>layout/</code>, <code>templates/</code>, and{' '}
+                      <code>sections/</code>. Edits preview live and go live on Publish.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {showPreview && (
+                <div className="wb-preview">
+                  <div className="wb-preview-bar">
+                    <span className="muted">Preview{previewing ? ' · rendering…' : ''}</span>
+                    <button
+                      className="btn-icon"
+                      aria-label="Refresh preview"
+                      title="Refresh preview"
+                      onClick={() => runPreview(files)}
+                      disabled={previewing}
+                    >
+                      <Icon.refresh size={15} />
+                    </button>
+                  </div>
+                  {previewErr ? (
+                    <div className="wb-preview-error">{previewErr}</div>
+                  ) : (
+                    <iframe
+                      className="wb-preview-frame"
+                      title="Theme preview"
+                      sandbox=""
+                      srcDoc={previewHtml}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+
+          {/* Status bar */}
+          <div className="wb-statusbar">
+            <span className="wb-status-item">● {store.name}</span>
+            <span style={{ flex: 1 }} />
+            {selected && <span className="wb-status-item">{languageLabel(selected)}</span>}
+          </div>
+        </>
       )}
     </div>
   );

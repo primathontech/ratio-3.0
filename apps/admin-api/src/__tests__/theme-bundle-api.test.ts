@@ -200,6 +200,33 @@ test('scaffold seeds a default starter theme when empty, and is a no-op once fil
   assert.strictEqual(body2.seeded, false);
 });
 
+test('preview renders a page to HTML through the theme render path (layout + section + data)', async () => {
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
+    files: {
+      'layout/theme.liquid': '<html><body>{{ content_for_layout }}</body></html>',
+      'templates/index.json': JSON.stringify({
+        sections: [{ type: 'hero', data: { heading: 'Hi there' } }],
+      }),
+      'sections/hero.liquid': '<h1>{{ heading }}</h1>',
+    },
+    page: 'index',
+  });
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as { html?: string };
+  assert.ok(body.html?.includes('Hi there'), 'renders the section with its data');
+  assert.ok(body.html?.includes('<body>'), 'wraps the content in the layout');
+});
+
+test('preview surfaces a render error as { error } (200, not a 500)', async () => {
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
+    files: { 'layout/theme.liquid': '<html></html>' }, // no templates/index.json → render throws
+    page: 'index',
+  });
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as { error?: string };
+  assert.ok(body.error, 'a template error comes back as a message, not a crash');
+});
+
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 400);

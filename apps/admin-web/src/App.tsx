@@ -32,8 +32,15 @@ import { SuperAdmin } from './superadmin';
 import { DashboardHome } from './dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './app-shell';
 import { AskRatio } from './ask-sophie';
-import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { StoreDataProvider, storeSlug, useMerchant, useStoreData, type Me } from './store-context';
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import {
+  StoreDataProvider,
+  storeSlug,
+  resolveStore,
+  useMerchant,
+  useStoreData,
+  type Me,
+} from './store-context';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -173,10 +180,12 @@ function AuthedRoutes() {
         >
           <Route index element={<SuperAdminPage />} />
         </Route>
+        {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search / Ask
+            Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
+        <Route path="/stores/:storeId/editor" element={<FullScreenEditorPage />} />
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
           <Route path="theme" element={<ThemePage />} />
-          <Route path="theme/code" element={<ThemePage initialTab="code" />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -215,60 +224,82 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
-// Theme = brand settings + version history + raw code, as tabs (Versions is owner-only). Code editing
-// (the bundle theme) lives here rather than as a separate nav item so the IA reads as one Theme area.
-function ThemePage({ initialTab = 'settings' }: { initialTab?: 'settings' | 'versions' | 'code' }) {
+// Theme = brand settings + version history, as tabs (Versions is owner-only). "Edit code" launches
+// the full-screen code editor (its own chrome-less route), Shopify-style.
+function ThemePage() {
   const { api, store } = useMerchant();
-  const { me } = useStoreData();
+  const navigate = useNavigate();
   const owner = store.role === 'owner';
-  const [tab, setTab] = useState<'settings' | 'versions' | 'code'>(initialTab);
+  const [tab, setTab] = useState<'settings' | 'versions'>('settings');
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="head-text">
           <h1>Theme</h1>
-          <p className="muted">Your storefront's brand settings, code, and published versions.</p>
+          <p className="muted">Your storefront's brand settings and published versions.</p>
         </div>
-        <div className="seg">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button
-            className={tab === 'settings' ? 'on' : ''}
-            aria-pressed={tab === 'settings'}
-            onClick={() => setTab('settings')}
+            className="btn btn-sm"
+            onClick={() => navigate(`/stores/${storeSlug(store)}/editor`)}
           >
-            Settings
+            Edit code
           </button>
-          <button
-            className={tab === 'code' ? 'on' : ''}
-            aria-pressed={tab === 'code'}
-            onClick={() => setTab('code')}
-          >
-            Code
-          </button>
+          {/* Only owners have a second view (Versions), so the tab switcher is owner-only — a member
+              would otherwise see a lone, pointless "Settings" tab. */}
           {owner && (
-            <button
-              className={tab === 'versions' ? 'on' : ''}
-              aria-pressed={tab === 'versions'}
-              onClick={() => setTab('versions')}
-            >
-              Versions
-            </button>
+            <div className="seg">
+              <button
+                className={tab === 'settings' ? 'on' : ''}
+                aria-pressed={tab === 'settings'}
+                onClick={() => setTab('settings')}
+              >
+                Settings
+              </button>
+              <button
+                className={tab === 'versions' ? 'on' : ''}
+                aria-pressed={tab === 'versions'}
+                onClick={() => setTab('versions')}
+              >
+                Versions
+              </button>
+            </div>
           )}
         </div>
       </div>
-      {tab === 'code' ? (
-        // Scoped boundary: a crash in the code editor (e.g. Monaco) stays contained here instead of
-        // taking down the whole app via the root boundary.
-        <ErrorBoundary>
-          <Suspense fallback={<Spinner />}>
-            <ThemeCodeEditor api={api} store={store} isLocal={!!me?.isLocal} />
-          </Suspense>
-        </ErrorBoundary>
-      ) : tab === 'versions' && owner ? (
+      {tab === 'versions' && owner ? (
         <ThemeVersionsPanel api={api} store={store} />
       ) : (
         <ThemeSettingsPanel api={api} store={store} />
       )}
     </div>
+  );
+}
+// The full-screen code editor route: resolves the store from the URL (it's outside MerchantLayout, so
+// there's no useMerchant context) and renders the IDE with a back button to the Theme page.
+function FullScreenEditorPage() {
+  const { api, stores, me } = useStoreData();
+  const { storeId } = useParams();
+  const navigate = useNavigate();
+  const store = resolveStore(stores, storeId);
+  if (!store) return <Navigate to="/" replace />;
+  return (
+    <ErrorBoundary>
+      <Suspense
+        fallback={
+          <div className="center-pad">
+            <Spinner />
+          </div>
+        }
+      >
+        <ThemeCodeEditor
+          api={api}
+          store={store}
+          isLocal={!!me?.isLocal}
+          onBack={() => navigate(`/stores/${storeSlug(store)}/theme`)}
+        />
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 function PagesPage() {

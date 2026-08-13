@@ -1,0 +1,562 @@
+/* Feature areas: domains, section builder, dashboard, Ask rail, super-admin, breakpoints. */
+/* Domains panel ----------------------------------------------------------- */
+.domains-panel {
+  padding: 18px;
+  margin-bottom: 18px;
+}
+.domain-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.domain-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.domain-row a {
+  font-size: 13.5px;
+}
+.domain-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.domain-row .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+.badge.dot-ok {
+  background: var(--success-weak);
+  color: var(--success);
+}
+.badge.dot-warn {
+  background: var(--warning-weak);
+  color: var(--warning);
+}
+.dns-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  font-size: 12px;
+}
+.dns-table th,
+.dns-table td {
+  padding: 9px 11px;
+  text-align: left;
+  vertical-align: top;
+}
+.dns-table thead th {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-weight: 600;
+}
+.dns-data-row td {
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+.dns-host,
+.dns-val {
+  overflow-wrap: anywhere;
+}
+.dns-val {
+  color: var(--text);
+}
+.dns-purpose-row td {
+  padding-top: 0;
+}
+.dns-purpose {
+  font-size: 11px;
+}
+.dns-intro {
+  font-size: 13px;
+  margin: 4px 0 14px;
+}
+.dns-status {
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+.dns-apex {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.dns-apex > strong {
+  font-size: 13.5px;
+}
+.dns-step-row td.dns-step {
+  padding: 14px 11px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+.dns-step-row:first-child td.dns-step {
+  border-top: none;
+  padding-top: 4px;
+}
+.dns-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.dns-cell-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.copy-btn {
+  flex: none;
+  padding: 2px 9px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--accent);
+  background: var(--accent-weak);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy-btn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Section builder --------------------------------------------------------- */
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sec-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  padding: 12px;
+}
+.sec-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.sec-actions {
+  display: flex;
+  gap: 4px;
+}
+.sec-actions .icon-btn {
+  width: 28px;
+  height: 28px;
+}
+.sec-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.products-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.product-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.product-row .input {
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.add-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed var(--line-strong);
+  margin-top: 2px;
+}
+
+/* Merchant dashboard home ------------------------------------------------ */
+.dash {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Roomier 3-across KPI cards on the dashboard (the shared .kpi-grid stays 5-across for the
+   super-admin console). */
+.dash .kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.dash-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.legend .sw {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 184px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+}
+.chart-tip {
+  height: 14px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 100%;
+}
+.chart-bars .bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+}
+.chart-labels {
+  display: flex;
+  gap: 10px;
+}
+.chart-labels > div {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: spi-pulse 1.8s ease infinite;
+}
+@keyframes spi-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.checkitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+}
+.checkbox {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line-strong);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+.checkbox.on {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+/* Ask Sophie rail -------------------------------------------------------- */
+.ask-rail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+/* Onboarding: the same rail rendered as a self-contained panel under the empty state. */
+.onboard-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin: 24px auto 0;
+}
+.onboard-ask .ask-rail {
+  height: min(60vh, 520px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.ask-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ask-badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 13px;
+  flex: none;
+}
+.ask-insights {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.insight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.insight-kind {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.insight-act {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.ask-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat {
+  max-width: 88%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-line;
+}
+.chat.you {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.chat.ai {
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--text);
+}
+.ask-foot {
+  flex: none;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--surface-2);
+}
+
+/* Super-admin merchants dashboard ---------------------------------------- */
+.sa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+}
+.sa-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  padding-right: 24px;
+}
+.sa-rail {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.sa-rail-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sa-rail-sec:last-child {
+  border-bottom: 0;
+}
+.detail-row {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+.detail-row .k {
+  flex: 1;
+  color: var(--muted);
+}
+.detail-row .v {
+  font-weight: 500;
+  text-align: right;
+}
+.health {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.health-track {
+  width: 34px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.health-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+.incident {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.incident .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex: none;
+}
+
+@media (max-width: 940px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    display: none;
+  }
+  .sa-grid {
+    grid-template-columns: 1fr;
+  }
+  .sa-main {
+    padding-right: 0;
+  }
+  .sa-rail {
+    position: static;
+    margin-top: 16px;
+  }
+}
+@media (max-width: 820px) {
+  .editor {
+    grid-template-columns: 1fr;
+  }
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .domain-row {
+    flex-wrap: wrap;
+  }
+  .domain-row a {
+    flex-basis: 100%;
+  }
+  .product-row {
+    grid-template-columns: 1fr;
+  }
+}

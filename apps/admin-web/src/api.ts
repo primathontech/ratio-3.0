@@ -273,6 +273,13 @@ export function createApi(
       req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/rollback`, {
         version,
       }),
+    // Render a page of the (possibly-unsaved) theme to HTML for the live preview. A template/Liquid
+    // error comes back as { error } rather than throwing, so the editor shows it in the preview pane.
+    previewBundle: (id: string, files: ThemeFiles, page = 'index') =>
+      req<{ html?: string; error?: string }>('POST', `/stores/${id}/theme/bundle/preview`, {
+        files,
+        page,
+      }),
     listDomains: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
         pickArray<DomainInfo>(d, 'domains')

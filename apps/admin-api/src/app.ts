@@ -20,14 +20,25 @@ import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
-import { ThemeStore as BundleThemeStore, defaultBundleTheme } from '@ratio/builder-core';
+import {
+  ThemeStore as BundleThemeStore,
+  defaultBundleTheme,
+  renderThemePage,
+  StubResolver,
+} from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
+import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { scaffoldStorefront } from '@ratio/builder-core';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
 import { FONTS, BASE_SIZE, RADIUS, CONTAINER, type ThemeTokens } from '@ratio/builder-core';
-import { defaultRegistry } from '@ratio/builder-registry';
+import {
+  defaultRegistry,
+  renderSection,
+  islandPlaceholder,
+  setUntrustedRenderer,
+} from '@ratio/builder-registry';
 import {
   cfConfig,
   connectCustomHostname,
@@ -119,6 +130,29 @@ const identityCompile = (s: ThemeFiles) => s;
 const pbRegistry = defaultRegistry();
 const pbPurge: PurgeLike = { invalidateByTags: (tags) => purgeEdgeTags(tags) };
 const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
+
+// Theme code editor live preview (OFCE-601): render a draft bundle theme to HTML the SAME way the
+// origin does — merchant Liquid via the worker-thread isolate, first-party sections via the registry.
+// Sample data (StubResolver) so data-bound sections show placeholder products without a commerce
+// backend. Reused by POST /theme/bundle/preview; identical shape to apps/origin/src/index.ts.
+setUntrustedRenderer(renderUntrusted);
+function renderThemePreview(files: ThemeFiles, page: string, tenantId: string) {
+  return renderThemePage(
+    files, // the composed draft (base ⊕ overrides) — no compile needed while compile is identity
+    page,
+    {
+      theme: (liquid, data) => renderUntrusted(liquid, data),
+      platform: (type, data) => {
+        const rec = pbRegistry.get(type);
+        if (!rec) throw new Error(`unknown platform section '${type}'`);
+        if (rec.island)
+          return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
+        return renderSection(rec, data);
+      },
+    },
+    { resolver: new StubResolver(), ctx: { tenantId, routeParams: {}, commerce: undefined } }
+  );
+}
 
 // Commerce webhook: map a gokwik change event → the surrogate tags the origin stamps on rendered
 // pages (prod:<id> for products, col:<handle> for collections), so a product/price/collection edit
@@ -755,6 +789,28 @@ export function createApp(
     await themes.saveDraft({ themeId: mainThemeId(id) }, files);
     c.set('auditTenant', id);
     return c.json({ files, seeded: true });
+  });
+
+  // Live preview: render a page of the theme to HTML (the editor shows it in an iframe). Renders the
+  // POSTed files (the editor's in-flight, possibly-unsaved buffer) when given, else the saved draft —
+  // so a merchant previews edits before saving. A Liquid/template error is the merchant's own code,
+  // so it comes back as { error } (200) to show in the preview pane, not a 500.
+  app.post('/stores/:id/theme/bundle/preview', requireMembership, async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles; page?: string };
+    const files = body.files ?? (await themes.readComposed({ themeId: mainThemeId(id) }));
+    const page = body.page || 'index';
+    try {
+      const { html } = await renderThemePreview(files, page, id);
+      return c.json({ html });
+    } catch (e) {
+      // A Liquid/template error is the merchant's own code (shown in the preview), but a worker
+      // crash / RenderTimeout / missing isolate looks identical here — log server-side so infra
+      // failures are diagnosable (ADR-0002), while still returning { error } to the client.
+      console.error('theme preview render failed:', e);
+      return c.json({ error: e instanceof Error ? e.message : 'preview failed' });
+    }
   });
 
   // Publish: freeze compile(base ⊕ overrides), cut an immutable version, flip the live pointer.
