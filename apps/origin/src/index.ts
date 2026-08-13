@@ -91,6 +91,17 @@ const themeStore = config.bundleStore
   ? new ThemeStore(new S3ObjectStore(config.bundleStore))
   : null;
 
+// The compiled-bundle template key for a URL: shared templates by page type (Shopify-shaped —
+// index / collection / product for home, /collections/:handle, /products/:handle), a custom page
+// keyed by its own path. matchRoute supplies the type + the route params ({{params.handle}}) the
+// resolver interpolates for data binding.
+function bundlePageName(canon: string, matched: RouteMatch | null): string {
+  if (canon === '/' || matched?.pageType === 'home') return 'index';
+  if (matched?.pageType === 'collection') return 'collection';
+  if (matched?.pageType === 'product') return 'product';
+  return canon.replace(/^\//, '').replace(/\//g, '.');
+}
+
 // Islands (Track 5): the ONLY per-user path. The cached shell carries inert placeholders that a
 // small first-party runtime hydrates from /api/island/*. The runtime is content-addressed so a
 // change busts the immutable edge cache by URL; the shell references it only when a page actually
@@ -520,7 +531,8 @@ app.all('*', async (c) => {
   // store when the store has no bundle theme, or the bundle has no template for this URL.
   if (themeStore && tenant.liveThemeId) {
     const canon = canonicalPath(path);
-    const page = canon === '/' ? 'index' : canon.replace(/^\//, '');
+    const matched = matchRoute(canon);
+    const page = bundlePageName(canon, matched);
     try {
       const compiled = await timed(c, 'bundle', () =>
         themeStore.loadLiveCompiled(tenantId as string)
@@ -541,7 +553,14 @@ app.all('*', async (c) => {
                 return renderSection(rec, data);
               },
             },
-            { resolver, ctx: { tenantId: tenantId as string, commerce: tenant.commerce } }
+            {
+              resolver,
+              ctx: {
+                tenantId: tenantId as string,
+                routeParams: matched?.params,
+                commerce: tenant.commerce,
+              },
+            }
           )
         );
         const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;

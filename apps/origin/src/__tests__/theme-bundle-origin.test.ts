@@ -28,6 +28,8 @@ const T3 = 'themebundle_o3';
 const THEME3 = 'themebundle_o3_main';
 const T4 = 'themebundle_o4';
 const THEME4 = 'themebundle_o4_main';
+const T5 = 'themebundle_o5';
+const THEME5 = 'themebundle_o5_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -40,8 +42,8 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [T, T2, T3, T4]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
-  for (const id of [THEME, THEME3, THEME4])
+  for (const id of [T, T2, T3, T4, T5]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3, THEME4, THEME5])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
@@ -56,6 +58,10 @@ before(async () => {
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Mixed Bundle', 'active')", [
     T4,
   ]);
+  await pool.query(
+    "INSERT INTO tenants (id, name, status) VALUES ($1, 'Routed Bundle', 'active')",
+    [T5]
+  );
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -91,13 +97,27 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME4 }, { compile: (s) => s });
+
+  // Shared templates by page type — /collections/:handle → collection.json, /products/:handle →
+  // product.json (Shopify-shaped), so one template serves every collection/product URL.
+  await store.ensureTheme(T5, THEME5);
+  await store.saveDraft(
+    { themeId: THEME5 },
+    {
+      'sections/collmark.liquid': '<div class="coll">Collection template</div>',
+      'sections/prodmark.liquid': '<div class="prod">Product template</div>',
+      'templates/collection.json': JSON.stringify({ sections: [{ type: 'collmark', data: {} }] }),
+      'templates/product.json': JSON.stringify({ sections: [{ type: 'prodmark', data: {} }] }),
+    }
+  );
+  await store.publish({ themeId: THEME5 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  for (const id of [THEME, THEME3, THEME4])
+  for (const id of [THEME, THEME3, THEME4, THEME5])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [T, T2, T3, T4, T5]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
 test(
@@ -151,5 +171,21 @@ test(
     const body = await res.text();
     assert.match(body, /<h2 class="heading">Featured<\/h2>/); // platform section, rendered from code
     assert.match(body, /<p class="promo">Hi there<\/p>/); // theme section, rendered from bundle Liquid
+  }
+);
+
+test(
+  'shared-template routing: a collection and a product URL render their bundle templates',
+  {
+    skip,
+  },
+  async () => {
+    const coll = await call('/collections/summer', edge({ 'x-ratio-tenant': T5 }));
+    assert.equal(coll.headers.get('x-handler'), 'theme-bundle');
+    assert.match(await coll.text(), /Collection template/); // one collection.json serves every handle
+
+    const prod = await call('/products/air-max-90', edge({ 'x-ratio-tenant': T5 }));
+    assert.equal(prod.headers.get('x-handler'), 'theme-bundle');
+    assert.match(await prod.text(), /Product template/); // one product.json serves every handle
   }
 );
