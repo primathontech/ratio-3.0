@@ -4,10 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import { App } from './App';
-import { ThemeProvider, useTheme } from './theme';
+import { ThemeProvider, useTheme } from './common/theme';
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
-import './styles.css';
+import './styles/styles.css';
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!publishableKey) throw new Error('VITE_CLERK_PUBLISHABLE_KEY is not set');

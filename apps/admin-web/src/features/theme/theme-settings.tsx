@@ -2,9 +2,9 @@
 // Every option except the brand colour is a fixed scale, so a merchant can't produce an off-brand
 // or broken result. Saving purges the storefront (theme is baked into every cached page).
 import { useCallback, useEffect, useState } from 'react';
-import type { Api, Store, StoreTheme } from './api';
-import { ApiError } from './api';
-import { Spinner, useToast } from './ui';
+import type { Api, Store, StoreTheme } from '../../common/api';
+import { ApiError } from '../../common/api';
+import { Spinner, useToast } from '../../common/ui';
 
 const FONT_OPTIONS = [
   { value: 'system', label: 'System' },

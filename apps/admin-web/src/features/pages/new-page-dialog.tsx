@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, Icon } from './ui';
+import { Dialog, Icon } from '../../common/ui';
 
 // Popup to create a storefront page. Validates the path inline; the caller selects the new page
 // once created. Title is optional — it defaults to empty and can be edited in the builder.
