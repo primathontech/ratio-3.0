@@ -358,6 +358,13 @@ h3 {
   letter-spacing: -0.02em;
   flex: none;
 }
+.brand .brand-logo,
+.sidebar-brand .brand-logo {
+  height: 28px;
+  width: auto;
+  flex: none;
+  display: block;
+}
 .brand-meta {
   display: flex;
   flex-direction: column;
@@ -881,6 +888,39 @@ h3 {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+.row-menu-pop {
+  z-index: 50;
+  min-width: 168px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 30px rgba(2, 6, 23, 0.18);
+}
+.row-menu-pop button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.row-menu-pop button:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.row-menu-pop button.danger {
+  color: var(--danger);
+}
+.row-menu-pop button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .data-table .id {
   font-family: var(--mono);
   font-size: 12px;
@@ -926,35 +966,6 @@ h3 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-.pagelist {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-bottom: 18px;
-}
-.pagelist button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 9px 11px;
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font: inherit;
-  font-size: 13.5px;
-  cursor: pointer;
-  text-align: left;
-}
-.pagelist button:hover {
-  background: var(--surface-2);
-}
-.pagelist button.active {
-  background: var(--accent-weak);
-  color: var(--accent);
-  font-weight: 560;
 }
 .preview-frame {
   width: 100%;
@@ -1565,6 +1576,20 @@ h3 {
   overflow: hidden;
   border-left: 1px solid var(--line);
   background: var(--surface);
+}
+/* Onboarding: the same rail rendered as a self-contained panel under the empty state. */
+.onboard-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin: 24px auto 0;
+}
+.onboard-ask .ask-rail {
+  height: min(60vh, 520px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 .ask-head {
   flex: none;

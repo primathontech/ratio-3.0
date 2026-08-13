@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Store } from './api';
-import { useToast } from './ui';
+import { Icon, useToast } from './ui';
+import { storefrontUrl, storeSlug } from './store-context';
 import {
   merchantOf,
   MERCHANT_STATUS,
@@ -27,8 +28,6 @@ const initials = (name: string) =>
       .join('') || '?'
   ).toUpperCase();
 
-const healthColor = (h: number) =>
-  h >= 85 ? 'var(--success)' : h >= 60 ? 'var(--warning)' : 'var(--danger)';
 const pillClass = (tone: string) =>
   tone === 'ok'
     ? 'pill pill-ok'
@@ -53,15 +52,15 @@ function Spark({ values, height = 28 }: { values: number[]; height?: number }) {
 }
 
 // Platform-admin "Merchants" view (reference SuperAdmin screen). Real stores + deterministic
-// placeholder metrics from superadmin-data. Row select fills the detail rail; "Enter store" opens
-// the store (our real open flow); "Invite merchant" opens the real create-store dialog.
+// placeholder metrics from superadmin-data. Row select fills the detail rail; "Manage store" opens
+// the store admin; "View storefront" opens the live site; "New store" opens the create-store dialog.
 export function SuperAdmin({
   stores,
-  onOpen,
+  isLocal,
   onCreate,
 }: {
   stores: Store[];
-  onOpen: (s: Store) => void;
+  isLocal: boolean;
   onCreate: () => void;
 }) {
   const toast = useToast();
@@ -101,12 +100,12 @@ export function SuperAdmin({
               <h1>Merchants</h1>
               <span
                 className="badge"
-                title="GMV, health and status are placeholder demo figures — not real analytics yet."
+                title="GMV and status are placeholder demo figures — not real analytics yet."
               >
                 Sample metrics
               </span>
             </div>
-            <p>Every store on Ratio, their health, and what needs a human today.</p>
+            <p>Every store on Ratio and what needs a human today.</p>
           </div>
           <button
             className="btn btn-ghost"
@@ -115,7 +114,7 @@ export function SuperAdmin({
             Export
           </button>
           <button className="btn btn-primary" onClick={onCreate}>
-            Invite merchant
+            <Icon.plus /> New store
           </button>
         </div>
 
@@ -182,15 +181,16 @@ export function SuperAdmin({
                   <th>Plan</th>
                   <th className="num">GMV · 30d</th>
                   <th className="num">Orders</th>
-                  <th className="num">Health</th>
                   <th>Status</th>
                   <th className="num">Since</th>
+                  <th>Storefront</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((m) => {
                   const s = MERCHANT_STATUS[m.status];
                   const active = current?.store.id === m.store.id;
+                  const sfUrl = storefrontUrl(m.store, isLocal);
                   return (
                     <tr
                       key={m.store.id}
@@ -253,22 +253,28 @@ export function SuperAdmin({
                       <td className="num" style={{ color: 'var(--muted)' }}>
                         {m.orders}
                       </td>
-                      <td className="num">
-                        <span className="health">
-                          <span className="health-track">
-                            <span
-                              className="health-fill"
-                              style={{ width: `${m.health}%`, background: healthColor(m.health) }}
-                            />
-                          </span>
-                          <span style={{ fontSize: 12, color: 'var(--muted)' }}>{m.health}</span>
-                        </span>
-                      </td>
                       <td>
                         <span className={pillClass(s.tone)}>{s.label}</span>
                       </td>
                       <td className="num" style={{ color: 'var(--text-3)', fontSize: 12 }}>
                         {m.since}
+                      </td>
+                      <td>
+                        {sfUrl ? (
+                          <a
+                            className="btn btn-ghost btn-sm"
+                            href={sfUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                            aria-label={`Open ${m.name} storefront in a new tab`}
+                          >
+                            Open <Icon.external size={13} />
+                          </a>
+                        ) : (
+                          <span style={{ color: 'var(--text-3)' }}>—</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -279,27 +285,14 @@ export function SuperAdmin({
         </div>
       </div>
 
-      {current && (
-        <DetailRail
-          m={current}
-          onOpen={onOpen}
-          onFlag={() => toast(`${current.name} flagged for compliance review`)}
-        />
-      )}
+      {current && <DetailRail m={current} isLocal={isLocal} />}
     </div>
   );
 }
 
-function DetailRail({
-  m,
-  onOpen,
-  onFlag,
-}: {
-  m: Merchant;
-  onOpen: (s: Store) => void;
-  onFlag: () => void;
-}) {
+function DetailRail({ m, isLocal }: { m: Merchant; isLocal: boolean }) {
   const s = MERCHANT_STATUS[m.status];
+  const sfUrl = storefrontUrl(m.store, isLocal);
   const detail: [string, string][] = [
     ['Plan', m.plan],
     ['GMV · 30d', m.gmv],
@@ -330,12 +323,27 @@ function DetailRail({
         </div>
         <Spark values={m.spark} height={44} />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => onOpen(m.store)}>
-            Enter store
-          </button>
-          <button className="btn btn-ghost" onClick={onFlag}>
-            Flag
-          </button>
+          <a
+            className="btn btn-ghost"
+            style={{ flex: 1 }}
+            href={`/stores/${storeSlug(m.store)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Manage ${m.name} in a new tab`}
+          >
+            Manage store <Icon.external size={13} />
+          </a>
+          {sfUrl && (
+            <a
+              className="btn btn-ghost"
+              href={sfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Open ${m.name} storefront in a new tab`}
+            >
+              View storefront <Icon.external size={13} />
+            </a>
+          )}
         </div>
       </div>
 

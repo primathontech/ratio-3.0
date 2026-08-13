@@ -39,6 +39,20 @@ let idSeq = 0;
 const newId = (type: string) => `${type}-${Date.now().toString(36)}-${idSeq++}`;
 const blankDoc = (path: string): PbDoc => ({ path, title: '', sections: [] });
 
+// What a merchant needs to know about a page: is it live, still a draft, or live-with-edits.
+// (The raw revision counter is internal plumbing, not shown here.)
+export const pageStatus = (p: PbPageMeta) => (!p.published ? 'Draft' : 'Live');
+
+// Friendly names for the known storefront routes; custom pages fall back to their path.
+const PAGE_NAMES: Record<string, string> = {
+  '/': 'Home page',
+  '/collections/:handle': 'Collection page',
+  '/products/:handle': 'Product page (PDP)',
+  '/search': 'Search page',
+  '/cart': 'Cart page',
+};
+export const pageName = (path: string) => PAGE_NAMES[path] ?? path;
+
 function move<T>(arr: T[], i: number, dir: -1 | 1): T[] {
   const j = i + dir;
   if (j < 0 || j >= arr.length) return arr;
@@ -365,37 +379,32 @@ function SectionCard({
   );
 }
 
-export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
+export function PageEditor({
+  api,
+  store,
+  path,
+  isNew,
+  initialTitle = '',
+  onBack,
+}: {
+  api: Api;
+  store: Store;
+  path: string;
+  isNew: boolean;
+  initialTitle?: string;
+  onBack: () => void;
+}) {
   const toast = useToast();
   const [catalog, setCatalog] = useState<PbSectionDef[] | null>(null);
   const [collections, setCollections] = useState<PbCollection[] | null>(null);
-  const [pages, setPages] = useState<PbPageMeta[]>([]);
-  const [path, setPath] = useState('/');
   const [doc, setDoc] = useState<PbDoc | null>(null);
   const [revision, setRevision] = useState(0);
   const [busy, setBusy] = useState(false);
   const [addType, setAddType] = useState('');
-  const [newPath, setNewPath] = useState('');
 
   const err = useCallback(
     (e: unknown, fallback: string) => toast(e instanceof ApiError ? e.message : fallback, 'error'),
     [toast]
-  );
-
-  const loadPages = useCallback(() => {
-    api
-      .listPbPages(store.id)
-      .then(setPages)
-      .catch((e) => err(e, 'Failed to list pages'));
-  }, [api, store.id, err]);
-
-  const loadDoc = useCallback(
-    async (p: string) => {
-      const state = await api.getPageBuilder(store.id, p);
-      setRevision(state.revision);
-      setDoc(state.draft ?? state.live ?? blankDoc(p));
-    },
-    [api, store.id]
   );
 
   useEffect(() => {
@@ -407,29 +416,27 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
       .listCollections(store.id)
       .then(setCollections)
       .catch(() => setCollections([]));
-    loadPages();
-    loadDoc('/').catch((e) => err(e, 'Failed to load page'));
-  }, [api, store.id, loadPages, loadDoc, err]);
+  }, [api, store.id, err]);
+
+  useEffect(() => {
+    // A brand-new page has nothing on the server yet — start blank; it's created on first save.
+    if (isNew) {
+      setRevision(0);
+      setDoc({ ...blankDoc(path), title: initialTitle });
+      return;
+    }
+    setDoc(null);
+    api
+      .getPageBuilder(store.id, path)
+      .then((state) => {
+        setRevision(state.revision);
+        setDoc(state.draft ?? state.live ?? blankDoc(path));
+      })
+      .catch((e) => err(e, 'Failed to load page'));
+  }, [api, store.id, path, isNew, initialTitle, err]);
 
   const defOf = useCallback((type: string) => catalog?.find((c) => c.type === type), [catalog]);
   const sectionTypes = (catalog ?? []).filter((c) => c.kind === 'section');
-
-  async function selectPage(p: string) {
-    if (p === path) return;
-    setPath(p);
-    setDoc(null);
-    await loadDoc(p).catch((e) => err(e, 'Failed to load page'));
-  }
-  function createPage() {
-    const p = newPath.trim();
-    if (!p.startsWith('/')) return toast('Path must start with /', 'error');
-    if (pages.some((x) => x.path === p) || p === path)
-      return toast('That page already exists', 'error');
-    setNewPath('');
-    setPath(p);
-    setRevision(0);
-    setDoc(blankDoc(p));
-  }
 
   function patchSection(i: number, s: PbSection) {
     if (!doc) return;
@@ -472,7 +479,6 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
     try {
       await api.savePbDraft(store.id, doc);
       toast('Draft saved', 'ok');
-      loadPages();
       return true;
     } catch (e) {
       err(e, 'Save failed');
@@ -490,16 +496,12 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
       toast(`Published ${path} (revision ${res.revision})`, 'ok');
       if (res.edgePurged === false)
         toast('Published, but the edge cache purge failed — it may serve stale briefly', 'error');
-      loadPages();
     } catch (e) {
       err(e, 'Publish failed');
     } finally {
       setBusy(false);
     }
   }
-
-  const knownPaths = pages.map((p) => p.path);
-  const isNewPage = !knownPaths.includes(path);
 
   // Prefer the *.localhost dev alias (resolves to 127.0.0.1 on :8080); else the real domain.
   const localHost = store.hosts?.find((h) => h.endsWith('.localhost'));
@@ -512,50 +514,22 @@ export function PageBuilderPanel({ api, store }: { api: Api; store: Store }) {
   return (
     <div className="card pane" style={{ marginBottom: 18 }}>
       <div className="pane-head">
-        <h2>
-          Page builder{' '}
-          <Badge accent>
-            {path} · rev {revision}
-          </Badge>
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onBack} aria-label="Back to pages">
+            <Icon.back size={14} /> Pages
+          </button>
+          <h2 style={{ margin: 0 }}>
+            {pageName(path)}{' '}
+            <Badge accent>
+              {path} · rev {revision}
+            </Badge>
+          </h2>
+        </div>
         {viewUrl && (
           <a className="btn btn-ghost btn-sm" href={viewUrl} target="_blank" rel="noreferrer">
             View <Icon.external size={12} />
           </a>
         )}
-      </div>
-
-      {/* page switcher */}
-      <nav className="pagelist" aria-label="Page-builder pages" style={{ marginBottom: 10 }}>
-        {pages.map((p) => (
-          <button
-            key={p.path}
-            className={p.path === path ? 'active' : ''}
-            aria-current={p.path === path ? 'true' : undefined}
-            onClick={() => selectPage(p.path)}
-          >
-            <span className="mono">{p.path}</span>
-            <Badge>{p.published ? `rev ${p.revision}` : 'draft'}</Badge>
-          </button>
-        ))}
-        {isNewPage && (
-          <button className="active" aria-current="true">
-            <span className="mono">{path}</span>
-            <Badge>new</Badge>
-          </button>
-        )}
-      </nav>
-      <div className="row" style={{ marginBottom: 14, alignItems: 'flex-end', gap: 8 }}>
-        <input
-          className="input mono"
-          placeholder="/new-page"
-          value={newPath}
-          onChange={(e) => setNewPath(e.target.value)}
-          aria-label="New page path"
-        />
-        <button className="btn btn-ghost btn-sm" onClick={createPage} disabled={!newPath.trim()}>
-          <Icon.plus size={14} /> New page
-        </button>
       </div>
 
       {!doc || !catalog ? (
