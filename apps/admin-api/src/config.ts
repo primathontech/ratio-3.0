@@ -10,6 +10,23 @@ function required(name: string): string {
 
 const local = process.env.RATIO_LOCAL === 'true';
 
+// The compiled-bundle object store (BC0), OPTIONAL — mirrors apps/origin/src/config.ts. Set
+// BUNDLE_S3_BUCKET to enable the bundle-theme authoring endpoints; unset ⇒ those routes 503 and
+// admin-api still boots (no new prod-breaking required env). Credentials are optional — omit them to
+// use the AWS default chain (IAM role); pass a custom endpoint + keys for MinIO/LocalStack in dev.
+function bundleStore() {
+  const bucket = process.env.BUNDLE_S3_BUCKET;
+  if (!bucket) return null;
+  const accessKeyId = process.env.BUNDLE_S3_KEY;
+  const secretAccessKey = process.env.BUNDLE_S3_SECRET;
+  return {
+    bucket,
+    region: process.env.BUNDLE_S3_REGION,
+    endpoint: process.env.BUNDLE_S3_ENDPOINT,
+    credentials: accessKeyId && secretAccessKey ? { accessKeyId, secretAccessKey } : undefined,
+  };
+}
+
 export const config = {
   // Boolean toggles — absence legitimately means "off", not a hidden fallback.
   local,
@@ -18,4 +35,6 @@ export const config = {
   insecureTls: process.env.DB_INSECURE_TLS === 'true',
   // Required — no default.
   databaseUrl: required('DATABASE_URL'),
+  // Optional — null disables the bundle-theme authoring endpoints.
+  bundleStore: bundleStore(),
 };
