@@ -12,8 +12,15 @@ import { pool } from '@ratio/data-db';
 
 const ALICE = 'user_alice_tb'; // owner
 const BOB = 'user_bob_tb'; // no membership
+const CAROL = 'user_carol_tb'; // member (editor), not owner
 const verify = async (token: string) =>
-  token === 'tok-alice' ? { userId: ALICE } : token === 'tok-bob' ? { userId: BOB } : null;
+  token === 'tok-alice'
+    ? { userId: ALICE }
+    : token === 'tok-bob'
+      ? { userId: BOB }
+      : token === 'tok-carol'
+        ? { userId: CAROL }
+        : null;
 
 // An in-memory ObjectStore — the bundle bytes live here instead of S3/MinIO.
 function memStore(): ObjectStore {
@@ -39,6 +46,7 @@ const ID = 't_theme_bundle';
 const MAIN = `${ID}-main`;
 const alice = { authorization: 'Bearer tok-alice' };
 const bob = { authorization: 'Bearer tok-bob' };
+const carol = { authorization: 'Bearer tok-carol' };
 
 const call = (
   a: typeof app,
@@ -73,6 +81,10 @@ before(async () => {
   await pool.query(
     `INSERT INTO memberships (clerk_user_id, tenant_id, role) VALUES ($1, $2, 'owner')`,
     [ALICE, ID]
+  );
+  await pool.query(
+    `INSERT INTO memberships (clerk_user_id, tenant_id, role) VALUES ($1, $2, 'editor')`,
+    [CAROL, ID]
   );
 });
 beforeEach(async () => {
@@ -154,6 +166,24 @@ test('rollback to an unknown version → 404', async () => {
   await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {}); // v1
   const rb = await call(app, 'POST', `/stores/${ID}/theme/bundle/rollback`, alice, { version: 99 });
   assert.strictEqual(rb.status, 404);
+});
+
+test('a member (non-owner) can save/preview a draft but cannot publish or rollback', async () => {
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, carol, {
+    files: { 'a.liquid': 'by-editor' },
+  });
+  assert.strictEqual(save.status, 200);
+  const view = await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, carol);
+  assert.strictEqual(view.status, 200);
+  const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, carol, {});
+  assert.strictEqual(pub.status, 403);
+  const rb = await call(app, 'POST', `/stores/${ID}/theme/bundle/rollback`, carol, { version: 1 });
+  assert.strictEqual(rb.status, 403);
+});
+
+test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
+  const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
+  assert.strictEqual(pub.status, 400);
 });
 
 test('every bundle endpoint is 503 when no object store is configured', async () => {

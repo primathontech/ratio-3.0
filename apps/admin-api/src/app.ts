@@ -744,7 +744,8 @@ export function createApp(
   app.post('/stores/:id/theme/bundle/publish', requireRole('owner'), async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const id = c.req.param('id');
-    await themes.ensureTheme(id, mainThemeId(id));
+    // Publish does NOT create the theme — draft-save is the create point. Publishing a store that
+    // never saved a draft is a client error, not a reason to make an empty theme live.
     let version: number;
     try {
       ({ version } = await themes.publish(
@@ -752,16 +753,16 @@ export function createApp(
         { compile: identityCompile, by: c.get('userId') }
       ));
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'publish failed' }, 400);
+      if (e instanceof Error && /unknown theme/.test(e.message))
+        return c.json({ error: 'no draft to publish — save a draft first' }, 400);
+      throw e; // infra faults (S3/DB) bubble to onError → 500 + logged, not a misleading 400
     }
+    // publish() enqueued a durable tenant-tag purge in its transaction (page_purge_outbox +
+    // drainPurges) — that's the invalidation. purgeEdgeTags hits the local dev edge-sim by tag.
+    // Prod by-URL purge scoped to the bundle theme's own routes is a follow-up.
     await purgeEdgeTags([tenantTag(id)]);
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
     c.set('auditTenant', id);
-    return c.json({ ok: true, version, ...(edgePurged !== null && { edgePurged }) });
+    return c.json({ ok: true, version });
   });
 
   // Roll the live pointer back to an earlier published version (the bundles are all still in S3).
@@ -775,16 +776,14 @@ export function createApp(
     try {
       await themes.rollback(id, body.version);
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : 'rollback failed' }, 404);
+      // Only the "not found" cases are a 404; anything else (DB/S3) bubbles to onError → 500.
+      if (e instanceof Error && /unknown version|no published theme|unknown tenant/.test(e.message))
+        return c.json({ error: e.message }, 404);
+      throw e;
     }
-    await purgeEdgeTags([tenantTag(id)]);
-    const pages = await pbStore.listPages(id);
-    const edgePurged = await purgeStoreUrls(
-      id,
-      pages.map((p) => p.path)
-    );
+    await purgeEdgeTags([tenantTag(id)]); // see publish: durable purge is the outbox tenant tag
     c.set('auditTenant', id);
-    return c.json({ ok: true, version: body.version, ...(edgePurged !== null && { edgePurged }) });
+    return c.json({ ok: true, version: body.version });
   });
 
   // Commerce backend connection: the GoKwik merchant id that powers products/collections/cart.
