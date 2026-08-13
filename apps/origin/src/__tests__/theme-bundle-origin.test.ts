@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ThemeStore } from '@ratio/builder-core';
+import { ThemeStore, tenantTag } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { app } from '../index';
@@ -130,6 +130,13 @@ test(
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('x-handler'), 'theme-bundle');
     assert.equal(res.headers.get('x-theme-version'), '1');
+    // Cacheable at the edge, tagged so a theme publish can purge the whole store.
+    assert.equal(res.headers.get('x-cache'), 'long');
+    assert.match(res.headers.get('cache-control') || '', /s-maxage=300/);
+    assert.ok(
+      (res.headers.get('x-surrogate-keys') || '').includes(tenantTag(T)),
+      'tagged by the tenant tag (a theme publish purges every page of the store)'
+    );
     const body = await res.text();
     assert.match(body, /^<!doctype html>/);
     assert.match(

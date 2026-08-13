@@ -547,7 +547,7 @@ app.all('*', async (c) => {
         themeStore.loadLiveCompiled(tenantId as string)
       );
       if (compiled && compiled[`templates/${page}.json`] != null) {
-        const sections = await timed(c, 'compose', () =>
+        const { html: sections, tags: dataTags } = await timed(c, 'compose', () =>
           renderThemePage(
             compiled,
             page,
@@ -578,7 +578,18 @@ app.all('*', async (c) => {
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
-        c.header('x-cache', 'no-store'); // caching + purge tags land with the data-binding slice
+        // Cacheable at the edge, invalidated by tag (D2): the tenant tag (a theme publish purges
+        // every page of the store), the page tag (this URL), and the data-source tags (a
+        // collection/product change purges the pages showing it). Emitting the tenant tag on every
+        // bundle page is what lets the write side purge the whole store on publish/rollback.
+        const tags = [
+          tenantTag(tenantId as string),
+          pageTag(tenantId as string, canon),
+          ...dataTags,
+        ];
+        c.header('x-surrogate-keys', tags.join(' '));
+        c.header('x-cache', 'long');
+        c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
         setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
         return c.html(html);
       }

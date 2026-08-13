@@ -21,7 +21,10 @@ const bundle = (sections: unknown[], extra: ThemeFiles = {}): ThemeFiles => ({
 
 test('renders a page from a compiled bundle (section liquid + its own data)', async () => {
   const compiled = bundle([{ type: 'hero', data: { hero: { heading: 'Hello' } } }]);
-  assert.match(await renderThemePage(compiled, 'index', { theme: trusted }), /<h1>Hello<\/h1>/);
+  assert.match(
+    (await renderThemePage(compiled, 'index', { theme: trusted })).html,
+    /<h1>Hello<\/h1>/
+  );
 });
 
 test('each section renders with its OWN data (no cross-section bleed)', async () => {
@@ -29,7 +32,7 @@ test('each section renders with its OWN data (no cross-section bleed)', async ()
     { type: 'hero', data: { hero: { heading: 'One' } } },
     { type: 'hero', data: { hero: { heading: 'Two' } } },
   ]);
-  const html = await renderThemePage(compiled, 'index', { theme: trusted });
+  const { html } = await renderThemePage(compiled, 'index', { theme: trusted });
   assert.match(html, /One/);
   assert.match(html, /Two/);
   assert.ok(html.indexOf('One') < html.indexOf('Two'), 'first instance renders first');
@@ -79,7 +82,7 @@ test('dispatches per section: platform → code renderer, theme → Liquid rende
       `<section class="hero">${(data as { heading: string }).heading}</section>`
     );
   };
-  const html = await renderThemePage(compiled, 'index', { theme, platform });
+  const { html } = await renderThemePage(compiled, 'index', { theme, platform });
   assert.match(html, /class="hero">Hi</); // platform section rendered by code
   assert.match(html, /class="grid">Shop</); // theme section rendered from Liquid
   assert.deepEqual(calls, ['platform:hero', 'theme']); // correct dispatch, in order
@@ -102,7 +105,7 @@ test('binds live data — a data-sourced theme section renders the resolved valu
       return { value: { products: [{ title: 'Alpha' }, { title: 'Beta' }] }, tags: ['col:summer'] };
     },
   };
-  const html = await renderThemePage(
+  const { html } = await renderThemePage(
     compiled,
     'index',
     { theme: trusted },
@@ -122,7 +125,7 @@ test('binds live data but an authored setting wins over a colliding resolved key
   const resolver: BindingResolver = {
     fetch: async () => ({ value: { title: 'FromData', count: 7 }, tags: [] }),
   };
-  const html = await renderThemePage(
+  const { html } = await renderThemePage(
     compiled,
     'index',
     { theme: trusted },
