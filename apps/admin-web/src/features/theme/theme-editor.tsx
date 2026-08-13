@@ -40,6 +40,13 @@ function fileGlyph(path: string): { text: string; cls: string } {
   return { text: '•', cls: 'fi-default' };
 }
 
+// A friendly label for a preview target (a templates/<page>.json name).
+function pageLabel(page: string): string {
+  if (page === 'index') return 'Home';
+  if (page.startsWith('page.')) return `Page: ${page.slice(5)}`;
+  return page.charAt(0).toUpperCase() + page.slice(1);
+}
+
 function languageLabel(path: string): string {
   const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
   return (
@@ -87,6 +94,7 @@ export function ThemeCodeEditor({
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewErr, setPreviewErr] = useState('');
   const [previewing, setPreviewing] = useState(false);
+  const [previewPage, setPreviewPage] = useState('index');
   // Set when the new-file input is cancelled (Escape), so the unmount-triggered blur doesn't re-create
   // the file the user just cancelled.
   const addCancelled = useRef(false);
@@ -103,10 +111,10 @@ export function ThemeCodeEditor({
 
   // Render the given files server-side (the storefront's own render path) into the preview iframe.
   const runPreview = useCallback(
-    async (f: ThemeFiles) => {
+    async (f: ThemeFiles, page: string) => {
       setPreviewing(true);
       try {
-        const res = await api.previewBundle(store.id, f);
+        const res = await api.previewBundle(store.id, f, page);
         setPreviewErr(res.error ?? '');
         setPreviewHtml(res.error ? '' : (res.html ?? ''));
       } catch (e) {
@@ -130,7 +138,7 @@ export function ThemeCodeEditor({
         setFiles(f);
         setSelected((s) => s ?? Object.keys(f).sort()[0] ?? null);
         setStatus('ready');
-        void runPreview(f);
+        void runPreview(f, 'index');
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 503) {
@@ -208,7 +216,7 @@ export function ThemeCodeEditor({
   async function saveDraft() {
     if (await save()) {
       toast('Draft saved', 'ok');
-      void runPreview(files);
+      void runPreview(files, previewPage);
     }
   }
 
@@ -235,6 +243,11 @@ export function ThemeCodeEditor({
     ? allPaths.filter((p) => p.toLowerCase().includes(filter.toLowerCase()))
     : allPaths;
   const groups = groupByFolder(shown.sort());
+  // Preview targets = the theme's page templates (templates/<page>.json), home first.
+  const templatePages = Object.keys(files)
+    .filter((p) => p.startsWith('templates/') && p.endsWith('.json'))
+    .map((p) => p.slice('templates/'.length, -'.json'.length))
+    .sort((a, b) => (a === 'index' ? -1 : b === 'index' ? 1 : a.localeCompare(b)));
   const ready = status === 'ready';
 
   return (
@@ -487,15 +500,32 @@ export function ThemeCodeEditor({
                 <div className="wb-preview">
                   <div className="wb-preview-bar">
                     <span className="muted">Preview{previewing ? ' · rendering…' : ''}</span>
-                    <button
-                      className="btn-icon"
-                      aria-label="Refresh preview"
-                      title="Refresh preview"
-                      onClick={() => runPreview(files)}
-                      disabled={previewing}
-                    >
-                      <Icon.refresh size={15} />
-                    </button>
+                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                      <select
+                        className="wb-preview-page"
+                        aria-label="Preview page"
+                        value={previewPage}
+                        onChange={(e) => {
+                          setPreviewPage(e.target.value);
+                          void runPreview(files, e.target.value);
+                        }}
+                      >
+                        {templatePages.map((p) => (
+                          <option key={p} value={p}>
+                            {pageLabel(p)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        className="btn-icon"
+                        aria-label="Refresh preview"
+                        title="Refresh preview"
+                        onClick={() => runPreview(files, previewPage)}
+                        disabled={previewing}
+                      >
+                        <Icon.refresh size={15} />
+                      </button>
+                    </div>
                   </div>
                   {previewErr ? (
                     <div className="wb-preview-error">{previewErr}</div>
