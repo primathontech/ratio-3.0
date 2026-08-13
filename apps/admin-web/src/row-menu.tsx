@@ -24,7 +24,13 @@ export function RowMenu({ actions, label = 'Actions' }: { actions: MenuAction[];
       if (popRef.current?.contains(t) || btnRef.current?.contains(t)) return;
       close();
     };
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    // Escape returns focus to the trigger (WCAG 2.4.3); outside-click just closes.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close();
+        btnRef.current?.focus();
+      }
+    };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     window.addEventListener('scroll', close, true);
@@ -35,6 +41,11 @@ export function RowMenu({ actions, label = 'Actions' }: { actions: MenuAction[];
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };
+  }, [open]);
+
+  // Move focus into the menu when it opens.
+  useEffect(() => {
+    if (open) popRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, [open]);
 
   function toggle(e: React.MouseEvent) {
@@ -72,6 +83,7 @@ export function RowMenu({ actions, label = 'Actions' }: { actions: MenuAction[];
               onClick={(e) => {
                 e.stopPropagation();
                 setPos(null);
+                btnRef.current?.focus();
                 a.onClick();
               }}
             >

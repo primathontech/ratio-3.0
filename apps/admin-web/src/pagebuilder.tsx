@@ -17,6 +17,7 @@ import type {
 } from './api';
 import { ApiError } from './api';
 import { Icon, Spinner, Badge, useToast } from './ui';
+import { storefrontUrl } from './store-context';
 
 function getPath(o: unknown, key: string): unknown {
   return key.split('.').reduce<unknown>((a, k) => {
@@ -384,6 +385,7 @@ export function PageEditor({
   store,
   path,
   isNew,
+  isLocal,
   initialTitle = '',
   onBack,
 }: {
@@ -391,6 +393,7 @@ export function PageEditor({
   store: Store;
   path: string;
   isNew: boolean;
+  isLocal: boolean;
   initialTitle?: string;
   onBack: () => void;
 }) {
@@ -503,13 +506,8 @@ export function PageEditor({
     }
   }
 
-  // Prefer the *.localhost dev alias (resolves to 127.0.0.1 on :8080); else the real domain.
-  const localHost = store.hosts?.find((h) => h.endsWith('.localhost'));
-  const viewUrl = localHost
-    ? `http://${localHost}:8080${path}`
-    : store.host
-      ? `https://${store.host}${path}`
-      : null;
+  const origin = storefrontUrl(store, isLocal);
+  const viewUrl = origin ? `${origin}${path}` : null;
 
   return (
     <div className="card pane" style={{ marginBottom: 18 }}>

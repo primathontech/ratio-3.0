@@ -16,9 +16,10 @@ export function NewPageDialog({
   const [title, setTitle] = useState('');
 
   const trimmed = path.trim();
+  const norm = (p: string) => p.trim().toLowerCase().replace(/\/+$/, '') || '/';
   const badStart = trimmed.length > 0 && !trimmed.startsWith('/');
   const tooShort = trimmed === '/' || trimmed.length < 2;
-  const duplicate = existingPaths.includes(trimmed);
+  const duplicate = existingPaths.some((p) => norm(p) === norm(trimmed));
   const valid = !badStart && !tooShort && !duplicate;
 
   function submit() {

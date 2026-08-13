@@ -294,7 +294,7 @@ export function PlatformLayout() {
                 Stores <Icon.external />
               </a>
             )}
-            <UserButton />
+            <UserButton afterSignOutUrl="/" />
           </div>
         </header>
         <div className="shell-body">

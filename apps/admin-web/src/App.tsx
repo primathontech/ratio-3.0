@@ -253,6 +253,7 @@ function ThemePage() {
 }
 function PagesPage() {
   const { api, store } = useMerchant();
+  const { me } = useStoreData();
   const [editing, setEditing] = useState<{ path: string; isNew: boolean; title?: string } | null>(
     null
   );
@@ -263,6 +264,7 @@ function PagesPage() {
         store={store}
         path={editing.path}
         isNew={editing.isNew}
+        isLocal={!!me?.isLocal}
         initialTitle={editing.title}
         onBack={() => setEditing(null)}
       />
