@@ -7,6 +7,7 @@ export * from './doc';
 export * from './footer';
 export * from './html';
 export * from './nav';
+export * from './order';
 export * from './path';
 export * from './resolve';
 export * from './resolve-shopkit';
