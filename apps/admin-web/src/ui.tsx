@@ -169,17 +169,6 @@ export const Icon = {
     ),
 };
 
-// File-type accent colour (VS Code Seti-ish) for a path's icon.
-export function fileIconClass(path: string): string {
-  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'js' || ext === 'mjs' || ext === 'ts') return 'fi-js';
-  if (ext === 'json') return 'fi-json';
-  if (ext === 'css') return 'fi-css';
-  if (ext === 'liquid') return 'fi-liquid';
-  if (ext === 'html' || ext === 'htm') return 'fi-html';
-  return 'fi-default';
-}
-
 /* Spinner ---------------------------------------------------------------- */
 export const Spinner = () => <span className="spinner" role="status" aria-label="Loading" />;
 

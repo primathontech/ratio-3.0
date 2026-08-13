@@ -805,6 +805,10 @@ export function createApp(
       const { html } = await renderThemePreview(files, page, id);
       return c.json({ html });
     } catch (e) {
+      // A Liquid/template error is the merchant's own code (shown in the preview), but a worker
+      // crash / RenderTimeout / missing isolate looks identical here — log server-side so infra
+      // failures are diagnosable (ADR-0002), while still returning { error } to the client.
+      console.error('theme preview render failed:', e);
       return c.json({ error: e instanceof Error ? e.message : 'preview failed' });
     }
   });

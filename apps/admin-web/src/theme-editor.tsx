@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, type Api, type Store, type ThemeFiles } from './api';
 import { EmptyState, Icon, Spinner, useToast } from './ui';
 import { storefrontUrl } from './store-context';
@@ -86,6 +86,9 @@ export function ThemeCodeEditor({
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewErr, setPreviewErr] = useState('');
   const [previewing, setPreviewing] = useState(false);
+  // Set when the new-file input is cancelled (Escape), so the unmount-triggered blur doesn't re-create
+  // the file the user just cancelled.
+  const addCancelled = useRef(false);
   const canPublish = store.role === 'owner';
 
   function toggleFolder(folder: string) {
@@ -145,6 +148,12 @@ export function ThemeCodeEditor({
   }
 
   function addFile() {
+    if (addCancelled.current) {
+      addCancelled.current = false;
+      setAdding(false);
+      setNewPath('');
+      return;
+    }
     const path = newPath.trim();
     if (!path) {
       setAdding(false);
@@ -430,7 +439,10 @@ export function ThemeCodeEditor({
                       onChange={(e) => setNewPath(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') addFile();
-                        if (e.key === 'Escape') setAdding(false);
+                        if (e.key === 'Escape') {
+                          addCancelled.current = true;
+                          setAdding(false);
+                        }
                       }}
                       onBlur={addFile}
                     />
