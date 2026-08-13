@@ -103,7 +103,7 @@ export function MerchantLayout() {
             <span className="brand-name">{store.name}</span>
             <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
           </span>
-          {multiStore && <Icon.selector />}
+          {multiStore && <Icon.selector size={18} />}
         </button>
 
         <div className="sidebar-nav">
