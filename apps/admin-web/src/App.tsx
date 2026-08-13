@@ -25,6 +25,7 @@ import {
 import { PageBuilderPanel } from './pagebuilder';
 import { ThemeSettingsPanel } from './theme-settings';
 import { CommandPalette, type Command } from './command-palette';
+import { SuperAdmin } from './superadmin';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -254,63 +255,76 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1
-            ref={headingRef}
-            tabIndex={-1}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, outline: 'none' }}
-          >
-            {me?.isPlatformAdmin ? 'All stores' : 'Your stores'}
-            {me?.isPlatformAdmin && <Badge accent>Admin · all stores</Badge>}
-          </h1>
-          <p className="muted">
-            {me?.isPlatformAdmin
-              ? 'Platform admin — you can manage every store on Ratio.'
-              : 'Every store is live at its own domain.'}
-          </p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setCreating(true)}>
-          <Icon.plus /> New store
-        </button>
-      </div>
-
-      {error && (
-        <div className="note note-error" role="alert">
-          {error}
-        </div>
-      )}
-
-      {!stores && !error && (
-        <div className="grid" role="status" aria-busy="true">
-          <span className="sr-only">Loading stores…</span>
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="card store-card">
-              <div className="skeleton" style={{ height: 34, width: 34, borderRadius: 9 }} />
-              <div className="skeleton" style={{ height: 14, width: '70%' }} />
-              <div className="skeleton" style={{ height: 12, width: '55%' }} />
+      {stores && stores.length > 0 && me?.isPlatformAdmin ? (
+        // Platform admins get the reference "Merchants" console (real stores + placeholder metrics).
+        <SuperAdmin stores={stores} onOpen={onOpen} onCreate={() => setCreating(true)} />
+      ) : (
+        <>
+          <div className="page-head">
+            <div>
+              <h1
+                ref={headingRef}
+                tabIndex={-1}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, outline: 'none' }}
+              >
+                {me?.isPlatformAdmin ? 'All stores' : 'Your stores'}
+                {me?.isPlatformAdmin && <Badge accent>Admin · all stores</Badge>}
+              </h1>
+              <p className="muted">
+                {me?.isPlatformAdmin
+                  ? 'Platform admin — you can manage every store on Ratio.'
+                  : 'Every store is live at its own domain.'}
+              </p>
             </div>
-          ))}
-        </div>
-      )}
+            <button className="btn btn-primary" onClick={() => setCreating(true)}>
+              <Icon.plus /> New store
+            </button>
+          </div>
 
-      {stores && stores.length === 0 && (
-        <EmptyState emoji="🏪" title="No stores yet">
-          <p className="muted" style={{ maxWidth: 320 }}>
-            Create your first store — it goes live instantly at its own subdomain.
-          </p>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Icon.plus /> Create a store
-          </button>
-        </EmptyState>
-      )}
+          {error && (
+            <div className="note note-error" role="alert">
+              {error}
+            </div>
+          )}
 
-      {stores && stores.length > 0 && (
-        <div className="grid">
-          {stores.map((s) => (
-            <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} local={!!me?.isLocal} />
-          ))}
-        </div>
+          {!stores && !error && (
+            <div className="grid" role="status" aria-busy="true">
+              <span className="sr-only">Loading stores…</span>
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="card store-card">
+                  <div className="skeleton" style={{ height: 34, width: 34, borderRadius: 9 }} />
+                  <div className="skeleton" style={{ height: 14, width: '70%' }} />
+                  <div className="skeleton" style={{ height: 12, width: '55%' }} />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {stores && stores.length === 0 && (
+            <EmptyState emoji="🏪" title="No stores yet">
+              <p className="muted" style={{ maxWidth: 320 }}>
+                Create your first store — it goes live instantly at its own subdomain.
+              </p>
+              <button className="btn btn-primary" onClick={() => setCreating(true)}>
+                <Icon.plus /> Create a store
+              </button>
+            </EmptyState>
+          )}
+
+          {stores && stores.length > 0 && (
+            <div className="grid">
+              {stores.map((s) => (
+                <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} local={!!me?.isLocal} />
+              ))}
+            </div>
+          )}
+
+          {me && (
+            <p className="muted" style={{ marginTop: 32, fontSize: 12.5 }}>
+              Signed in · <span className="mono">{me.userId}</span>
+            </p>
+          )}
+        </>
       )}
 
       {creating && (
@@ -323,12 +337,6 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
             load();
           }}
         />
-      )}
-
-      {me && (
-        <p className="muted" style={{ marginTop: 32, fontSize: 12.5 }}>
-          Signed in · <span className="mono">{me.userId}</span>
-        </p>
       )}
     </>
   );
