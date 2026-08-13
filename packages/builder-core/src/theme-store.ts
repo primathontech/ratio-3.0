@@ -107,6 +107,10 @@ export class ThemeStore {
   // making it live so a store can keep several themes without every publish hijacking the pointer.
   // The theme is checked BEFORE freezing so a doomed publish writes no orphan bundles to S3; the
   // remaining bundle writes on an aborted transaction are unreferenced (harmless, content-addressed).
+  // NOTE: there is no "promote an existing version to live" primitive yet — rollback needs the tenant
+  // to already have a live pointer. So a theme first published with makeLive:false becomes live only
+  // via a later makeLive:true publish. That primitive lands with multi-theme selection (not needed
+  // while a store has one live theme).
   async publish(
     ref: ThemeRef,
     opts: { compile: CompileFn; by?: string; makeLive?: boolean }
@@ -201,13 +205,17 @@ export class ThemeStore {
   }
 
   // Load a compiled bundle by its content hash (what the origin renders), or null if absent. Cached
-  // in the per-instance LRU — the hash is a content address, so a hit is always current.
+  // in the per-instance LRU — the hash is a content address, so a hit is always current. Frozen
+  // before caching: the value is shared across requests, so an accidental mutation must throw rather
+  // than silently corrupt the cached (and hash-addressed) bundle. Render is read-only; a path that
+  // needs to edit a compiled tree must clone it.
   async loadCompiled(compiledHash: string): Promise<ThemeFiles | null> {
     const cached = this.compiledCache.get(compiledHash);
     if (cached) return cached;
     const blob = await this.objects.get(compiledKey(compiledHash));
     if (!blob) return null;
     const files = unpackBundle(Buffer.from(blob));
+    Object.freeze(files);
     this.compiledCache.set(compiledHash, files);
     return files;
   }

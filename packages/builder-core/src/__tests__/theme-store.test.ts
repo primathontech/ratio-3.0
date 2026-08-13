@@ -70,19 +70,17 @@ test('loadCompiled returns null for an unknown hash', { skip }, async () => {
   assert.equal(await store.loadCompiled('0'.repeat(64)), null);
 });
 
-// OFCE-604 #4: compiled bundles are content-addressed (immutable), so loadCompiled caches them in a
-// per-instance LRU — a repeated load of the same hash must not re-hit the object store. Uses an
-// in-memory store, so it runs without MinIO.
-test('loadCompiled caches by hash — the object store is read once for repeated loads', async () => {
+// An in-memory ObjectStore that counts reads — lets the LRU tests run without MinIO.
+function memStore() {
   const mem = new Map<string, Uint8Array>();
-  let gets = 0;
+  const counter = { gets: 0 };
   const objects: ObjectStore = {
     put: async (k, b) => {
       mem.set(k, b as Uint8Array);
       return { etag: 'x' };
     },
     get: async (k) => {
-      gets++;
+      counter.gets++;
       return mem.get(k) ?? null;
     },
     head: async (k) => (mem.has(k) ? { etag: 'x' } : null),
@@ -90,11 +88,37 @@ test('loadCompiled caches by hash — the object store is read once for repeated
       mem.delete(k);
     },
   };
+  return { objects, counter };
+}
+
+// OFCE-604 #4: compiled bundles are content-addressed (immutable), so loadCompiled caches them in a
+// per-instance LRU — a repeated load of the same hash must not re-hit the object store, and the
+// shared cached value is frozen so a stray mutation can't corrupt it.
+test('loadCompiled caches by hash — read once, same frozen instance returned', async () => {
+  const { objects, counter } = memStore();
   const s = new ThemeStore(objects);
   await s.saveDraft({ themeId: 't_lru' }, files);
   const { compiledHash } = await s.freezeBundles({ themeId: 't_lru' }, { compile: identity });
-  gets = 0;
-  assert.deepEqual(await s.loadCompiled(compiledHash), files);
-  assert.deepEqual(await s.loadCompiled(compiledHash), files);
-  assert.equal(gets, 1); // second load served from the in-memory LRU
+  counter.gets = 0;
+  const a = await s.loadCompiled(compiledHash);
+  const b = await s.loadCompiled(compiledHash);
+  assert.deepEqual(a, files);
+  assert.equal(b, a); // second load returns the cached instance, not a fresh unpack
+  assert.equal(counter.gets, 1); // object store read once
+  assert.ok(Object.isFrozen(a)); // read-only contract is enforced, not just documented
+});
+
+// The LRU is bounded: past compiledCacheMax the oldest entry is evicted and must be re-fetched.
+test('loadCompiled evicts the oldest bundle past compiledCacheMax', async () => {
+  const { objects, counter } = memStore();
+  const s = new ThemeStore(objects, { compiledCacheMax: 1 });
+  await s.saveDraft({ themeId: 't_a' }, { 'a.liquid': 'A' });
+  const { compiledHash: ha } = await s.freezeBundles({ themeId: 't_a' }, { compile: identity });
+  await s.saveDraft({ themeId: 't_b' }, { 'b.liquid': 'B' });
+  const { compiledHash: hb } = await s.freezeBundles({ themeId: 't_b' }, { compile: identity });
+  counter.gets = 0;
+  await s.loadCompiled(ha); // miss → cache [ha]
+  await s.loadCompiled(hb); // miss → evicts ha, cache [hb]
+  await s.loadCompiled(ha); // evicted → re-fetch
+  assert.equal(counter.gets, 3);
 });
