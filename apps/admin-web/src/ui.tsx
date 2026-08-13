@@ -77,6 +77,24 @@ export const Icon = {
   check: ({ size }: IconProps) => svg(<path d="M20 6L9 17l-5-5" />, size),
   up: ({ size }: IconProps) => svg(<path d="M18 15l-6-6-6 6" />, size),
   down: ({ size }: IconProps) => svg(<path d="M6 9l6 6 6-6" />, size),
+  selector: ({ size }: IconProps) => svg(<path d="M8 9l4-4 4 4M8 15l4 4 4-4" />, size),
+  more: ({ size }: IconProps) =>
+    svg(
+      <>
+        <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" />
+      </>,
+      size
+    ),
+  sparkles: ({ size }: IconProps) =>
+    svg(
+      <>
+        <path d="M12 3c.4 4 2.6 6.2 6.5 6.5-3.9.3-6.1 2.5-6.5 6.5-.4-4-2.6-6.2-6.5-6.5C9.4 9.2 11.6 7 12 3z" />
+        <path d="M18.5 14.5c.2 1.9 1.1 2.8 3 3-1.9.2-2.8 1.1-3 3-.2-1.9-1.1-2.8-3-3 1.9-.2 2.8-1.1 3-3z" />
+      </>,
+      size
+    ),
   trash: ({ size }: IconProps) =>
     svg(
       <>

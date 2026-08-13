@@ -20,11 +20,13 @@ import {
   ToastProvider,
   useToast,
 } from './ui';
-import { PageBuilderPanel } from './pagebuilder';
+import { PageEditor } from './pagebuilder';
+import { PagesList } from './pages-list';
 import { ThemeSettingsPanel } from './theme-settings';
 import { SuperAdmin } from './superadmin';
 import { DashboardHome } from './dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './app-shell';
+import { AskRatio } from './ask-sophie';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { StoreDataProvider, storeSlug, useMerchant, useStoreData, type Me } from './store-context';
 
@@ -140,6 +142,12 @@ function AuthedRoutes() {
             <Icon.plus /> Create a store
           </button>
         </EmptyState>
+        <div className="onboard-ask">
+          <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>
+            …or just tell Ratio to set it up for you.
+          </p>
+          <AskRatio api={api} storeId={null} onChanged={load} />
+        </div>
         {dialog}
       </main>
     );
@@ -194,15 +202,8 @@ function RequireAdmin({ children }: { children: React.ReactNode }) {
 /* Route elements: thin wrappers that pull api + the resolved store from context (or the store list
    for the platform view) and render the real panel. */
 function SuperAdminPage() {
-  const { stores, openCreate } = useStoreData();
-  const navigate = useNavigate();
-  return (
-    <SuperAdmin
-      stores={stores}
-      onOpen={(s) => navigate(`/stores/${storeSlug(s)}`)}
-      onCreate={openCreate}
-    />
-  );
+  const { stores, me, openCreate } = useStoreData();
+  return <SuperAdmin stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
 }
 function HomePage() {
   const { store } = useMerchant();
@@ -252,7 +253,29 @@ function ThemePage() {
 }
 function PagesPage() {
   const { api, store } = useMerchant();
-  return <PageBuilderPanel api={api} store={store} />;
+  const { me } = useStoreData();
+  const [editing, setEditing] = useState<{ path: string; isNew: boolean; title?: string } | null>(
+    null
+  );
+  if (editing)
+    return (
+      <PageEditor
+        api={api}
+        store={store}
+        path={editing.path}
+        isNew={editing.isNew}
+        isLocal={!!me?.isLocal}
+        initialTitle={editing.title}
+        onBack={() => setEditing(null)}
+      />
+    );
+  return (
+    <PagesList
+      api={api}
+      store={store}
+      onOpen={(path, isNew, title) => setEditing({ path, isNew, title })}
+    />
+  );
 }
 function DomainsPage() {
   const { api, store } = useMerchant();

@@ -42,6 +42,20 @@ export function useMerchant(): MerchantCtx {
 export function storeSlug(store: Store): string {
   return store.host ?? store.id;
 }
+
+// The live storefront URL to open in a browser. In local dev (RATIO_LOCAL / me.isLocal) the store
+// is reachable at its <label>.localhost alias on the local edge; in production it's the real domain
+// over https. Returns null when the store has no matching host yet.
+const LOCAL_EDGE_PORT = '8080';
+export function storefrontUrl(store: Store, isLocal: boolean): string | null {
+  const hosts = [...(store.hosts ?? []), store.host].filter(Boolean) as string[];
+  if (isLocal) {
+    const local = hosts.find((h) => h.endsWith('.localhost'));
+    return local ? `http://${local}:${LOCAL_EDGE_PORT}` : null;
+  }
+  const real = hosts.find((h) => !h.endsWith('.localhost'));
+  return real ? `https://${real}` : null;
+}
 export function resolveStore(stores: Store[], param: string | undefined): Store | undefined {
   if (!param) return undefined;
   return stores.find((s) => s.host === param || s.hosts?.includes(param) || s.id === param);

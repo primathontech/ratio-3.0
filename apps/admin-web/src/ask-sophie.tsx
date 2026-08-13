@@ -3,10 +3,18 @@ import type { Api, AssistantAction } from './api';
 import { Spinner } from './ui';
 
 const SUGGESTIONS = ['Show top products', 'Create a discount campaign', 'Forecast next week'];
+// With no store open the assistant is in onboarding scope (create_store is available), so the
+// example prompts guide the merchant to spin up their first store instead of asking about one.
+const ONBOARD_SUGGESTIONS = [
+  'Onboard a store called Acme, brand colour blue',
+  'Create a store “Nova” at nova.in',
+  'Set up a store and add an About page',
+];
 
 // The AI copilot rail. Reference "Ask Sophie" styling, but the chat drives our REAL assistant
 // (api.assistant → the same control-plane the rest of the UI uses). The two insight cards are
-// placeholder prompts; clicking them sends a real message.
+// placeholder prompts; clicking them sends a real message. With storeId === null the rail runs in
+// onboarding mode: store-metric insights make no sense yet, so it shows onboarding guidance.
 export function AskRatio({
   api,
   storeId,
@@ -18,8 +26,9 @@ export function AskRatio({
   storeId: string | null;
   overlay?: boolean;
   onChanged: () => void;
-  onClose: () => void;
+  onClose?: () => void;
 }) {
+  const onboarding = storeId == null;
   type Turn = { role: 'you' | 'ai'; text: string; actions?: AssistantAction[] };
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState('');
@@ -56,49 +65,54 @@ export function AskRatio({
           ✦
         </span>
         <span style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>Ask Ratio</span>
-        <button
-          className="icon-btn"
-          style={{ width: 26, height: 26 }}
-          onClick={onClose}
-          aria-label="Close assistant"
-        >
-          ✕
-        </button>
+        {onClose && (
+          <button
+            className="icon-btn"
+            style={{ width: 26, height: 26 }}
+            onClick={onClose}
+            aria-label="Close assistant"
+          >
+            ✕
+          </button>
+        )}
       </div>
 
-      <div className="ask-insights">
-        <div className="insight">
-          <div className="insight-kind" style={{ color: 'var(--success)' }}>
-            Opportunity
+      {!onboarding && (
+        <div className="ask-insights">
+          <div className="insight">
+            <div className="insight-kind" style={{ color: 'var(--success)' }}>
+              Opportunity
+            </div>
+            <div style={{ fontSize: 13, lineHeight: '20px' }}>
+              Revenue is up 12% — Instagram converts 2.1× your site average. Shift budget to Reels?
+            </div>
+            <button className="insight-act" onClick={() => send('Create a discount campaign')}>
+              Draft the campaign →
+            </button>
           </div>
-          <div style={{ fontSize: 13, lineHeight: '20px' }}>
-            Revenue is up 12% — Instagram converts 2.1× your site average. Shift budget to Reels?
+          <div className="insight" style={{ background: 'var(--warning-weak)' }}>
+            <div className="insight-kind" style={{ color: 'var(--warning)' }}>
+              Risk
+            </div>
+            <div style={{ fontSize: 13, lineHeight: '20px' }}>
+              Linen Shirt — Ecru sells out in 5 days. Supplier lead time is 11 days.
+            </div>
+            <button
+              className="insight-act"
+              onClick={() => send('Reorder 240 units of Linen Shirt — Ecru')}
+            >
+              Reorder 240 units →
+            </button>
           </div>
-          <button className="insight-act" onClick={() => send('Create a discount campaign')}>
-            Draft the campaign →
-          </button>
         </div>
-        <div className="insight" style={{ background: 'var(--warning-weak)' }}>
-          <div className="insight-kind" style={{ color: 'var(--warning)' }}>
-            Risk
-          </div>
-          <div style={{ fontSize: 13, lineHeight: '20px' }}>
-            Linen Shirt — Ecru sells out in 5 days. Supplier lead time is 11 days.
-          </div>
-          <button
-            className="insight-act"
-            onClick={() => send('Reorder 240 units of Linen Shirt — Ecru')}
-          >
-            Reorder 240 units →
-          </button>
-        </div>
-      </div>
+      )}
 
       <div className="ask-body" aria-live="polite">
         {turns.length === 0 && (
           <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-            Ask about your store — “Add an About page”, onboard a store, edit a theme. Changes go
-            live immediately.
+            {onboarding
+              ? 'Describe your store and I’ll set it up — e.g. “Onboard a store called Acme, brand colour blue, domain acme.in.” I can create the store, add pages, and connect your domain.'
+              : 'Ask about your store — “Add an About page”, onboard a store, edit a theme. Changes go live immediately.'}
           </div>
         )}
         {turns.map((t, i) => (
@@ -124,7 +138,7 @@ export function AskRatio({
 
       <div className="ask-foot">
         <div className="chips">
-          {SUGGESTIONS.map((s) => (
+          {(onboarding ? ONBOARD_SUGGESTIONS : SUGGESTIONS).map((s) => (
             <button key={s} className="chip" onClick={() => send(s)} disabled={busy}>
               {s}
             </button>
@@ -142,7 +156,7 @@ export function AskRatio({
             style={{ height: 36 }}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Ask about your store…"
+            placeholder={onboarding ? 'Describe your new store…' : 'Ask about your store…'}
             disabled={busy}
             aria-label="Message"
           />

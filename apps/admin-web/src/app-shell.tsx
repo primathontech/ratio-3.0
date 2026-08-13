@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
 import { useTheme } from './theme';
@@ -6,7 +6,7 @@ import { Icon } from './ui';
 import { NAV, type NavItem } from './dashboard-data';
 import { AskRatio } from './ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
-import { resolveStore, storeSlug, useStoreData } from './store-context';
+import { resolveStore, storeSlug, storefrontUrl, useStoreData } from './store-context';
 
 // The merchant shell for a single store (/stores/:storeId/*): sidebar + top bar + Ask rail, with
 // the route content in <Outlet>. The current store lives in the URL.
@@ -24,6 +24,7 @@ export function MerchantLayout() {
     typeof window !== 'undefined' ? window.innerWidth < 1200 : false
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [storePickerOpen, setStorePickerOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export function MerchantLayout() {
   if (!store) return <Navigate to="/" replace />;
   const owner = store.role === 'owner';
   const slug = storeSlug(store);
+  const liveUrl = storefrontUrl(store, !!me?.isLocal);
 
   const pathFor = (route: string) =>
     route === 'admin'
@@ -75,28 +77,33 @@ export function MerchantLayout() {
     }))
   );
 
+  // Switch store via a searchable picker — cycling one-by-one doesn't scale to many stores.
+  const storeCommands: Command[] = useMemo(
+    () =>
+      stores.map((s) => ({
+        label: s.name,
+        group: s.host ?? '',
+        run: () => navigate(`/stores/${storeSlug(s)}`),
+      })),
+    [stores, navigate]
+  );
+  const multiStore = stores.length > 1;
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <button
           className="sidebar-brand"
-          aria-label={
-            stores.length > 1
-              ? `Current store: ${store.name}. Activate to switch store.`
-              : store.name
-          }
-          onClick={() =>
-            navigate(
-              `/stores/${storeSlug(stores[(stores.findIndex((s) => s.id === store.id) + 1) % stores.length])}`
-            )
-          }
+          aria-haspopup={multiStore ? 'dialog' : undefined}
+          aria-label={multiStore ? `Current store: ${store.name}. Switch store.` : store.name}
+          onClick={() => multiStore && setStorePickerOpen(true)}
         >
-          <span className="logo">R</span>
+          <img className="brand-logo" src="/logo.svg" alt="Ratio" />
           <span className="brand-meta">
             <span className="brand-name">{store.name}</span>
             <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
           </span>
-          {stores.length > 1 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>⌄</span>}
+          {multiStore && <Icon.selector size={18} />}
         </button>
 
         <div className="sidebar-nav">
@@ -132,32 +139,48 @@ export function MerchantLayout() {
 
       <div className="main-area">
         <header className="appbar">
-          <button
-            className="cmdk-trigger"
-            onClick={() => setPaletteOpen(true)}
-            aria-haspopup="dialog"
-          >
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: '1.5px solid var(--text-3)',
-                flex: 'none',
-              }}
-            />
-            <span className="label">Search or ask Ratio to do something…</span>
-            <span className="kbd">⌘K</span>
-          </button>
           <div className="right">
-            <button className="btn btn-ghost" onClick={cycle}>
-              {resolved === 'dark' ? 'Light' : 'Dark'}
+            <button
+              className="cmdk-trigger"
+              onClick={() => setPaletteOpen(true)}
+              aria-haspopup="dialog"
+            >
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: '1.5px solid var(--text-3)',
+                  flex: 'none',
+                }}
+              />
+              <span className="label">Search or ask Ratio to do something…</span>
+              <span className="kbd">⌘K</span>
             </button>
+            <button
+              className="icon-btn"
+              onClick={cycle}
+              aria-label={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={resolved === 'dark' ? 'Light' : 'Dark'}
+            >
+              {resolved === 'dark' ? <Icon.sun /> : <Icon.moon />}
+            </button>
+            {liveUrl && (
+              <a
+                className="btn btn-ghost"
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open this store's storefront in a new tab"
+              >
+                View storefront <Icon.external size={14} />
+              </a>
+            )}
             <button
               className={askOpen ? 'btn btn-primary' : 'btn btn-ghost'}
               onClick={() => setAskOpen((o) => !o)}
             >
-              Ask Ratio
+              <Icon.sparkles size={15} /> Ask Ratio
             </button>
             <UserButton afterSignOutUrl="/" />
           </div>
@@ -194,6 +217,12 @@ export function MerchantLayout() {
         onClose={() => setPaletteOpen(false)}
         commands={commands}
       />
+      <CommandPalette
+        open={storePickerOpen}
+        onClose={() => setStorePickerOpen(false)}
+        commands={storeCommands}
+        placeholder="Switch store…"
+      />
     </div>
   );
 }
@@ -220,7 +249,7 @@ export function PlatformLayout() {
   const commands: Command[] = first
     ? [
         {
-          label: 'Merchant view',
+          label: 'Stores',
           group: 'Navigate',
           run: () => navigate(`/stores/${storeSlug(first)}`),
         },
@@ -232,7 +261,7 @@ export function PlatformLayout() {
       <div className="main-area">
         <header className="appbar">
           <span className="brand">
-            <span className="logo">R</span>
+            <img className="brand-logo" src="/logo.svg" alt="Ratio" />
             Ratio Platform
             <span className="badge badge-accent">Super admin</span>
           </span>
@@ -246,15 +275,25 @@ export function PlatformLayout() {
               <span className="label">Search platform…</span>
               <span className="kbd">⌘K</span>
             </button>
-            <button className="btn btn-ghost" onClick={cycle}>
-              {resolved === 'dark' ? 'Light' : 'Dark'}
-            </button>
             <button
-              className="btn btn-ghost"
-              onClick={() => first && navigate(`/stores/${storeSlug(first)}`)}
+              className="icon-btn"
+              onClick={cycle}
+              aria-label={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+              title={resolved === 'dark' ? 'Light' : 'Dark'}
             >
-              Merchant view
+              {resolved === 'dark' ? <Icon.sun /> : <Icon.moon />}
             </button>
+            {first && (
+              <a
+                className="btn btn-ghost"
+                href={`/stores/${storeSlug(first)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Open the store dashboard in a new tab"
+              >
+                Stores <Icon.external />
+              </a>
+            )}
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>

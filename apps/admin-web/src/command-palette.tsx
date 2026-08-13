@@ -8,10 +8,12 @@ export function CommandPalette({
   open,
   onClose,
   commands,
+  placeholder = 'Jump to a section…',
 }: {
   open: boolean;
   onClose: () => void;
   commands: Command[];
+  placeholder?: string;
 }) {
   const [q, setQ] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -24,7 +26,12 @@ export function CommandPalette({
   if (!open) return null;
 
   const needle = q.trim().toLowerCase();
-  const shown = needle ? commands.filter((c) => c.label.toLowerCase().includes(needle)) : commands;
+  const matches = needle
+    ? commands.filter((c) => `${c.label} ${c.group}`.toLowerCase().includes(needle))
+    : commands;
+  // Cap the DOM: a store picker can hold thousands — render a slice and let search narrow it.
+  const LIMIT = 50;
+  const shown = matches.slice(0, LIMIT);
   const run = (c: Command) => {
     c.run();
     onClose();
@@ -47,7 +54,7 @@ export function CommandPalette({
             ref={inputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Jump to a section…"
+            placeholder={placeholder}
             aria-label="Command"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && shown[0]) run(shown[0]);
@@ -66,6 +73,18 @@ export function CommandPalette({
           {shown.length === 0 && (
             <div style={{ padding: '22px 12px', textAlign: 'center', color: 'var(--text-3)' }}>
               No matches
+            </div>
+          )}
+          {matches.length > shown.length && (
+            <div
+              style={{
+                padding: '10px 12px',
+                textAlign: 'center',
+                color: 'var(--text-3)',
+                fontSize: 12,
+              }}
+            >
+              {matches.length - shown.length} more — keep typing to narrow
             </div>
           )}
         </div>
