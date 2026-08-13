@@ -10,11 +10,13 @@ const SUGGESTIONS = ['Show top products', 'Create a discount campaign', 'Forecas
 export function AskRatio({
   api,
   storeId,
+  overlay,
   onChanged,
   onClose,
 }: {
   api: Api;
   storeId: string | null;
+  overlay?: boolean;
   onChanged: () => void;
   onClose: () => void;
 }) {
@@ -43,7 +45,12 @@ export function AskRatio({
   }
 
   return (
-    <aside className="ask-rail">
+    <aside
+      className="ask-rail"
+      role={overlay ? 'dialog' : undefined}
+      aria-modal={overlay || undefined}
+      aria-label="Ask Ratio"
+    >
       <div className="ask-head">
         <span className="ask-badge" aria-hidden>
           ✦

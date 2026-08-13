@@ -35,11 +35,22 @@ export function AppShell({
   // Track the selected store by id, not index: a reload (create/delete/assistant action) can reorder
   // or shrink `stores`, and an index would silently point at a different store.
   const [storeId, setStoreId] = useState<string>(stores[0]?.id);
+  // 1200px is the single breakpoint: at/above it the Ask rail is a column, below it an overlay
+  // drawer. Keep the initial-open check and the overlay logic on the same threshold as the CSS.
   const [askOpen, setAskOpen] = useState(
-    typeof window !== 'undefined' ? window.innerWidth >= 1280 : true
+    typeof window !== 'undefined' ? window.innerWidth >= 1200 : true
+  );
+  const [narrow, setNarrow] = useState(
+    typeof window !== 'undefined' ? window.innerWidth < 1200 : false
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const onResize = () => setNarrow(window.innerWidth < 1200);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   const current = stores.find((s) => s.id === storeId) ?? stores[0];
   const owner = current?.role === 'owner';
@@ -74,11 +85,13 @@ export function AppShell({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);
+      } else if (e.key === 'Escape' && narrow) {
+        setAskOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [narrow]);
 
   const commands: Command[] = groups.flatMap((g) =>
     g.items.map((it) => ({
@@ -187,12 +200,19 @@ export function AppShell({
             {current && renderRoute(route, current, nav)}
           </main>
           {showAsk && (
-            <AskRatio
-              api={api}
-              storeId={current?.id ?? null}
-              onChanged={onChanged}
-              onClose={() => setAskOpen(false)}
-            />
+            <>
+              {/* Click-away backdrop only when the rail is an overlay drawer (< 1200px). */}
+              {narrow && (
+                <div className="ask-backdrop" onClick={() => setAskOpen(false)} aria-hidden />
+              )}
+              <AskRatio
+                api={api}
+                storeId={current?.id ?? null}
+                overlay={narrow}
+                onChanged={onChanged}
+                onClose={() => setAskOpen(false)}
+              />
+            </>
           )}
         </div>
       </div>

@@ -302,11 +302,16 @@ h3 {
     box-shadow: var(--shadow-lg);
   }
 }
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 39;
+  animation: fade 0.14s ease;
+}
 
-/* App bar (top) ----------------------------------------------------------- */
+/* App bar (top). Not sticky: the fixed-height shell never scrolls the page, only the panes. */
 .appbar {
-  position: sticky;
-  top: 0;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -1048,7 +1053,7 @@ h3 {
 
 /* Sign-in ---------------------------------------------------------------- */
 .signin-wrap {
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 40px 20px;
