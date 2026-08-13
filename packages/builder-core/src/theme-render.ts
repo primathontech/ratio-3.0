@@ -49,7 +49,7 @@ export async function renderThemePage(
   page: string,
   renderers: SectionRenderers,
   opts: { resolver?: BindingResolver; ctx?: ResolveContext } = {}
-): Promise<string> {
+): Promise<{ html: string; tags: string[] }> {
   const raw = compiled[templatePath(page)];
   if (raw == null) throw new Error(`no template for page '${page}'`);
   const tpl = JSON.parse(raw) as PageTemplate;
@@ -57,13 +57,16 @@ export async function renderThemePage(
   // Resolve page-level data sources once via the injected resolver (the same BindingResolver the
   // legacy path uses), then merge each resolved value's keys into the sections that bind to it — so
   // a theme section's Liquid can reference live data (e.g. {% for product in products %}) by name.
+  // The resolver's cache tags are returned so the origin can purge the page when that data changes.
   const resolved: Record<string, Record<string, unknown>> = {};
+  const tags: string[] = [];
   if (opts.resolver && tpl.dataSources) {
     const ctx = opts.ctx ?? { tenantId: '' };
     const entries = Object.entries(tpl.dataSources);
     const values = await Promise.all(entries.map(([, src]) => opts.resolver!.fetch(src, ctx)));
     entries.forEach(([key], i) => {
       resolved[key] = values[i].value;
+      tags.push(...values[i].tags);
     });
   }
 
@@ -83,5 +86,5 @@ export async function renderThemePage(
       throw new Error(`no section '${inst.type}' in the theme`);
     }
   }
-  return parts.join('\n');
+  return { html: parts.join('\n'), tags: [...new Set(tags)] };
 }

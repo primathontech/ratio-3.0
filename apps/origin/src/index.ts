@@ -29,7 +29,12 @@ import {
   type CspDirectives,
   type IntegrationContext,
 } from '@ratio/gokwik';
-import { defaultRegistry, setUntrustedRenderer, renderSection } from '@ratio/builder-registry';
+import {
+  defaultRegistry,
+  setUntrustedRenderer,
+  renderSection,
+  islandPlaceholder,
+} from '@ratio/builder-registry';
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
@@ -547,7 +552,7 @@ app.all('*', async (c) => {
         themeStore.loadLiveCompiled(tenantId as string)
       );
       if (compiled && compiled[`templates/${page}.json`] != null) {
-        const sections = await timed(c, 'compose', () =>
+        const { html: sections, tags: dataTags } = await timed(c, 'compose', () =>
           renderThemePage(
             compiled,
             page,
@@ -561,6 +566,14 @@ app.all('*', async (c) => {
               platform: (type, data) => {
                 const rec = pbRegistry.get(type);
                 if (!rec) throw new Error(`unknown platform section '${type}'`);
+                // An island (per-user) section must NEVER render its personalized HTML into this
+                // shared, s-maxage'd response — emit the inert placeholder instead (hydrated
+                // client-side via /api/island), exactly as composePage does. (Instance = type for
+                // now — one island per type; full per-instance ids + island CSP on the bundle path
+                // are a later slice. Today no first-party section declares an island, so this is a
+                // fail-closed guard, not yet a live code path.)
+                if (rec.island)
+                  return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
                 return renderSection(rec, data);
               },
             },
@@ -578,7 +591,18 @@ app.all('*', async (c) => {
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
-        c.header('x-cache', 'no-store'); // caching + purge tags land with the data-binding slice
+        // Cacheable at the edge, invalidated by tag (D2): the tenant tag (a theme publish purges
+        // every page of the store), the page tag (this URL), and the data-source tags (a
+        // collection/product change purges the pages showing it). Emitting the tenant tag on every
+        // bundle page is what lets the write side purge the whole store on publish/rollback.
+        const tags = [
+          tenantTag(tenantId as string),
+          pageTag(tenantId as string, canon),
+          ...dataTags,
+        ];
+        c.header('x-surrogate-keys', tags.join(' '));
+        c.header('x-cache', 'long');
+        c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
         setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
         return c.html(html);
       }

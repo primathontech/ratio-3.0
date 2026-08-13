@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ThemeStore } from '@ratio/builder-core';
+import { ThemeStore, tenantTag } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { app } from '../index';
@@ -30,6 +30,8 @@ const T4 = 'themebundle_o4';
 const THEME4 = 'themebundle_o4_main';
 const T5 = 'themebundle_o5';
 const THEME5 = 'themebundle_o5_main';
+const T6 = 'themebundle_o6';
+const THEME6 = 'themebundle_o6_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -42,8 +44,9 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [T, T2, T3, T4, T5]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
-  for (const id of [THEME, THEME3, THEME4, THEME5])
+  for (const id of [T, T2, T3, T4, T5, T6])
+    await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
@@ -62,6 +65,9 @@ before(async () => {
     "INSERT INTO tenants (id, name, status) VALUES ($1, 'Routed Bundle', 'active')",
     [T5]
   );
+  await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Data Bundle', 'active')", [
+    T6,
+  ]);
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -111,13 +117,30 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME5 }, { compile: (s) => s });
+
+  // A data-sourced home: the section binds to a collection, so the resolver's col:* tags must reach
+  // x-surrogate-keys (data-driven purge — a collection change purges the pages showing it).
+  await store.ensureTheme(T6, THEME6);
+  await store.saveDraft(
+    { themeId: THEME6 },
+    {
+      'sections/plist.liquid':
+        '<ul>{% for p in products %}<li>{{ p.title | escape }}</li>{% endfor %}</ul>',
+      'templates/index.json': JSON.stringify({
+        dataSources: { main: { type: 'COLLECTION_BY_HANDLES', params: { handles: ['summer'] } } },
+        sections: [{ type: 'plist', dataSourceKey: 'main', data: {} }],
+      }),
+    }
+  );
+  await store.publish({ themeId: THEME6 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  for (const id of [THEME, THEME3, THEME4, THEME5])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [T, T2, T3, T4, T5, T6])
+    await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
 test(
@@ -130,6 +153,13 @@ test(
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('x-handler'), 'theme-bundle');
     assert.equal(res.headers.get('x-theme-version'), '1');
+    // Cacheable at the edge, tagged so a theme publish can purge the whole store.
+    assert.equal(res.headers.get('x-cache'), 'long');
+    assert.match(res.headers.get('cache-control') || '', /s-maxage=300/);
+    assert.ok(
+      (res.headers.get('x-surrogate-keys') || '').includes(tenantTag(T)),
+      'tagged by the tenant tag (a theme publish purges every page of the store)'
+    );
     const body = await res.text();
     assert.match(body, /^<!doctype html>/);
     assert.match(
@@ -193,3 +223,11 @@ test(
     assert.notEqual(home.headers.get('x-handler'), 'theme-bundle');
   }
 );
+
+test('a data-sourced page carries its data tags in x-surrogate-keys', { skip }, async () => {
+  const res = await call('/', edge({ 'x-ratio-tenant': T6 }));
+  assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+  const keys = res.headers.get('x-surrogate-keys') || '';
+  // The resolver's collection tag rides along so a collection change purges this page (D2).
+  assert.ok(keys.includes('col:summer'), `expected col:summer in surrogate keys, got: ${keys}`);
+});
