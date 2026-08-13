@@ -4,6 +4,7 @@
 // Publish records the version + flips the store's live pointer (Postgres); loadLiveCompiled is the
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
+import { tenantTag } from './tags';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 
@@ -147,6 +148,13 @@ export class ThemeStore {
           [tenantId, ref.themeId, version]
         );
         if (ptr.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
+        // What the store serves changed → enqueue a durable purge of the tenant tag in the SAME
+        // transaction (D2), so the edge drops every cached page of this store. Same outbox +
+        // drainPurges() worker as the legacy page store; a lost purge can't strand a stale page.
+        await client.query('INSERT INTO page_purge_outbox (tenant_id, tags) VALUES ($1, $2)', [
+          tenantId,
+          [tenantTag(tenantId)],
+        ]);
       }
       await client.query('COMMIT');
       return { version, sourceHash, compiledHash };
@@ -179,6 +187,11 @@ export class ThemeStore {
       await client.query('UPDATE tenants SET live_theme_version = $2 WHERE id = $1', [
         tenantId,
         version,
+      ]);
+      // The live pointer moved → purge the store's cached pages (same durable outbox as publish).
+      await client.query('INSERT INTO page_purge_outbox (tenant_id, tags) VALUES ($1, $2)', [
+        tenantId,
+        [tenantTag(tenantId)],
       ]);
       await client.query('COMMIT');
     } catch (e) {

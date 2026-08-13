@@ -8,6 +8,7 @@ import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/clien
 import { S3ObjectStore, type ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 import { ThemeStore, type CompileFn } from '../theme-store';
+import { tenantTag } from '../tags';
 import type { ThemeFiles } from '../bundle';
 
 // Wraps a real store to count writes — used to prove a doomed publish never touches S3.
@@ -63,6 +64,7 @@ before(async () => {
 
 after(async () => {
   if (skip) return;
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
   await pool.query('DELETE FROM theme WHERE id = $1', [THEME]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [TENANT]);
   await pool.end();
@@ -152,6 +154,39 @@ test(
       [TENANT]
     );
     assert.deepEqual(after.rows[0], before.rows[0]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
+  }
+);
+
+// OFCE-601 purge-on-publish: publishing (or rolling back) a bundle theme changes what the store
+// serves, so it enqueues a durable purge of the tenant tag IN the same transaction — the edge drops
+// every cached page of that store. Same page_purge_outbox + drainPurges() worker as the legacy path.
+test('publish enqueues a durable tenant-tag purge in the outbox', { skip }, async () => {
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
+  await store.saveDraft({ themeId: THEME }, files);
+  await store.publish({ themeId: THEME }, { compile: identity });
+  const { rows } = await pool.query<{ tags: string[] }>(
+    'SELECT tags FROM page_purge_outbox WHERE tenant_id = $1',
+    [TENANT]
+  );
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].tags, [tenantTag(TENANT)]);
+});
+
+test(
+  'publish with makeLive:false enqueues no purge (nothing served changed)',
+  {
+    skip,
+  },
+  async () => {
+    const OTHER = 't_mca_bundle_alt2';
+    await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
+    await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
+    await store.ensureTheme(TENANT, OTHER, 'Alt2');
+    await store.saveDraft({ themeId: OTHER }, files);
+    await store.publish({ themeId: OTHER }, { compile: identity, makeLive: false });
+    const n = await pool.query('SELECT 1 FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
+    assert.equal(n.rowCount, 0);
     await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
   }
 );
