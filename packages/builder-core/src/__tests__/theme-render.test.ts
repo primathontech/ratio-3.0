@@ -134,3 +134,24 @@ test('binds live data but an authored setting wins over a colliding resolved key
   assert.match(html, /<h2>Authored<\/h2>/); // authored setting wins over the colliding resolved key
   assert.match(html, /<span>7<\/span>/); // a non-colliding resolved key still binds
 });
+
+// OFCE-601 theme layout: the theme's layout/theme.liquid owns the body chrome (header/footer) and
+// {{ content_for_layout }} is where the composed sections land — the merchant owns the whole shell.
+test('wraps the composed sections in the theme layout when present', async () => {
+  const compiled: ThemeFiles = {
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid':
+      '<header>Shop</header><main>{{ content_for_layout }}</main><footer>©</footer>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Hi' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(compiled, 'index', { theme: trusted });
+  assert.equal(html, '<header>Shop</header><main><h1>Hi</h1></main><footer>©</footer>');
+});
+
+test('no layout → the composed sections are the whole body (origin supplies the document)', async () => {
+  const compiled = bundle([{ type: 'hero', data: { hero: { heading: 'Bare' } } }]);
+  const { html } = await renderThemePage(compiled, 'index', { theme: trusted });
+  assert.equal(html, '<section class="hero"><h1>Bare</h1></section>');
+});

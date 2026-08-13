@@ -39,6 +39,7 @@ interface PageTemplate {
 
 const templatePath = (page: string) => `templates/${page}.json`;
 const sectionPath = (type: string) => `sections/${type}.liquid`;
+const LAYOUT_PATH = 'layout/theme.liquid';
 
 // Render one page of a compiled bundle to HTML, section by section, each with its own data context.
 // Each section dispatches on whether the bundle carries Liquid for its type: present → a THEME section
@@ -86,5 +87,12 @@ export async function renderThemePage(
       throw new Error(`no section '${inst.type}' in the theme`);
     }
   }
-  return { html: parts.join('\n'), tags: [...new Set(tags)] };
+  // The theme's own layout (Shopify's layout/theme.liquid) owns the body chrome — header, footer, and
+  // {{ content_for_layout }} where the composed sections go — rendered like any theme section (isolate
+  // at the origin). Absent → the sections are the whole body; the origin still supplies <html><head>.
+  const content = parts.join('\n');
+  const layout = compiled[LAYOUT_PATH];
+  const html =
+    layout != null ? await renderers.theme(layout, { content_for_layout: content }) : content;
+  return { html, tags: [...new Set(tags)] };
 }
