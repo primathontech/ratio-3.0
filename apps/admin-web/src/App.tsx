@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import {
   createApi,
   type Api,
@@ -10,7 +10,6 @@ import {
   type AssistantAction,
   type ThemeVersion,
 } from './api';
-import { useTheme } from './theme';
 import {
   Badge,
   Dialog,
@@ -24,8 +23,9 @@ import {
 } from './ui';
 import { PageBuilderPanel } from './pagebuilder';
 import { ThemeSettingsPanel } from './theme-settings';
-import { CommandPalette, type Command } from './command-palette';
 import { SuperAdmin } from './superadmin';
+import { DashboardHome } from './dashboard';
+import { AppShell, ComingSoon, type ShellNav } from './app-shell';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -33,28 +33,8 @@ const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 const NewTabHint = () => <span className="sr-only"> (opens in a new tab)</span>;
 
 export function App() {
-  const { resolved, cycle } = useTheme();
   return (
     <ToastProvider>
-      <header className="appbar">
-        <a className="brand" href="/">
-          <span className="logo">R</span> Ratio Admin
-        </a>
-        <div className="right">
-          <button
-            className="icon-btn"
-            onClick={cycle}
-            aria-label={`Switch to ${resolved === 'dark' ? 'light' : 'dark'} mode`}
-            title="Toggle theme"
-          >
-            {resolved === 'dark' ? <Icon.sun /> : <Icon.moon />}
-          </button>
-          <SignedIn>
-            <UserButton afterSignOutUrl="/" />
-          </SignedIn>
-        </div>
-      </header>
-
       <SignedOut>
         <main className="signin-wrap">
           <div className="signin-card">
@@ -71,160 +51,27 @@ export function App() {
 
       <SignedIn>
         <ErrorBoundary>
-          <Dashboard />
+          <SignedInApp />
         </ErrorBoundary>
       </SignedIn>
     </ToastProvider>
   );
 }
 
-function useApi(): Api {
-  const { getToken } = useAuth();
-  return useMemo(() => createApi(API_URL, () => getToken()), [getToken]);
-}
-
-function Dashboard() {
+// The whole signed-in experience: fetch the user's stores + role, then render the merchant shell
+// (sidebar + top bar + Ask rail). renderRoute maps each sidebar route to a live panel, the
+// dashboard, the super-admin console, or a ComingSoon placeholder.
+function SignedInApp() {
   const api = useApi();
-  const [store, setStore] = useState<Store | null>(null);
-  // Bumped after the AI assistant makes a change, so the active view remounts and reloads.
-  const [reloadKey, setReloadKey] = useState(0);
-  return (
-    <main className="container">
-      {store ? (
-        // No key here (M2): remounting the open editor on an assistant change discarded the
-        // merchant's unsaved edits. The editor keeps its state; a stale save is caught by the
-        // page's optimistic-concurrency version check (409 → "reload").
-        <PageManager api={api} store={store} onBack={() => setStore(null)} />
-      ) : (
-        <StoreList key={reloadKey} api={api} onOpen={setStore} />
-      )}
-      <AssistantPanel
-        api={api}
-        storeId={store?.id ?? null}
-        onChanged={() => setReloadKey((k) => k + 1)}
-      />
-    </main>
-  );
-}
-
-// OFCE-400 Model A: chat with the AI assistant right in the dashboard. It drives the same
-// control-plane the rest of this UI does (server-side), so anything it does — onboard a
-// store, add a page — is real and shows up in "Recent changes". Available whether or not a
-// store is open; when one is open its id is passed so "add a page" needs no repetition.
-function AssistantPanel({
-  api,
-  storeId,
-  onChanged,
-}: {
-  api: Api;
-  storeId: string | null;
-  onChanged: () => void;
-}) {
-  type Turn = { role: 'you' | 'ai'; text: string; actions?: AssistantAction[] };
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [input, setInput] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function send(e: React.FormEvent) {
-    e.preventDefault();
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput('');
-    setErr(null);
-    setTurns((t) => [...t, { role: 'you', text }]);
-    setBusy(true);
-    try {
-      // No client key (R12 M-2): a fresh per-send UUID defeated the server's content-derived
-      // dedup, so a resend after a client timeout re-ran the tool loop. Omitting it lets the
-      // server key on (user, store, message) so an identical resend dedupes within the window.
-      const r = await api.assistant(text, storeId ?? undefined);
-      setTurns((t) => [...t, { role: 'ai', text: r.reply, actions: r.actions }]);
-      if (r.actions.some((a) => a.ok)) onChanged();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="card pane" style={{ marginTop: 20 }}>
-      <div className="pane-head">
-        <h2>AI assistant</h2>
-      </div>
-      <p className="muted" style={{ fontSize: 12.5 }}>
-        Ask in plain English — “Create a store called Acme at acme.ratiodev.in” or “Add an About
-        page”. Changes go live immediately and appear in Recent changes.
-      </p>
-
-      {/* Always mounted (M6): a live region must exist before its content changes, or the
-          first assistant reply isn't announced to screen readers. */}
-      <div
-        aria-live="polite"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-          margin: turns.length ? '12px 0' : 0,
-        }}
-      >
-        {turns.map((t, i) => (
-          <div key={i} className={t.role === 'you' ? 'note' : 'note note-ok'}>
-            <strong>{t.role === 'you' ? 'You' : 'Assistant'}:</strong> {t.text}
-            {t.actions && t.actions.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
-                {t.actions.map((a, j) => (
-                  <span key={j} className={a.ok ? 'badge dot-ok' : 'badge dot-warn'}>
-                    {a.tool} {a.ok ? 'done' : 'failed'}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {err && (
-        <div className="note note-error" role="alert">
-          {err}
-        </div>
-      )}
-
-      <form onSubmit={send} className="row" style={{ alignItems: 'flex-end', marginTop: 8 }}>
-        <Field label={storeId ? `Message (editing ${storeId})` : 'Message'}>
-          <input
-            className="input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask the assistant to onboard or edit a store…"
-            disabled={busy}
-          />
-        </Field>
-        <button className="btn btn-primary" type="submit" disabled={busy || !input.trim()}>
-          {busy ? <Spinner /> : <Icon.check />} Send
-        </button>
-      </form>
-    </div>
-  );
-}
-
-/* Store list ------------------------------------------------------------- */
-function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   const toast = useToast();
   const [stores, setStores] = useState<Store[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
   const [me, setMe] = useState<{
     userId: string;
     isPlatformAdmin: boolean;
     isLocal?: boolean;
   } | null>(null);
-
-  // Focus the heading when the list view (re)opens — e.g. returning via "All stores" — so
-  // focus isn't dropped to <body> on the transition (M5 / WCAG 2.4.3).
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => headingRef.current?.focus(), []);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -235,8 +82,6 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   }, [api]);
   useEffect(load, [load]);
   useEffect(() => {
-    // Retry once so a transient /me failure doesn't silently strip the admin UI for the whole
-    // session (L2); after that, degrade quietly to the non-admin view. Guarded against unmount.
     let cancelled = false;
     const loadMe = (attempt = 0) =>
       api
@@ -253,80 +98,100 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
     };
   }, [api]);
 
+  const renderRoute = (route: string, store: Store, nav: ShellNav): React.ReactNode => {
+    switch (route) {
+      case 'home':
+        return <DashboardHome storeName={store.name} />;
+      case 'admin':
+        return (
+          <SuperAdmin
+            stores={stores ?? []}
+            onOpen={(s) => nav.enterStore(s)}
+            onCreate={() => setCreating(true)}
+          />
+        );
+      case 'theme':
+        return <ThemeSettingsPanel api={api} store={store} />;
+      case 'pages':
+        return <PageBuilderPanel api={api} store={store} />;
+      case 'versions':
+        return <ThemeVersionsPanel api={api} store={store} />;
+      case 'domains':
+        return <DomainsPanel api={api} store={store} />;
+      case 'commerce':
+        return <CommercePanel api={api} store={store} />;
+      case 'access':
+        return <AgentAccessPanel api={api} store={store} />;
+      case 'audit':
+        return <AuditPanel api={api} store={store} />;
+      case 'danger':
+        return (
+          <DangerPanel
+            api={api}
+            store={store}
+            onDeleted={() => {
+              nav.go('home');
+              load();
+            }}
+          />
+        );
+      default:
+        return <ComingSoon route={route} onHome={() => nav.go('home')} />;
+    }
+  };
+
+  if (error) {
+    return (
+      <main className="container">
+        <div className="note note-error" role="alert">
+          {error}
+        </div>
+      </main>
+    );
+  }
+  if (!stores) {
+    return (
+      <div className="center-pad">
+        <Spinner />
+      </div>
+    );
+  }
+  if (stores.length === 0) {
+    return (
+      <main className="container">
+        <EmptyState emoji="🏪" title="No stores yet">
+          <p className="muted" style={{ maxWidth: 320 }}>
+            Create your first store — it goes live instantly at its own subdomain.
+          </p>
+          <button className="btn btn-primary" onClick={() => setCreating(true)}>
+            <Icon.plus /> Create a store
+          </button>
+        </EmptyState>
+        {creating && (
+          <CreateStoreDialog
+            api={api}
+            onClose={() => setCreating(false)}
+            onCreated={() => {
+              setCreating(false);
+              toast('Store created');
+              load();
+            }}
+          />
+        )}
+      </main>
+    );
+  }
+
   return (
     <>
-      {stores && stores.length > 0 && me?.isPlatformAdmin ? (
-        // Platform admins get the reference "Merchants" console (real stores + placeholder metrics).
-        <SuperAdmin stores={stores} onOpen={onOpen} onCreate={() => setCreating(true)} />
-      ) : (
-        <>
-          <div className="page-head">
-            <div>
-              <h1
-                ref={headingRef}
-                tabIndex={-1}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, outline: 'none' }}
-              >
-                {me?.isPlatformAdmin ? 'All stores' : 'Your stores'}
-                {me?.isPlatformAdmin && <Badge accent>Admin · all stores</Badge>}
-              </h1>
-              <p className="muted">
-                {me?.isPlatformAdmin
-                  ? 'Platform admin — you can manage every store on Ratio.'
-                  : 'Every store is live at its own domain.'}
-              </p>
-            </div>
-            <button className="btn btn-primary" onClick={() => setCreating(true)}>
-              <Icon.plus /> New store
-            </button>
-          </div>
-
-          {error && (
-            <div className="note note-error" role="alert">
-              {error}
-            </div>
-          )}
-
-          {!stores && !error && (
-            <div className="grid" role="status" aria-busy="true">
-              <span className="sr-only">Loading stores…</span>
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="card store-card">
-                  <div className="skeleton" style={{ height: 34, width: 34, borderRadius: 9 }} />
-                  <div className="skeleton" style={{ height: 14, width: '70%' }} />
-                  <div className="skeleton" style={{ height: 12, width: '55%' }} />
-                </div>
-              ))}
-            </div>
-          )}
-
-          {stores && stores.length === 0 && (
-            <EmptyState emoji="🏪" title="No stores yet">
-              <p className="muted" style={{ maxWidth: 320 }}>
-                Create your first store — it goes live instantly at its own subdomain.
-              </p>
-              <button className="btn btn-primary" onClick={() => setCreating(true)}>
-                <Icon.plus /> Create a store
-              </button>
-            </EmptyState>
-          )}
-
-          {stores && stores.length > 0 && (
-            <div className="grid">
-              {stores.map((s) => (
-                <StoreCard key={s.id} store={s} onOpen={() => onOpen(s)} local={!!me?.isLocal} />
-              ))}
-            </div>
-          )}
-
-          {me && (
-            <p className="muted" style={{ marginTop: 32, fontSize: 12.5 }}>
-              Signed in · <span className="mono">{me.userId}</span>
-            </p>
-          )}
-        </>
-      )}
-
+      <AppShell
+        api={api}
+        stores={stores}
+        isPlatformAdmin={!!me?.isPlatformAdmin}
+        onCreate={() => setCreating(true)}
+        onChanged={load}
+        renderRoute={renderRoute}
+      />
       {creating && (
         <CreateStoreDialog
           api={api}
@@ -342,73 +207,9 @@ function StoreList({ api, onOpen }: { api: Api; onOpen: (s: Store) => void }) {
   );
 }
 
-// Tolerate the deploy-skew window where the API hasn't shipped `hosts` yet.
-function hostsOf(store: Store): string[] {
-  return store.hosts ?? (store.host ? [store.host] : []);
-}
-
-function initials(name: string): string {
-  const letters = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w[0]);
-  return (letters.slice(0, 2).join('') || '?').toUpperCase();
-}
-
-function StoreCard({ store, onOpen, local }: { store: Store; onOpen: () => void; local: boolean }) {
-  const hosts = hostsOf(store);
-  // *.localhost is the dev alias (added at onboard when RATIO_LOCAL); the real domains are the rest.
-  const prodHosts = hosts.filter((h) => !h.endsWith('.localhost'));
-  const localHost = hosts.find((h) => h.endsWith('.localhost'));
-  return (
-    <div className="card store-card">
-      <div className="top">
-        <span className="avatar avatar-sq" aria-hidden>
-          {initials(store.name)}
-        </span>
-        <div style={{ minWidth: 0 }}>
-          {/* The store name is the primary action (a real button — keyboard/SR correct);
-              host links are siblings, not nested inside an interactive element (M-2/L-4). */}
-          <button type="button" className="name store-open" onClick={onOpen}>
-            {store.name}
-          </button>
-          {prodHosts.length > 0 ? (
-            <div className="hosts">
-              {prodHosts.map((h) => (
-                <a key={h} className="host" href={`https://${h}`} target="_blank" rel="noreferrer">
-                  {h} <Icon.external size={11} />
-                  <NewTabHint />
-                </a>
-              ))}
-            </div>
-          ) : (
-            <span className="host muted">no domain</span>
-          )}
-          {/* Dev-only (RATIO_LOCAL, from /me): link to the storefront at its *.localhost host, which
-              resolves to 127.0.0.1 and — being a host, not a query param — survives navigation. */}
-          {local && localHost && (
-            <div className="hosts">
-              <a
-                className="host"
-                href={`http://${localHost}:8080/`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {localHost}:8080 <Icon.external size={11} />
-                <NewTabHint />
-              </a>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="foot">
-        <Badge accent>{store.role}</Badge>
-        <span className="mono muted" style={{ fontSize: 12 }}>
-          {store.id}
-        </span>
-      </div>
-    </div>
-  );
+function useApi(): Api {
+  const { getToken } = useAuth();
+  return useMemo(() => createApi(API_URL, () => getToken()), [getToken]);
 }
 
 function CreateStoreDialog({
@@ -498,167 +299,6 @@ function CreateStoreDialog({
         </div>
       </form>
     </Dialog>
-  );
-}
-
-/* Page manager ----------------------------------------------------------- */
-function PageManager({ api, store, onBack }: { api: Api; store: Store; onBack: () => void }) {
-  const hosts = hostsOf(store);
-  const owner = store.role === 'owner';
-  // Move focus to the store heading when this view opens so keyboard/SR users aren't dropped
-  // to <body> on the transition (M5 / WCAG 2.4.3).
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => headingRef.current?.focus(), []);
-
-  // The store's panels, grouped into a left-nav workspace so one shows at a time (each loads its
-  // own data on demand). Owner-only sections are filtered here AND enforced server-side. The API
-  // enforces the same roles regardless of the UI.
-  const groups: {
-    title: string;
-    items: { key: string; label: string; node: React.ReactNode }[];
-  }[] = [
-    {
-      title: 'Design',
-      items: [
-        { key: 'theme', label: 'Theme', node: <ThemeSettingsPanel api={api} store={store} /> },
-        { key: 'pages', label: 'Pages', node: <PageBuilderPanel api={api} store={store} /> },
-        ...(owner
-          ? [
-              {
-                key: 'versions',
-                label: 'Versions',
-                node: <ThemeVersionsPanel api={api} store={store} />,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      title: 'Store',
-      items: [
-        { key: 'domains', label: 'Domains', node: <DomainsPanel api={api} store={store} /> },
-        ...(owner
-          ? [
-              {
-                key: 'commerce',
-                label: 'Commerce',
-                node: <CommercePanel api={api} store={store} />,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      title: 'Platform',
-      items: [
-        {
-          key: 'access',
-          label: 'Agent access',
-          node: <AgentAccessPanel api={api} store={store} />,
-        },
-        { key: 'audit', label: 'Audit log', node: <AuditPanel api={api} store={store} /> },
-      ],
-    },
-    ...(owner
-      ? [
-          {
-            title: 'Danger',
-            items: [
-              {
-                key: 'danger',
-                label: 'Delete store',
-                node: <DangerPanel api={api} store={store} onDeleted={onBack} />,
-              },
-            ],
-          },
-        ]
-      : []),
-  ];
-  const flat = groups.flatMap((g) => g.items);
-  const [active, setActive] = useState('theme');
-  const current = flat.find((s) => s.key === active) ?? flat[0];
-
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
-  const commands: Command[] = [
-    ...flat.map((s) => ({
-      label: `Go to ${s.label}`,
-      group: 'Section',
-      run: () => setActive(s.key),
-    })),
-    { label: 'Back to all stores', group: 'Navigate', run: onBack },
-  ];
-
-  return (
-    <>
-      <button className="btn btn-subtle crumb" onClick={onBack}>
-        <Icon.back size={15} /> All stores
-      </button>
-      <div className="page-head">
-        <div className="head-text">
-          <h1 ref={headingRef} tabIndex={-1} style={{ outline: 'none' }}>
-            {store.name}
-          </h1>
-          {hosts.length > 0 && (
-            <p className="hosts">
-              {hosts.map((h) => (
-                <a key={h} href={`https://${h}`} target="_blank" rel="noreferrer">
-                  {h} <Icon.external size={12} />
-                  <NewTabHint />
-                </a>
-              ))}
-            </p>
-          )}
-        </div>
-        <button
-          className="cmdk-trigger"
-          onClick={() => setPaletteOpen(true)}
-          aria-haspopup="dialog"
-        >
-          <span className="label">Jump to a section…</span>
-          <span className="kbd">⌘K</span>
-        </button>
-      </div>
-
-      <div className="workspace">
-        <nav className="card ws-nav" aria-label="Store sections">
-          {groups.map((g) => (
-            <div className="nav-group" key={g.title}>
-              <div className="nav-group-title">{g.title}</div>
-              {g.items.map((s) => (
-                <button
-                  key={s.key}
-                  className={s.key === active ? 'nav-item active' : 'nav-item'}
-                  aria-current={s.key === active ? 'page' : undefined}
-                  onClick={() => setActive(s.key)}
-                >
-                  <span className="bar" />
-                  <span style={{ flex: 1 }}>{s.label}</span>
-                </button>
-              ))}
-            </div>
-          ))}
-        </nav>
-        <div className="ws-content fade-in" key={active}>
-          {current?.node}
-        </div>
-      </div>
-
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        commands={commands}
-      />
-    </>
   );
 }
 
