@@ -113,23 +113,25 @@ export function AppShell({
           {stores.length > 1 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>⌄</span>}
         </button>
 
-        {groups.map((g) => (
-          <div className="nav-group" key={g.title}>
-            <div className="nav-group-title">{g.title}</div>
-            {g.items.map((it: NavItem) => (
-              <button
-                key={it.route}
-                className={it.route === route ? 'nav-item active' : 'nav-item'}
-                aria-current={it.route === route ? 'page' : undefined}
-                onClick={() => setRoute(it.route)}
-              >
-                <span className="bar" />
-                <span style={{ flex: 1 }}>{it.label}</span>
-                {it.hint && <span className="hint">{it.hint}</span>}
-              </button>
-            ))}
-          </div>
-        ))}
+        <div className="sidebar-nav">
+          {groups.map((g) => (
+            <div className="nav-group" key={g.title}>
+              <div className="nav-group-title">{g.title}</div>
+              {g.items.map((it: NavItem) => (
+                <button
+                  key={it.route}
+                  className={it.route === route ? 'nav-item active' : 'nav-item'}
+                  aria-current={it.route === route ? 'page' : undefined}
+                  onClick={() => setRoute(it.route)}
+                >
+                  <span className="bar" />
+                  <span style={{ flex: 1 }}>{it.label}</span>
+                  {it.hint && <span className="hint">{it.hint}</span>}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
 
         <div className="nav-card">
           <div style={{ fontSize: 13, fontWeight: 600 }}>Add a store</div>
@@ -175,14 +177,7 @@ export function AppShell({
           </div>
         </header>
 
-        <div
-          style={{
-            flex: 1,
-            minHeight: 0,
-            display: 'grid',
-            gridTemplateColumns: showAsk ? 'minmax(0,1fr) 344px' : 'minmax(0,1fr)',
-          }}
-        >
+        <div className={showAsk ? 'shell-body with-ask' : 'shell-body'}>
           <main
             className="container"
             style={{ overflow: 'auto', outline: 'none' }}

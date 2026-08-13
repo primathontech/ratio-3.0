@@ -162,16 +162,26 @@ h3 {
 .app-shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
+/* The sidebar fills the viewport height; only its menu scrolls, so the brand (top) and the
+   "New store" card (bottom) stay pinned. */
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   padding: 14px 12px;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  overflow: auto;
+  overflow: hidden;
+}
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .sidebar-brand {
   display: flex;
@@ -250,7 +260,8 @@ h3 {
   flex: 1;
 }
 .nav-card {
-  margin-top: auto;
+  flex: none;
+  margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -264,6 +275,32 @@ h3 {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+/* Content area under the top bar: main scrolls on its own; the Ask rail takes a column on wide
+   screens (>=1200px) and becomes an overlay drawer below that (see the media queries). */
+.shell-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1200px) {
+  .shell-body.with-ask {
+    grid-template-columns: minmax(0, 1fr) 344px;
+  }
+}
+@media (max-width: 1199px) {
+  .ask-rail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, 88vw);
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 /* App bar (top) ----------------------------------------------------------- */
