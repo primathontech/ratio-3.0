@@ -1388,7 +1388,6 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1280px;
 }
 /* Roomier 3-across KPI cards on the dashboard (the shared .kpi-grid stays 5-across for the
    super-admin console). */
