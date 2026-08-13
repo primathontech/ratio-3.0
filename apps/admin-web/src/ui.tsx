@@ -13,10 +13,13 @@ import {
 /* Error boundary --------------------------------------------------------- */
 // A render-time throw (e.g. a malformed pageConfig reaching the editor) would otherwise unmount
 // the whole app to a blank screen (M-4). Contain it to a scoped, recoverable fallback.
-export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
+export class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; message?: string }
+> {
+  state: { hasError: boolean; message?: string } = { hasError: false };
+  static getDerivedStateFromError(error: unknown) {
+    return { hasError: true, message: error instanceof Error ? error.message : String(error) };
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('UI error boundary caught:', error, info.componentStack);
@@ -28,6 +31,19 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { hasError
         <div className="emoji">⚠️</div>
         <strong style={{ color: 'var(--text)' }}>Something went wrong</strong>
         <p className="muted">This view hit an unexpected error.</p>
+        {this.state.message && (
+          <p
+            className="muted"
+            style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 12,
+              maxWidth: 560,
+              wordBreak: 'break-word',
+            }}
+          >
+            {this.state.message}
+          </p>
+        )}
         <button className="btn btn-ghost" onClick={() => window.location.reload()}>
           Reload
         </button>

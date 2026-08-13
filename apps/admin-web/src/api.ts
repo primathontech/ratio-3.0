@@ -24,6 +24,8 @@ export interface ThemeVersion {
   createdBy: string | null;
   createdAt: string;
 }
+// A bundle theme's files, keyed by path (e.g. 'index.liquid' → its source). The code editor's model.
+export type ThemeFiles = Record<string, string>;
 // --- Page builder (section/block PageDoc) ---
 export interface PbSettingDef {
   key: string; // dotted path into section data, e.g. 'hero.heading'
@@ -251,6 +253,26 @@ export function createApi(
         `/stores/${id}/theme/rollback`,
         { version }
       ),
+    // Bundle-theme code authoring (OFCE-601): the merchant's Liquid/HTML/CSS files, distinct from the
+    // token-based `theme*` methods above. The draft is the store's working theme (base ⊕ overrides).
+    getBundleDraft: (id: string) =>
+      req<{ files: ThemeFiles }>('GET', `/stores/${id}/theme/bundle/draft`).then(
+        (d) => d.files ?? {}
+      ),
+    saveBundleDraft: (id: string, files: ThemeFiles) =>
+      req<{ ok: boolean; hash: string }>('PUT', `/stores/${id}/theme/bundle/draft`, { files }),
+    scaffoldBundleDraft: (id: string) =>
+      req<{ files: ThemeFiles; seeded: boolean }>(
+        'POST',
+        `/stores/${id}/theme/bundle/scaffold`,
+        {}
+      ).then((d) => d.files ?? {}),
+    publishBundle: (id: string) =>
+      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/publish`, {}),
+    rollbackBundle: (id: string, version: number) =>
+      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/rollback`, {
+        version,
+      }),
     listDomains: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
         pickArray<DomainInfo>(d, 'domains')

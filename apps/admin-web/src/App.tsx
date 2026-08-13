@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import {
   createApi,
@@ -22,6 +22,11 @@ import {
 } from './ui';
 import { PageEditor } from './pagebuilder';
 import { PagesList } from './pages-list';
+// Lazy: the code editor pulls in CodeMirror (~200KB) — keep it out of the main bundle so it only
+// loads when a merchant actually opens the theme-code route.
+const ThemeCodeEditor = lazy(() =>
+  import('./theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
+);
 import { ThemeSettingsPanel } from './theme-settings';
 import { SuperAdmin } from './superadmin';
 import { DashboardHome } from './dashboard';
@@ -171,6 +176,7 @@ function AuthedRoutes() {
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
           <Route path="theme" element={<ThemePage />} />
+          <Route path="theme/code" element={<ThemePage initialTab="code" />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -209,20 +215,19 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
-// Theme = brand settings + version history, as tabs (Versions is owner-only).
-function ThemePage() {
+// Theme = brand settings + version history + raw code, as tabs (Versions is owner-only). Code editing
+// (the bundle theme) lives here rather than as a separate nav item so the IA reads as one Theme area.
+function ThemePage({ initialTab = 'settings' }: { initialTab?: 'settings' | 'versions' | 'code' }) {
   const { api, store } = useMerchant();
+  const { me } = useStoreData();
   const owner = store.role === 'owner';
-  const [tab, setTab] = useState<'settings' | 'versions'>('settings');
+  const [tab, setTab] = useState<'settings' | 'versions' | 'code'>(initialTab);
   return (
-    <div
-      className="fade-in"
-      style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 1180 }}
-    >
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="head-text">
           <h1>Theme</h1>
-          <p className="muted">Your storefront's brand settings and published versions.</p>
+          <p className="muted">Your storefront's brand settings, code, and published versions.</p>
         </div>
         <div className="seg">
           <button
@@ -231,6 +236,13 @@ function ThemePage() {
             onClick={() => setTab('settings')}
           >
             Settings
+          </button>
+          <button
+            className={tab === 'code' ? 'on' : ''}
+            aria-pressed={tab === 'code'}
+            onClick={() => setTab('code')}
+          >
+            Code
           </button>
           {owner && (
             <button
@@ -243,7 +255,15 @@ function ThemePage() {
           )}
         </div>
       </div>
-      {tab === 'versions' && owner ? (
+      {tab === 'code' ? (
+        // Scoped boundary: a crash in the code editor (e.g. Monaco) stays contained here instead of
+        // taking down the whole app via the root boundary.
+        <ErrorBoundary>
+          <Suspense fallback={<Spinner />}>
+            <ThemeCodeEditor api={api} store={store} isLocal={!!me?.isLocal} />
+          </Suspense>
+        </ErrorBoundary>
+      ) : tab === 'versions' && owner ? (
         <ThemeVersionsPanel api={api} store={store} />
       ) : (
         <ThemeSettingsPanel api={api} store={store} />

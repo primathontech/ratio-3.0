@@ -20,7 +20,7 @@ import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
-import { ThemeStore as BundleThemeStore } from '@ratio/builder-core';
+import { ThemeStore as BundleThemeStore, defaultBundleTheme } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { scaffoldStorefront } from '@ratio/builder-core';
@@ -281,8 +281,9 @@ export function createApp(
   opts: AppOptions = {}
 ) {
   const app = new Hono<Vars>();
-  // Bundle-theme store: injected (tests) else the module-scoped one (null when S3 is unconfigured).
-  const themes = opts.bundleThemes ?? bundleThemes;
+  // Bundle-theme store: an explicitly injected value wins (including null, to force-disable in tests);
+  // only an absent option falls back to the module-scoped one (null when S3 is unconfigured).
+  const themes = opts.bundleThemes !== undefined ? opts.bundleThemes : bundleThemes;
 
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
   // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
@@ -737,6 +738,21 @@ export function createApp(
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const files = await themes.readComposed({ themeId: mainThemeId(c.req.param('id')) });
     return c.json({ files });
+  });
+
+  // Seed the working theme with a default starter (folders + a working home/collection/product page)
+  // when it has none yet, so the code editor opens populated instead of empty. Member-writable; a
+  // no-op (returns the existing draft) once the theme has files.
+  app.post('/stores/:id/theme/bundle/scaffold', requireMembership, async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const id = c.req.param('id');
+    const draft = await themes.readDraft({ themeId: mainThemeId(id) });
+    if (Object.keys(draft).length > 0) return c.json({ files: draft, seeded: false });
+    const files = defaultBundleTheme();
+    await themes.ensureTheme(id, mainThemeId(id));
+    await themes.saveDraft({ themeId: mainThemeId(id) }, files);
+    c.set('auditTenant', id);
+    return c.json({ files, seeded: true });
   });
 
   // Publish: freeze compile(base ⊕ overrides), cut an immutable version, flip the live pointer.
