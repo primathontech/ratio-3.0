@@ -4,7 +4,7 @@
 import { test, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
-import { S3ObjectStore } from '@ratio/data-objects';
+import { S3ObjectStore, type ObjectStore } from '@ratio/data-objects';
 import { ThemeStore, type CompileFn } from '../theme-store';
 import type { ThemeFiles } from '../bundle';
 
@@ -68,4 +68,33 @@ test('a real compile transform yields a different compiled hash', { skip }, asyn
 
 test('loadCompiled returns null for an unknown hash', { skip }, async () => {
   assert.equal(await store.loadCompiled('0'.repeat(64)), null);
+});
+
+// OFCE-604 #4: compiled bundles are content-addressed (immutable), so loadCompiled caches them in a
+// per-instance LRU — a repeated load of the same hash must not re-hit the object store. Uses an
+// in-memory store, so it runs without MinIO.
+test('loadCompiled caches by hash — the object store is read once for repeated loads', async () => {
+  const mem = new Map<string, Uint8Array>();
+  let gets = 0;
+  const objects: ObjectStore = {
+    put: async (k, b) => {
+      mem.set(k, b as Uint8Array);
+      return { etag: 'x' };
+    },
+    get: async (k) => {
+      gets++;
+      return mem.get(k) ?? null;
+    },
+    head: async (k) => (mem.has(k) ? { etag: 'x' } : null),
+    delete: async (k) => {
+      mem.delete(k);
+    },
+  };
+  const s = new ThemeStore(objects);
+  await s.saveDraft({ themeId: 't_lru' }, files);
+  const { compiledHash } = await s.freezeBundles({ themeId: 't_lru' }, { compile: identity });
+  gets = 0;
+  assert.deepEqual(await s.loadCompiled(compiledHash), files);
+  assert.deepEqual(await s.loadCompiled(compiledHash), files);
+  assert.equal(gets, 1); // second load served from the in-memory LRU
 });
