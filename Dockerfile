@@ -15,6 +15,7 @@ COPY packages/builder-registry/package.json ./packages/builder-registry/package.
 COPY packages/builder-render/package.json ./packages/builder-render/package.json
 COPY packages/control-plane-client/package.json ./packages/control-plane-client/package.json
 COPY packages/data-db/package.json ./packages/data-db/package.json
+COPY packages/data-objects/package.json ./packages/data-objects/package.json
 COPY packages/data-provisioning/package.json ./packages/data-provisioning/package.json
 COPY packages/data-repo/package.json ./packages/data-repo/package.json
 COPY packages/edge-core/package.json ./packages/edge-core/package.json
