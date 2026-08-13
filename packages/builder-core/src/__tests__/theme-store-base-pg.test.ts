@@ -22,6 +22,9 @@ const skip = endpoint ? false : 'set S3_TEST_ENDPOINT (MinIO) with a migrated DA
 const TENANT = 't_mca_base';
 const BASE = 't_mca_base_default';
 const CHILD = 't_mca_base_child';
+const GRANDCHILD = 't_mca_base_grandchild';
+const DANGLING = 't_mca_base_dangling';
+const ALL_THEMES = [BASE, CHILD, GRANDCHILD, DANGLING];
 const identity: CompileFn = (s) => s;
 let store: ThemeStore;
 
@@ -33,7 +36,9 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [BASE, CHILD]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  // Reverse order: a child's base FK means the base row must be deleted last.
+  for (const id of [...ALL_THEMES].reverse())
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [TENANT]);
   await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'MCA Base Test')`, [TENANT]);
   store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
@@ -47,7 +52,8 @@ before(async () => {
 after(async () => {
   if (skip) return;
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
-  for (const id of [BASE, CHILD]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [...ALL_THEMES].reverse())
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [TENANT]);
   await pool.end();
 });
@@ -94,5 +100,41 @@ test(
       'a.liquid': 'X',
       'b.liquid': 'BASE-B',
     });
+  }
+);
+
+test(
+  'a root theme (no base) freezes its whole draft unchanged: compiled === source',
+  { skip },
+  async () => {
+    await store.saveDraft({ themeId: BASE }, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
+    const r = await store.publish({ themeId: BASE }, { compile: identity, makeLive: false });
+    const src = await store.loadSource(r.sourceHash);
+    assert.deepEqual(await store.loadCompiled(r.compiledHash), src); // nothing composed beneath a root
+    assert.deepEqual(src, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
+  }
+);
+
+test('publish throws when the tracked base version has no published bundle', { skip }, async () => {
+  await store.ensureTheme(TENANT, DANGLING, 'Dangling', { themeId: BASE, version: 99 });
+  await store.saveDraft({ themeId: DANGLING }, { 'a.liquid': 'MINE' });
+  await assert.rejects(
+    () => store.publish({ themeId: DANGLING }, { compile: identity }),
+    /base '.*'@99 has no published version/
+  );
+});
+
+test(
+  'publish throws when the tracked base is not a root theme (multi-level base)',
+  { skip },
+  async () => {
+    // CHILD tracks BASE, so CHILD is a non-root. Pointing a theme's base at CHILD would compose CHILD's
+    // OVERRIDES as if they were a full theme — silent file loss. It must fail loud instead.
+    await store.ensureTheme(TENANT, GRANDCHILD, 'Grandchild', { themeId: CHILD, version: 1 });
+    await store.saveDraft({ themeId: GRANDCHILD }, { 'a.liquid': 'MINE' });
+    await assert.rejects(
+      () => store.publish({ themeId: GRANDCHILD }, { compile: identity }),
+      /base '.*' is not a root theme/
+    );
   }
 );

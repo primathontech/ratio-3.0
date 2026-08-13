@@ -111,13 +111,21 @@ export class ThemeStore {
     const baseThemeId = rows[0]?.base_theme_id;
     const baseVersion = rows[0]?.base_version;
     if (!baseThemeId || baseVersion == null) return {};
-    const v = await pool.query<{ source_hash: string }>(
-      'SELECT source_hash FROM theme_bundle_version WHERE theme_id = $1 AND version = $2',
+    const v = await pool.query<{ source_hash: string; base_theme_id: string | null }>(
+      `SELECT tbv.source_hash, t.base_theme_id
+         FROM theme_bundle_version tbv
+         JOIN theme t ON t.id = tbv.theme_id
+        WHERE tbv.theme_id = $1 AND tbv.version = $2`,
       [baseThemeId, baseVersion]
     );
-    const hash = v.rows[0]?.source_hash;
-    if (!hash) throw new Error(`base '${baseThemeId}'@${baseVersion} has no published version`);
-    return (await this.loadSource(hash)) ?? {};
+    const row = v.rows[0];
+    if (!row?.source_hash)
+      throw new Error(`base '${baseThemeId}'@${baseVersion} has no published version`);
+    // A base must be a root: we treat its source bundle as the full theme. If it tracks a base of its
+    // own, that bundle is only its overrides — composing it would silently drop files. Fail loud.
+    if (row.base_theme_id)
+      throw new Error(`base '${baseThemeId}' is not a root theme (tracks '${row.base_theme_id}')`);
+    return (await this.loadSource(row.source_hash)) ?? {};
   }
 
   // The full theme the compiler/preview sees: the base composed with the current draft overrides.
@@ -126,7 +134,9 @@ export class ThemeStore {
   }
 
   // Create a tenant's theme record if it does not exist (onboarding / first edit). `base` makes the
-  // theme track a library base @version (base ⊕ overrides); omit it for a root/base theme.
+  // theme track a library base @version (base ⊕ overrides); omit it for a root/base theme. Create-only:
+  // if the theme already exists this is a no-op, so `base` is set once at creation and never re-attached
+  // to an existing theme here (base is immutable for the theme's life; a base bump is a separate op).
   async ensureTheme(
     tenantId: string,
     themeId: string,
