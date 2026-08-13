@@ -31,7 +31,8 @@ export function AppShell({
   renderRoute: (route: string, store: Store, nav: ShellNav) => React.ReactNode;
 }) {
   const { resolved, cycle } = useTheme();
-  const [route, setRoute] = useState('home');
+  // Super admins land on the platform "Merchants" view; everyone else on their store dashboard.
+  const [route, setRoute] = useState(isPlatformAdmin ? 'admin' : 'home');
   // Track the selected store by id, not index: a reload (create/delete/assistant action) can reorder
   // or shrink `stores`, and an index would silently point at a different store.
   const [storeId, setStoreId] = useState<string>(stores[0]?.id);
@@ -101,91 +102,113 @@ export function AppShell({
     }))
   );
 
-  const showAsk = askOpen && route !== 'admin';
+  // The platform (super-admin) view is its own page: no store sidebar, its own top bar.
+  const isPlatform = route === 'admin';
+  const showAsk = askOpen && !isPlatform;
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <button
-          className="sidebar-brand"
-          aria-label={
-            stores.length > 1
-              ? `Current store: ${current?.name}. Activate to switch store.`
-              : current?.name
-          }
-          onClick={() => {
-            const i = stores.findIndex((s) => s.id === current?.id);
-            setStoreId(stores[(i + 1) % stores.length].id);
-          }}
-        >
-          <span className="logo">R</span>
-          <span className="brand-meta">
-            <span className="brand-name">{current?.name ?? 'Ratio'}</span>
-            <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
-          </span>
-          {stores.length > 1 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>⌄</span>}
-        </button>
-
-        <div className="sidebar-nav">
-          {groups.map((g) => (
-            <div className="nav-group" key={g.title}>
-              <div className="nav-group-title">{g.title}</div>
-              {g.items.map((it: NavItem) => (
-                <button
-                  key={it.route}
-                  className={it.route === route ? 'nav-item active' : 'nav-item'}
-                  aria-current={it.route === route ? 'page' : undefined}
-                  onClick={() => setRoute(it.route)}
-                >
-                  <span className="bar" />
-                  <span style={{ flex: 1 }}>{it.label}</span>
-                  {it.hint && <span className="hint">{it.hint}</span>}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        <div className="nav-card">
-          <div style={{ fontSize: 13, fontWeight: 600 }}>Add a store</div>
-          <p style={{ margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--muted)' }}>
-            Spin up another storefront — it goes live instantly.
-          </p>
-          <button className="btn btn-primary btn-sm" style={{ marginTop: 2 }} onClick={onCreate}>
-            <Icon.plus /> New store
+    <div className={isPlatform ? 'app-shell no-sidebar' : 'app-shell'}>
+      {!isPlatform && (
+        <aside className="sidebar">
+          <button
+            className="sidebar-brand"
+            aria-label={
+              stores.length > 1
+                ? `Current store: ${current?.name}. Activate to switch store.`
+                : current?.name
+            }
+            onClick={() => {
+              const i = stores.findIndex((s) => s.id === current?.id);
+              setStoreId(stores[(i + 1) % stores.length].id);
+            }}
+          >
+            <span className="logo">R</span>
+            <span className="brand-meta">
+              <span className="brand-name">{current?.name ?? 'Ratio'}</span>
+              <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
+            </span>
+            {stores.length > 1 && <span style={{ color: 'var(--text-3)', fontSize: 11 }}>⌄</span>}
           </button>
-        </div>
-      </aside>
+
+          <div className="sidebar-nav">
+            {groups.map((g) => (
+              <div className="nav-group" key={g.title}>
+                <div className="nav-group-title">{g.title}</div>
+                {g.items.map((it: NavItem) => (
+                  <button
+                    key={it.route}
+                    className={it.route === route ? 'nav-item active' : 'nav-item'}
+                    aria-current={it.route === route ? 'page' : undefined}
+                    onClick={() => setRoute(it.route)}
+                  >
+                    <span className="bar" />
+                    <span style={{ flex: 1 }}>{it.label}</span>
+                    {it.hint && <span className="hint">{it.hint}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="nav-card">
+            <div style={{ fontSize: 13, fontWeight: 600 }}>Add a store</div>
+            <p style={{ margin: 0, fontSize: 12, lineHeight: '18px', color: 'var(--muted)' }}>
+              Spin up another storefront — it goes live instantly.
+            </p>
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 2 }} onClick={onCreate}>
+              <Icon.plus /> New store
+            </button>
+          </div>
+        </aside>
+      )}
 
       <div className="main-area">
         <header className="appbar">
+          {isPlatform && (
+            <span className="brand">
+              <span className="logo">R</span>
+              Ratio Platform
+              <span className="badge badge-accent">Super admin</span>
+            </span>
+          )}
           <button
             className="cmdk-trigger"
+            style={isPlatform ? { flex: 'none', width: 220, marginLeft: 'auto' } : undefined}
             onClick={() => setPaletteOpen(true)}
             aria-haspopup="dialog"
           >
-            <span
-              style={{
-                width: 14,
-                height: 14,
-                borderRadius: '50%',
-                border: '1.5px solid var(--text-3)',
-                flex: 'none',
-              }}
-            />
-            <span className="label">Search or ask Ratio to do something…</span>
+            {!isPlatform && (
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: '1.5px solid var(--text-3)',
+                  flex: 'none',
+                }}
+              />
+            )}
+            <span className="label">
+              {isPlatform ? 'Search platform…' : 'Search or ask Ratio to do something…'}
+            </span>
             <span className="kbd">⌘K</span>
           </button>
           <div className="right">
             <button className="btn btn-ghost" onClick={cycle}>
               {resolved === 'dark' ? 'Light' : 'Dark'}
             </button>
-            <button
-              className={showAsk ? 'btn btn-primary' : 'btn btn-ghost'}
-              onClick={() => setAskOpen((o) => !o)}
-            >
-              Ask Ratio
-            </button>
+            {isPlatform ? (
+              <button className="btn btn-ghost" onClick={() => setRoute('home')}>
+                Merchant view
+              </button>
+            ) : (
+              <button
+                className={showAsk ? 'btn btn-primary' : 'btn btn-ghost'}
+                onClick={() => setAskOpen((o) => !o)}
+              >
+                Ask Ratio
+              </button>
+            )}
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>

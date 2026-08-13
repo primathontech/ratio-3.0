@@ -165,6 +165,10 @@ h3 {
   height: 100vh;
   overflow: hidden;
 }
+/* Platform (super-admin) view has no store sidebar. */
+.app-shell.no-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
 /* The sidebar fills the viewport height; only its menu scrolls, so the brand (top) and the
    "New store" card (bottom) stay pinned. */
 .sidebar {
