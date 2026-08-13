@@ -57,7 +57,12 @@ export function DashboardHome({ storeName }: { storeName: string }) {
     <div className="dash fade-in">
       <div className="page-head">
         <div className="head-text">
-          <h1>Good morning{firstName ? `, ${firstName}` : ''}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1>Welcome{firstName ? `, ${firstName}` : ''}</h1>
+            <span className="badge" title="Placeholder demo figures — not real analytics yet.">
+              Sample data
+            </span>
+          </div>
           <p>
             Ratio watched <strong>{storeName}</strong> overnight. Revenue is pacing 12% ahead of
             last week.
@@ -68,6 +73,7 @@ export function DashboardHome({ storeName }: { storeName: string }) {
             <button
               key={r.value}
               className={r.value === range ? 'on' : ''}
+              aria-pressed={r.value === range}
               onClick={() => setRange(r.value)}
             >
               {r.label}

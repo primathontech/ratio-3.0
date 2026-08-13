@@ -11,7 +11,6 @@ import {
   type ThemeVersion,
 } from './api';
 import {
-  Badge,
   Dialog,
   EmptyState,
   ErrorBoundary,

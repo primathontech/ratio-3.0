@@ -97,7 +97,15 @@ export function SuperAdmin({
       <div className="sa-main">
         <div className="page-head">
           <div className="head-text">
-            <h1>Merchants</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <h1>Merchants</h1>
+              <span
+                className="badge"
+                title="GMV, health and status are placeholder demo figures — not real analytics yet."
+              >
+                Sample metrics
+              </span>
+            </div>
             <p>Every store on Ratio, their health, and what needs a human today.</p>
           </div>
           <button
@@ -142,6 +150,7 @@ export function SuperAdmin({
                 <button
                   key={t.label}
                   className={t.label === tab ? 'on' : ''}
+                  aria-pressed={t.label === tab}
                   onClick={() => setTab(t.label)}
                 >
                   {t.label}{' '}
@@ -186,6 +195,16 @@ export function SuperAdmin({
                     <tr
                       key={m.store.id}
                       onClick={() => setSelectedId(m.store.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedId(m.store.id);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={active}
+                      aria-label={`Select ${m.name}`}
                       style={{
                         cursor: 'pointer',
                         background: active ? 'var(--surface-2)' : undefined,

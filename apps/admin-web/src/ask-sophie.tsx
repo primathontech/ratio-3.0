@@ -78,7 +78,10 @@ export function AskRatio({
           <div style={{ fontSize: 13, lineHeight: '20px' }}>
             Linen Shirt — Ecru sells out in 5 days. Supplier lead time is 11 days.
           </div>
-          <button className="insight-act" onClick={() => send('Show top products')}>
+          <button
+            className="insight-act"
+            onClick={() => send('Reorder 240 units of Linen Shirt — Ecru')}
+          >
             Reorder 240 units →
           </button>
         </div>

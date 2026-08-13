@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { UserButton } from '@clerk/clerk-react';
 import type { Api, Store } from './api';
 import { useTheme } from './theme';
@@ -32,14 +32,23 @@ export function AppShell({
 }) {
   const { resolved, cycle } = useTheme();
   const [route, setRoute] = useState('home');
-  const [storeIdx, setStoreIdx] = useState(0);
+  // Track the selected store by id, not index: a reload (create/delete/assistant action) can reorder
+  // or shrink `stores`, and an index would silently point at a different store.
+  const [storeId, setStoreId] = useState<string>(stores[0]?.id);
   const [askOpen, setAskOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 1280 : true
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
 
-  const current = stores[Math.min(storeIdx, stores.length - 1)];
+  const current = stores.find((s) => s.id === storeId) ?? stores[0];
   const owner = current?.role === 'owner';
+
+  // Move focus to the main region on route / store change so keyboard + SR users aren't stranded on
+  // a now-hidden control (WCAG 2.4.3).
+  useEffect(() => {
+    mainRef.current?.focus();
+  }, [route, current?.id]);
 
   const groups = useMemo(
     () =>
@@ -55,8 +64,7 @@ export function AppShell({
   const nav: ShellNav = {
     go: (r) => setRoute(r),
     enterStore: (s) => {
-      const i = stores.findIndex((x) => x.id === s.id);
-      if (i >= 0) setStoreIdx(i);
+      setStoreId(s.id);
       setRoute('home');
     },
   };
@@ -87,7 +95,15 @@ export function AppShell({
       <aside className="sidebar">
         <button
           className="sidebar-brand"
-          onClick={() => setStoreIdx((i) => (i + 1) % stores.length)}
+          aria-label={
+            stores.length > 1
+              ? `Current store: ${current?.name}. Activate to switch store.`
+              : current?.name
+          }
+          onClick={() => {
+            const i = stores.findIndex((s) => s.id === current?.id);
+            setStoreId(stores[(i + 1) % stores.length].id);
+          }}
         >
           <span className="logo">R</span>
           <span className="brand-meta">
@@ -167,7 +183,12 @@ export function AppShell({
             gridTemplateColumns: showAsk ? 'minmax(0,1fr) 344px' : 'minmax(0,1fr)',
           }}
         >
-          <main className="container" style={{ overflow: 'auto' }}>
+          <main
+            className="container"
+            style={{ overflow: 'auto', outline: 'none' }}
+            ref={mainRef}
+            tabIndex={-1}
+          >
             {current && renderRoute(route, current, nav)}
           </main>
           {showAsk && (
