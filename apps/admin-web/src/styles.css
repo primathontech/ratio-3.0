@@ -1388,7 +1388,6 @@ h3 {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  max-width: 1180px;
 }
 .dash-cols {
   display: grid;
