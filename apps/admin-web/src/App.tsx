@@ -24,7 +24,9 @@ import { PageBuilderPanel } from './pagebuilder';
 import { ThemeSettingsPanel } from './theme-settings';
 import { SuperAdmin } from './superadmin';
 import { DashboardHome } from './dashboard';
-import { AppShell, ComingSoon, type ShellNav } from './app-shell';
+import { MerchantLayout, PlatformLayout, ComingSoon } from './app-shell';
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { StoreDataProvider, useMerchant, useStoreData, type Me } from './store-context';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -50,25 +52,21 @@ export function App() {
 
       <SignedIn>
         <ErrorBoundary>
-          <SignedInApp />
+          <AuthedRoutes />
         </ErrorBoundary>
       </SignedIn>
     </ToastProvider>
   );
 }
 
-// The whole signed-in experience: fetch the user's stores + role, then render the merchant shell
-// (sidebar + top bar + Ask rail). renderRoute maps each sidebar route to a live panel, the
-// dashboard, the super-admin console, or a ComingSoon placeholder.
-function SignedInApp() {
+// Fetch the store list + identity once, provide them to every route, and define the route tree.
+// Super admins default to /admin; everyone else to their first store (/stores/:id).
+function AuthedRoutes() {
   const api = useApi();
   const toast = useToast();
   const [stores, setStores] = useState<Store[] | null>(null);
-  const [me, setMe] = useState<{
-    userId: string;
-    isPlatformAdmin: boolean;
-    isLocal?: boolean;
-  } | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [meLoaded, setMeLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -86,10 +84,15 @@ function SignedInApp() {
       api
         .me()
         .then((m) => {
-          if (!cancelled) setMe(m);
+          if (!cancelled) {
+            setMe(m);
+            setMeLoaded(true);
+          }
         })
         .catch(() => {
-          if (!cancelled && attempt < 1) loadMe(attempt + 1);
+          if (cancelled) return;
+          if (attempt < 1) loadMe(attempt + 1);
+          else setMeLoaded(true); // degrade to the non-admin view after a retry
         });
     loadMe();
     return () => {
@@ -97,47 +100,17 @@ function SignedInApp() {
     };
   }, [api]);
 
-  const renderRoute = (route: string, store: Store, nav: ShellNav): React.ReactNode => {
-    switch (route) {
-      case 'home':
-        return <DashboardHome storeName={store.name} />;
-      case 'admin':
-        return (
-          <SuperAdmin
-            stores={stores ?? []}
-            onOpen={(s) => nav.enterStore(s)}
-            onCreate={() => setCreating(true)}
-          />
-        );
-      case 'theme':
-        return <ThemeSettingsPanel api={api} store={store} />;
-      case 'pages':
-        return <PageBuilderPanel api={api} store={store} />;
-      case 'versions':
-        return <ThemeVersionsPanel api={api} store={store} />;
-      case 'domains':
-        return <DomainsPanel api={api} store={store} />;
-      case 'commerce':
-        return <CommercePanel api={api} store={store} />;
-      case 'access':
-        return <AgentAccessPanel api={api} store={store} />;
-      case 'audit':
-        return <AuditPanel api={api} store={store} />;
-      case 'danger':
-        return (
-          <DangerPanel
-            api={api}
-            store={store}
-            onDeleted={() => {
-              nav.go('home');
-              load();
-            }}
-          />
-        );
-      default:
-        return <ComingSoon route={route} onHome={() => nav.go('home')} />;
-    }
-  };
+  const dialog = creating && (
+    <CreateStoreDialog
+      api={api}
+      onClose={() => setCreating(false)}
+      onCreated={() => {
+        setCreating(false);
+        toast('Store created');
+        load();
+      }}
+    />
+  );
 
   if (error) {
     return (
@@ -148,7 +121,8 @@ function SignedInApp() {
       </main>
     );
   }
-  if (!stores) {
+  // Wait for BOTH stores and identity before routing, so the role-based landing lands correctly.
+  if (!stores || !meLoaded) {
     return (
       <div className="center-pad">
         <Spinner />
@@ -166,44 +140,120 @@ function SignedInApp() {
             <Icon.plus /> Create a store
           </button>
         </EmptyState>
-        {creating && (
-          <CreateStoreDialog
-            api={api}
-            onClose={() => setCreating(false)}
-            onCreated={() => {
-              setCreating(false);
-              toast('Store created');
-              load();
-            }}
-          />
-        )}
+        {dialog}
       </main>
     );
   }
 
   return (
-    <>
-      <AppShell
-        api={api}
-        stores={stores}
-        isPlatformAdmin={!!me?.isPlatformAdmin}
-        onCreate={() => setCreating(true)}
-        onChanged={load}
-        renderRoute={renderRoute}
-      />
-      {creating && (
-        <CreateStoreDialog
-          api={api}
-          onClose={() => setCreating(false)}
-          onCreated={() => {
-            setCreating(false);
-            toast('Store created');
-            load();
-          }}
-        />
-      )}
-    </>
+    <StoreDataProvider
+      value={{ api, stores, me, reload: load, openCreate: () => setCreating(true) }}
+    >
+      <Routes>
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <PlatformLayout />
+            </RequireAdmin>
+          }
+        >
+          <Route index element={<SuperAdminPage />} />
+        </Route>
+        <Route path="/stores/:storeId" element={<MerchantLayout />}>
+          <Route index element={<HomePage />} />
+          <Route path="theme" element={<ThemePage />} />
+          <Route path="pages" element={<PagesPage />} />
+          <Route path="versions" element={<VersionsPage />} />
+          <Route path="domains" element={<DomainsPage />} />
+          <Route path="commerce" element={<CommercePage />} />
+          <Route path="access" element={<AccessPage />} />
+          <Route path="audit" element={<AuditPage />} />
+          <Route path="danger" element={<DangerPage />} />
+          <Route path="*" element={<ComingSoonPage />} />
+        </Route>
+        <Route path="*" element={<RoleRedirect />} />
+      </Routes>
+      {dialog}
+    </StoreDataProvider>
   );
+}
+
+// Bare "/" (and any unknown path) → the right home for the role.
+function RoleRedirect() {
+  const { stores, me } = useStoreData();
+  if (me?.isPlatformAdmin) return <Navigate to="/admin" replace />;
+  return <Navigate to={`/stores/${stores[0].id}`} replace />;
+}
+
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { me } = useStoreData();
+  if (!me?.isPlatformAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+/* Route elements: thin wrappers that pull api + the resolved store from context (or the store list
+   for the platform view) and render the real panel. */
+function SuperAdminPage() {
+  const { stores, openCreate } = useStoreData();
+  const navigate = useNavigate();
+  return (
+    <SuperAdmin stores={stores} onOpen={(s) => navigate(`/stores/${s.id}`)} onCreate={openCreate} />
+  );
+}
+function HomePage() {
+  const { store } = useMerchant();
+  return <DashboardHome storeName={store.name} />;
+}
+function ThemePage() {
+  const { api, store } = useMerchant();
+  return <ThemeSettingsPanel api={api} store={store} />;
+}
+function PagesPage() {
+  const { api, store } = useMerchant();
+  return <PageBuilderPanel api={api} store={store} />;
+}
+function VersionsPage() {
+  const { api, store } = useMerchant();
+  return <ThemeVersionsPanel api={api} store={store} />;
+}
+function DomainsPage() {
+  const { api, store } = useMerchant();
+  return <DomainsPanel api={api} store={store} />;
+}
+function CommercePage() {
+  const { api, store } = useMerchant();
+  return <CommercePanel api={api} store={store} />;
+}
+function AccessPage() {
+  const { api, store } = useMerchant();
+  return <AgentAccessPanel api={api} store={store} />;
+}
+function AuditPage() {
+  const { api, store } = useMerchant();
+  return <AuditPanel api={api} store={store} />;
+}
+function DangerPage() {
+  const { api, store } = useMerchant();
+  const { reload } = useStoreData();
+  const navigate = useNavigate();
+  return (
+    <DangerPanel
+      api={api}
+      store={store}
+      onDeleted={() => {
+        reload();
+        navigate('/');
+      }}
+    />
+  );
+}
+function ComingSoonPage() {
+  const { store } = useMerchant();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const seg = location.pathname.split('/').pop() || '';
+  return <ComingSoon route={seg} onHome={() => navigate(`/stores/${store.id}`)} />;
 }
 
 function useApi(): Api {
