@@ -313,6 +313,20 @@ describe('admin api client', () => {
     expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/scaffold');
   });
 
+  test('previewBundle POSTs files + page and returns the rendered html', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { html: '<html>hi</html>' }, (r) => (seen = r))
+    );
+    const res = await api.previewBundle('s1', { 'x.liquid': 'y' }, 'index');
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/bundle/preview');
+    expect(await seen!.json()).toEqual({ files: { 'x.liquid': 'y' }, page: 'index' });
+    expect(res).toEqual({ html: '<html>hi</html>' });
+  });
+
   test('publishBundle POSTs to the bundle publish endpoint', async () => {
     let seen: Request | undefined;
     const api = createApi(

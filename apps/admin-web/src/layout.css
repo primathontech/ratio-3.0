@@ -1,0 +1,298 @@
+/* App shell: sidebar, content area, top bar, command trigger. */
+/* App layout: sidebar + main. Falls back to a single column on narrow screens. --------- */
+.app-shell {
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  height: 100vh;
+  overflow: hidden;
+}
+/* Platform (super-admin) view has no store sidebar. */
+.app-shell.no-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* The sidebar fills the viewport height; only its menu scrolls, so the brand (top) and the
+   "New store" card (bottom) stay pinned. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+}
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sidebar-brand:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+.nav-group-title {
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-item:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+.nav-item .bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: transparent;
+  flex: none;
+}
+.nav-item.active {
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.nav-item.active .bar {
+  background: var(--accent);
+}
+.nav-item .hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.nav-fill {
+  flex: 1;
+}
+.nav-card {
+  flex: none;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--accent-weak);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.main-area {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+/* Content area under the top bar: main scrolls on its own; the Ask rail takes a column on wide
+   screens (>=1200px) and becomes an overlay drawer below that (see the media queries). */
+.shell-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1200px) {
+  .shell-body.with-ask {
+    grid-template-columns: minmax(0, 1fr) 344px;
+  }
+}
+@media (max-width: 1199px) {
+  .ask-rail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, 88vw);
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+  }
+}
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 39;
+  animation: fade 0.14s ease;
+}
+
+/* App bar (top). Not sticky: the fixed-height shell never scrolls the page, only the panes. */
+.appbar {
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 20px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.appbar .right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 640;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.brand:hover {
+  text-decoration: none;
+}
+.brand .logo,
+.sidebar-brand .logo {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+.brand .brand-logo,
+.sidebar-brand .brand-logo {
+  height: 28px;
+  width: auto;
+  flex: none;
+  display: block;
+}
+.brand-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.brand-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.brand-sub {
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--text-3);
+}
+
+/* Command / search trigger in the top bar. */
+.cmdk-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  min-width: 0;
+  max-width: 460px;
+  flex: 1;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  cursor: text;
+  text-align: left;
+}
+.cmdk-trigger:hover {
+  border-color: var(--line-strong);
+}
+.cmdk-trigger .label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kbd {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-3);
+}
+
+.container {
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 28px 64px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+.page-head .head-text {
+  flex: 1;
+  min-width: 260px;
+}
+.page-head h1 {
+  font-size: 30px;
+  line-height: 38px;
+}
+.page-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+.crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+}
