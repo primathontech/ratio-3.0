@@ -96,10 +96,19 @@ const themeStore = config.bundleStore
 // keyed by its own path. matchRoute supplies the type + the route params ({{params.handle}}) the
 // resolver interpolates for data binding.
 function bundlePageName(canon: string, matched: RouteMatch | null): string {
-  if (canon === '/' || matched?.pageType === 'home') return 'index';
-  if (matched?.pageType === 'collection') return 'collection';
-  if (matched?.pageType === 'product') return 'product';
-  return canon.replace(/^\//, '').replace(/\//g, '.');
+  switch (matched?.pageType) {
+    case 'home':
+      return 'index';
+    case 'collection':
+      return 'collection';
+    case 'product':
+      return 'product';
+    default:
+      // Custom / self-keyed page: namespace under page.* so a bare request path (/index,
+      // /collection, /product, …) can never alias the reserved shared-template keys — only a URL
+      // that actually matched home/collection/product yields those.
+      return canon === '/' ? 'index' : `page.${canon.replace(/^\//, '').replace(/\//g, '.')}`;
+  }
 }
 
 // Islands (Track 5): the ONLY per-user path. The cached shell carries inert placeholders that a
@@ -544,8 +553,10 @@ app.all('*', async (c) => {
             page,
             {
               // Theme sections: the bundle's Liquid, sandboxed in the isolate. Platform sections:
-              // no Liquid in the bundle — resolve the type to the current first-party record and
-              // render it in-process (trusted code), so a page can mix both flavors.
+              // no Liquid in the bundle — resolve the type to the first-party record and render it
+              // in-process (trusted code), so a page can mix both flavors. Platform sections resolve
+              // to the LATEST registered version (unpinned) by design — "platform = centrally
+              // updated" — unlike the legacy PageDoc path which pins the version it was built with.
               theme: (liquid, data) => renderUntrusted(liquid, data),
               platform: (type, data) => {
                 const rec = pbRegistry.get(type);

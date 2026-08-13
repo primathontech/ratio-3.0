@@ -187,5 +187,9 @@ test(
     const prod = await call('/products/air-max-90', edge({ 'x-ratio-tenant': T5 }));
     assert.equal(prod.headers.get('x-handler'), 'theme-bundle');
     assert.match(await prod.text(), /Product template/); // one product.json serves every handle
+
+    // This bundle has no index.json → GET / has no matching template → falls through to legacy.
+    const home = await call('/', edge({ 'x-ratio-tenant': T5 }));
+    assert.notEqual(home.headers.get('x-handler'), 'theme-bundle');
   }
 );
