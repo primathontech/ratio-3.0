@@ -29,7 +29,12 @@ import {
   type CspDirectives,
   type IntegrationContext,
 } from '@ratio/gokwik';
-import { defaultRegistry, setUntrustedRenderer, renderSection } from '@ratio/builder-registry';
+import {
+  defaultRegistry,
+  setUntrustedRenderer,
+  renderSection,
+  islandPlaceholder,
+} from '@ratio/builder-registry';
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
@@ -561,6 +566,14 @@ app.all('*', async (c) => {
               platform: (type, data) => {
                 const rec = pbRegistry.get(type);
                 if (!rec) throw new Error(`unknown platform section '${type}'`);
+                // An island (per-user) section must NEVER render its personalized HTML into this
+                // shared, s-maxage'd response — emit the inert placeholder instead (hydrated
+                // client-side via /api/island), exactly as composePage does. (Instance = type for
+                // now — one island per type; full per-instance ids + island CSP on the bundle path
+                // are a later slice. Today no first-party section declares an island, so this is a
+                // fail-closed guard, not yet a live code path.)
+                if (rec.island)
+                  return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
                 return renderSection(rec, data);
               },
             },
