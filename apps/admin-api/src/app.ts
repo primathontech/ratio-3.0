@@ -20,6 +20,9 @@ import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
+import { ThemeStore as BundleThemeStore } from '@ratio/builder-core';
+import type { ThemeFiles } from '@ratio/builder-core';
+import { S3ObjectStore } from '@ratio/data-objects';
 import { scaffoldStorefront } from '@ratio/builder-core';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
@@ -103,6 +106,16 @@ async function purgeStoreUrls(id: string, paths: string[]): Promise<boolean | nu
 // origin stamps on a page-builder response, so it invalidates precisely that page.
 const pbStore = new PgPageStore();
 const themeStore = new PgThemeStore();
+
+// Bundle-theme authoring (OFCE-601): the S3 ThemeStore (base ⊕ overrides), distinct from the legacy
+// PgThemeStore above. Gated on BUNDLE_S3_BUCKET — null disables the /theme/bundle/* endpoints so
+// admin-api still boots without an object store configured. One working theme per store, id below.
+const bundleThemes = config.bundleStore
+  ? new BundleThemeStore(new S3ObjectStore(config.bundleStore))
+  : null;
+const mainThemeId = (tenantId: string) => `${tenantId}-main`;
+// No real theme compiler yet (every caller uses identity); the seam stays injected for a later slice.
+const identityCompile = (s: ThemeFiles) => s;
 const pbRegistry = defaultRegistry();
 const pbPurge: PurgeLike = { invalidateByTags: (tags) => purgeEdgeTags(tags) };
 const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
@@ -260,6 +273,7 @@ export interface AppOptions {
   rateLimit?: number; // per-user requests/min on the control plane
   assistantRateLimit?: number; // tighter per-user budget on /assistant
   internalToken?: string; // marks in-process (viaSelf) calls so they skip the limiter (tests inject)
+  bundleThemes?: BundleThemeStore | null; // inject a fake-ObjectStore-backed store in tests
 }
 
 export function createApp(
@@ -267,6 +281,8 @@ export function createApp(
   opts: AppOptions = {}
 ) {
   const app = new Hono<Vars>();
+  // Bundle-theme store: injected (tests) else the module-scoped one (null when S3 is unconfigured).
+  const themes = opts.bundleThemes ?? bundleThemes;
 
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
   // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
@@ -695,6 +711,79 @@ export function createApp(
       version: result.version,
       ...(edgePurged !== null && { edgePurged }),
     });
+  });
+
+  // --- Bundle-theme authoring (OFCE-601, base ⊕ overrides). Distinct from the legacy Pg theme routes
+  // above: merchant Liquid theme files stored as S3 bundles, one working theme per store
+  // (id `${tenantId}-main`). All gated on BUNDLE_S3_BUCKET — 503 when the object store isn't wired.
+
+  // Save the store's draft overrides (only the files it changed). Creates the working theme on first
+  // save; `base` (a library base @version) is attached at creation only.
+  app.put('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as {
+      files?: ThemeFiles;
+      base?: { themeId: string; version: number };
+    };
+    await themes.ensureTheme(id, mainThemeId(id), 'Theme', body.base);
+    const { hash } = await themes.saveDraft({ themeId: mainThemeId(id) }, body.files ?? {});
+    c.set('auditTenant', id);
+    return c.json({ ok: true, hash });
+  });
+
+  // Preview the working theme: the base composed with the current draft overrides.
+  app.get('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const files = await themes.readComposed({ themeId: mainThemeId(c.req.param('id')) });
+    return c.json({ files });
+  });
+
+  // Publish: freeze compile(base ⊕ overrides), cut an immutable version, flip the live pointer.
+  // Owner-only. Purges the store's cached pages — the live theme changed.
+  app.post('/stores/:id/theme/bundle/publish', requireRole('owner'), async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const id = c.req.param('id');
+    // Publish does NOT create the theme — draft-save is the create point. Publishing a store that
+    // never saved a draft is a client error, not a reason to make an empty theme live.
+    let version: number;
+    try {
+      ({ version } = await themes.publish(
+        { themeId: mainThemeId(id) },
+        { compile: identityCompile, by: c.get('userId') }
+      ));
+    } catch (e) {
+      if (e instanceof Error && /unknown theme/.test(e.message))
+        return c.json({ error: 'no draft to publish — save a draft first' }, 400);
+      throw e; // infra faults (S3/DB) bubble to onError → 500 + logged, not a misleading 400
+    }
+    // publish() enqueued a durable tenant-tag purge in its transaction (page_purge_outbox +
+    // drainPurges) — that's the invalidation. purgeEdgeTags hits the local dev edge-sim by tag.
+    // Prod by-URL purge scoped to the bundle theme's own routes is a follow-up.
+    await purgeEdgeTags([tenantTag(id)]);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, version });
+  });
+
+  // Roll the live pointer back to an earlier published version (the bundles are all still in S3).
+  // Owner-only.
+  app.post('/stores/:id/theme/bundle/rollback', requireRole('owner'), async (c) => {
+    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { version?: number };
+    if (typeof body.version !== 'number')
+      return c.json({ error: 'version (number) is required' }, 400);
+    try {
+      await themes.rollback(id, body.version);
+    } catch (e) {
+      // Only the "not found" cases are a 404; anything else (DB/S3) bubbles to onError → 500.
+      if (e instanceof Error && /unknown version|no published theme|unknown tenant/.test(e.message))
+        return c.json({ error: e.message }, 404);
+      throw e;
+    }
+    await purgeEdgeTags([tenantTag(id)]); // see publish: durable purge is the outbox tenant tag
+    c.set('auditTenant', id);
+    return c.json({ ok: true, version: body.version });
   });
 
   // Commerce backend connection: the GoKwik merchant id that powers products/collections/cart.
