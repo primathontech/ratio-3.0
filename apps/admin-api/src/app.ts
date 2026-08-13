@@ -746,8 +746,10 @@ export function createApp(
   app.post('/stores/:id/theme/bundle/scaffold', requireMembership, async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const id = c.req.param('id');
-    const draft = await themes.readDraft({ themeId: mainThemeId(id) });
-    if (Object.keys(draft).length > 0) return c.json({ files: draft, seeded: false });
+    // Gate on the COMPOSED theme (base ⊕ overrides), matching GET /draft — so a base-backed theme
+    // with zero overrides is NOT treated as empty and overwritten with the placeholder default.
+    const existing = await themes.readComposed({ themeId: mainThemeId(id) });
+    if (Object.keys(existing).length > 0) return c.json({ files: existing, seeded: false });
     const files = defaultBundleTheme();
     await themes.ensureTheme(id, mainThemeId(id));
     await themes.saveDraft({ themeId: mainThemeId(id) }, files);

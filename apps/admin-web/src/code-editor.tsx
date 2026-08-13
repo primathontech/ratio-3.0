@@ -10,10 +10,14 @@ import { Spinner } from './ui';
 loader.config({ monaco });
 type MonacoGlobal = typeof globalThis & { MonacoEnvironment?: monaco.Environment };
 (globalThis as MonacoGlobal).MonacoEnvironment = {
-  getWorker: () =>
-    new Worker(
-      URL.createObjectURL(new Blob(['self.onmessage=()=>{}'], { type: 'text/javascript' }))
-    ),
+  getWorker: () => {
+    const url = URL.createObjectURL(
+      new Blob(['self.onmessage=()=>{}'], { type: 'text/javascript' })
+    );
+    const worker = new Worker(url);
+    URL.revokeObjectURL(url); // the worker has loaded the script; free the blob URL
+    return worker;
+  },
 };
 
 // Monaco language by file extension. Liquid has no built-in mode; HTML is the closest fit (it keeps
