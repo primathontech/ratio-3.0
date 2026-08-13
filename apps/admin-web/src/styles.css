@@ -123,19 +123,19 @@ h3 {
   text-wrap: balance;
 }
 h1 {
-  font-size: 30px;
-  line-height: 38px;
-  font-weight: 640;
+  font-size: 32px;
+  line-height: 40px;
+  font-weight: 600;
 }
 h2 {
-  font-size: 20px;
-  line-height: 28px;
-  font-weight: 620;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 600;
 }
 h3 {
-  font-size: 15px;
-  line-height: 22px;
-  font-weight: 620;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
 }
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -162,16 +162,26 @@ h3 {
 .app-shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
+/* The sidebar fills the viewport height; only its menu scrolls, so the brand (top) and the
+   "New store" card (bottom) stay pinned. */
 .sidebar {
   display: flex;
   flex-direction: column;
-  gap: 4px;
   padding: 14px 12px;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  overflow: auto;
+  overflow: hidden;
+}
+.sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .sidebar-brand {
   display: flex;
@@ -250,7 +260,8 @@ h3 {
   flex: 1;
 }
 .nav-card {
-  margin-top: auto;
+  flex: none;
+  margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -264,12 +275,43 @@ h3 {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+/* Content area under the top bar: main scrolls on its own; the Ask rail takes a column on wide
+   screens (>=1200px) and becomes an overlay drawer below that (see the media queries). */
+.shell-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 1200px) {
+  .shell-body.with-ask {
+    grid-template-columns: minmax(0, 1fr) 344px;
+  }
+}
+@media (max-width: 1199px) {
+  .ask-rail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, 88vw);
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+  }
+}
+.ask-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 39;
+  animation: fade 0.14s ease;
 }
 
-/* App bar (top) ----------------------------------------------------------- */
+/* App bar (top). Not sticky: the fixed-height shell never scrolls the page, only the panes. */
 .appbar {
-  position: sticky;
-  top: 0;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -372,7 +414,7 @@ h3 {
 }
 
 .container {
-  max-width: 100%;
+  width: 100%;
   margin: 0 auto;
   padding: 24px 28px 64px;
 }
@@ -1011,7 +1053,7 @@ h3 {
 
 /* Sign-in ---------------------------------------------------------------- */
 .signin-wrap {
-  min-height: calc(100vh - 56px);
+  min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 40px 20px;
@@ -1383,12 +1425,345 @@ h3 {
   margin-top: 2px;
 }
 
+/* Merchant dashboard home ------------------------------------------------ */
+.dash {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+/* Roomier 3-across KPI cards on the dashboard (the shared .kpi-grid stays 5-across for the
+   super-admin console). */
+.dash .kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+.dash-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.legend .sw {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 184px;
+  padding-top: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.chart-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 6px;
+  height: 100%;
+}
+.chart-tip {
+  height: 14px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 100%;
+}
+.chart-bars .bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+}
+.chart-labels {
+  display: flex;
+  gap: 10px;
+}
+.chart-labels > div {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: spi-pulse 1.8s ease infinite;
+}
+@keyframes spi-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.meter {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+.checkitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+}
+.checkbox {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1.5px solid var(--line-strong);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex: none;
+}
+.checkbox.on {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+/* Ask Sophie rail -------------------------------------------------------- */
+.ask-rail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+.ask-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.ask-badge {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--accent-weak);
+  color: var(--accent);
+  font-size: 13px;
+  flex: none;
+}
+.ask-insights {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.insight {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.insight-kind {
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.insight-act {
+  align-self: flex-start;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.ask-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat {
+  max-width: 88%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-line;
+}
+.chat.you {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.chat.ai {
+  align-self: flex-start;
+  background: var(--bg);
+  color: var(--text);
+}
+.ask-foot {
+  flex: none;
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.chip {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip:hover {
+  background: var(--surface-2);
+}
+
+/* Super-admin merchants dashboard ---------------------------------------- */
+.sa-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+}
+.sa-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  padding-right: 24px;
+}
+.sa-rail {
+  position: sticky;
+  top: 24px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.sa-rail-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.sa-rail-sec:last-child {
+  border-bottom: 0;
+}
+.detail-row {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+}
+.detail-row .k {
+  flex: 1;
+  color: var(--muted);
+}
+.detail-row .v {
+  font-weight: 500;
+  text-align: right;
+}
+.health {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.health-track {
+  width: 34px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.health-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+.incident {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.incident .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex: none;
+}
+
 @media (max-width: 940px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
   .sidebar {
     display: none;
+  }
+  .sa-grid {
+    grid-template-columns: 1fr;
+  }
+  .sa-main {
+    padding-right: 0;
+  }
+  .sa-rail {
+    position: static;
+    margin-top: 16px;
   }
 }
 @media (max-width: 820px) {
