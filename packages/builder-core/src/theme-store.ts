@@ -4,6 +4,7 @@
 // Publish records the version + flips the store's live pointer (Postgres); loadLiveCompiled is the
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
+import { composeTheme } from './theme-compose';
 import { tenantTag } from './tags';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
@@ -80,26 +81,64 @@ export class ThemeStore {
     return { hash: bundleId(files) };
   }
 
-  // Freeze the current draft into immutable, content-addressed source + compiled bundles in the
-  // object store (no DB). The public `publish` builds on this to also record the version + pointer.
+  // Freeze the current draft into immutable, content-addressed source + compiled bundles. The draft
+  // is the theme's OVERRIDES (its changed files): the SOURCE bundle is those overrides (small, for
+  // merges), and the COMPILED bundle is compile(base ⊕ overrides) — the full render-ready theme the
+  // origin loads. The base is read from the theme's (base_theme_id, base_version); a root theme (no
+  // base) composes over an empty base, so its overrides ARE its whole theme (backward-compatible).
   async freezeBundles(ref: ThemeRef, opts: { compile: CompileFn }): Promise<PublishedBundles> {
-    const source = await this.readDraft(ref);
-    const sourceHash = bundleId(source);
-    await this.objects.put(sourceKey(sourceHash), packBundle(source), { contentType: GZIP });
+    const overrides = await this.readDraft(ref);
+    const sourceHash = bundleId(overrides);
+    await this.objects.put(sourceKey(sourceHash), packBundle(overrides), { contentType: GZIP });
 
-    const compiled = await opts.compile(source);
+    const composed = composeTheme(await this.loadBaseSource(ref.themeId), overrides);
+    const compiled = await opts.compile(composed);
     const compiledHash = bundleId(compiled);
     await this.objects.put(compiledKey(compiledHash), packBundle(compiled), { contentType: GZIP });
 
     return { sourceHash, compiledHash };
   }
 
-  // Create a tenant's theme record if it does not exist (onboarding / first edit).
-  async ensureTheme(tenantId: string, themeId: string, name = 'Theme'): Promise<void> {
+  // The base theme's source files (the full base — a base is a root theme, so its frozen source IS
+  // the whole theme), or {} if this theme tracks no base. Read from the theme's (base_theme_id,
+  // base_version) → that base version's source bundle. (Multi-level bases — a base with its own base —
+  // would compose recursively; v1's library bases are roots, so one level suffices.)
+  private async loadBaseSource(themeId: string): Promise<ThemeFiles> {
+    const { rows } = await pool.query<{
+      base_theme_id: string | null;
+      base_version: number | null;
+    }>('SELECT base_theme_id, base_version FROM theme WHERE id = $1', [themeId]);
+    const baseThemeId = rows[0]?.base_theme_id;
+    const baseVersion = rows[0]?.base_version;
+    if (!baseThemeId || baseVersion == null) return {};
+    const v = await pool.query<{ source_hash: string }>(
+      'SELECT source_hash FROM theme_bundle_version WHERE theme_id = $1 AND version = $2',
+      [baseThemeId, baseVersion]
+    );
+    const hash = v.rows[0]?.source_hash;
+    if (!hash) throw new Error(`base '${baseThemeId}'@${baseVersion} has no published version`);
+    return (await this.loadSource(hash)) ?? {};
+  }
+
+  // The full theme the compiler/preview sees: the base composed with the current draft overrides.
+  async readComposed(ref: ThemeRef): Promise<ThemeFiles> {
+    return composeTheme(await this.loadBaseSource(ref.themeId), await this.readDraft(ref));
+  }
+
+  // Create a tenant's theme record if it does not exist (onboarding / first edit). `base` makes the
+  // theme track a library base @version (base ⊕ overrides); omit it for a root/base theme.
+  async ensureTheme(
+    tenantId: string,
+    themeId: string,
+    name = 'Theme',
+    base?: { themeId: string; version: number }
+  ): Promise<void> {
     assertThemeId(themeId);
+    if (base) assertThemeId(base.themeId);
     await pool.query(
-      'INSERT INTO theme (id, tenant_id, name) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
-      [themeId, tenantId, name]
+      `INSERT INTO theme (id, tenant_id, name, base_theme_id, base_version) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO NOTHING`,
+      [themeId, tenantId, name, base?.themeId ?? null, base?.version ?? null]
     );
   }
 
