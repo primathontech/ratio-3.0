@@ -24,6 +24,8 @@ const skip = endpoint ? false : 'set BUNDLE_S3_ENDPOINT (MinIO) + a migrated DAT
 const T = 'themebundle_o1';
 const THEME = 'themebundle_o1_main';
 const T2 = 'themebundle_o2';
+const T3 = 'themebundle_o3';
+const THEME3 = 'themebundle_o3_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -36,14 +38,18 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [T, T2]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
-  await pool.query('DELETE FROM theme WHERE id = $1', [THEME]);
+  for (const id of [T, T2, T3]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
   ]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'No Bundle', 'active')", [
     T2,
   ]);
+  await pool.query(
+    "INSERT INTO tenants (id, name, status) VALUES ($1, 'Broken Bundle', 'active')",
+    [T3]
+  );
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -57,12 +63,17 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME }, { compile: (s) => s });
+
+  // A live bundle whose template is malformed JSON — the render must throw and DEGRADE to legacy.
+  await store.ensureTheme(T3, THEME3);
+  await store.saveDraft({ themeId: THEME3 }, { 'templates/index.json': 'NOT JSON' });
+  await store.publish({ themeId: THEME3 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  await pool.query('DELETE FROM theme WHERE id = $1', [THEME]);
-  for (const id of [T, T2]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEME, THEME3]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [T, T2, T3]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
 test(
@@ -96,3 +107,10 @@ test(
     assert.notEqual(res.headers.get('x-handler'), 'theme-bundle');
   }
 );
+
+test('a broken bundle degrades to the legacy path, not a 500', { skip }, async () => {
+  const res = await call('/', edge({ 'x-ratio-tenant': T3 }));
+  // The render throws (malformed template JSON) → caught → falls through to legacy (404, no page).
+  assert.notEqual(res.status, 500);
+  assert.notEqual(res.headers.get('x-handler'), 'theme-bundle');
+});

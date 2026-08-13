@@ -110,3 +110,24 @@ test('binds live data — a data-sourced theme section renders the resolved valu
   );
   assert.match(html, /<li>Alpha<\/li><li>Beta<\/li>/);
 });
+
+test('binds live data but an authored setting wins over a colliding resolved key', async () => {
+  const compiled: ThemeFiles = {
+    'sections/card.liquid': `<h2>{{ title | escape }}</h2><span>{{ count }}</span>`,
+    'templates/index.json': JSON.stringify({
+      dataSources: { main: { type: 'X', params: {} } },
+      sections: [{ type: 'card', dataSourceKey: 'main', data: { title: 'Authored' } }],
+    }),
+  };
+  const resolver: BindingResolver = {
+    fetch: async () => ({ value: { title: 'FromData', count: 7 }, tags: [] }),
+  };
+  const html = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    { resolver, ctx: { tenantId: 't1' } }
+  );
+  assert.match(html, /<h2>Authored<\/h2>/); // authored setting wins over the colliding resolved key
+  assert.match(html, /<span>7<\/span>/); // a non-colliding resolved key still binds
+});

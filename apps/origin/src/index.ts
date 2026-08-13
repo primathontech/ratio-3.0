@@ -521,25 +521,35 @@ app.all('*', async (c) => {
   if (themeStore && tenant.liveThemeId) {
     const canon = canonicalPath(path);
     const page = canon === '/' ? 'index' : canon.replace(/^\//, '');
-    const compiled = await timed(c, 'bundle', () =>
-      themeStore.loadLiveCompiled(tenantId as string)
-    );
-    if (compiled && compiled[`templates/${page}.json`] != null) {
-      const sections = await timed(c, 'compose', () =>
-        renderThemePage(
-          compiled,
-          page,
-          { theme: (liquid, data) => renderUntrusted(liquid, data) },
-          { resolver, ctx: { tenantId: tenantId as string, commerce: tenant.commerce } }
-        )
+    try {
+      const compiled = await timed(c, 'bundle', () =>
+        themeStore.loadLiveCompiled(tenantId as string)
       );
-      const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;
-      c.header('x-tenant', tenantId as string);
-      c.header('x-handler', 'theme-bundle');
-      c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
-      c.header('x-cache', 'no-store'); // caching + purge tags land with the data-binding slice
-      setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
-      return c.html(html);
+      if (compiled && compiled[`templates/${page}.json`] != null) {
+        const sections = await timed(c, 'compose', () =>
+          renderThemePage(
+            compiled,
+            page,
+            { theme: (liquid, data) => renderUntrusted(liquid, data) },
+            { resolver, ctx: { tenantId: tenantId as string, commerce: tenant.commerce } }
+          )
+        );
+        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;
+        c.header('x-tenant', tenantId as string);
+        c.header('x-handler', 'theme-bundle');
+        c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
+        c.header('x-cache', 'no-store'); // caching + purge tags land with the data-binding slice
+        setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
+        return c.html(html);
+      }
+    } catch (e) {
+      // A bundle-store/render hiccup (S3, malformed bundle JSON, a resolver error) must not 500 the
+      // very tenants using the new path — log and DEGRADE to the legacy page store below.
+      logger.warn({
+        evt: 'bundle_render_error',
+        tenant: tenantId,
+        err: e instanceof Error ? e.message : 'unknown',
+      });
     }
   }
 

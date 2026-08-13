@@ -71,7 +71,10 @@ export async function renderThemePage(
   for (const inst of tpl.sections) {
     const bound = inst.dataSourceKey ? (resolved[inst.dataSourceKey] ?? {}) : {};
     const liquid = compiled[sectionPath(inst.type)];
-    const data = { ...(inst.data ?? {}), ...bound };
+    // Bound live data fills the context; an authored setting of the same name WINS, so resolved data
+    // can never silently overwrite what the merchant set. (Per-binding namespacing — Shopify-style
+    // collection.* / product.* kept apart from settings — is a later slice; this is the safe interim.)
+    const data = { ...bound, ...(inst.data ?? {}) };
     if (liquid != null) {
       parts.push(await renderers.theme(liquid, data));
     } else if (renderers.platform) {
