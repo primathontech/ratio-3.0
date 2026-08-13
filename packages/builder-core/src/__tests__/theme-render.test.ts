@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
 import { renderThemePage, type SectionRenderer, type PlatformRenderer } from '../theme-render';
+import type { BindingResolver } from '../resolve';
 import type { ThemeFiles } from '../bundle';
 
 const trusted: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
@@ -82,4 +83,30 @@ test('dispatches per section: platform → code renderer, theme → Liquid rende
   assert.match(html, /class="hero">Hi</); // platform section rendered by code
   assert.match(html, /class="grid">Shop</); // theme section rendered from Liquid
   assert.deepEqual(calls, ['platform:hero', 'theme']); // correct dispatch, in order
+});
+
+// OFCE-601 data binding: a section with a dataSourceKey gets its page-level data source resolved by
+// the injected BindingResolver (the same one the legacy path uses); the resolved value's keys merge
+// into the section's Liquid context so the template can iterate live data by name.
+test('binds live data — a data-sourced theme section renders the resolved value', async () => {
+  const compiled: ThemeFiles = {
+    'sections/grid.liquid': `<ul>{% for p in products %}<li>{{ p.title | escape }}</li>{% endfor %}</ul>`,
+    'templates/index.json': JSON.stringify({
+      dataSources: { main: { type: 'COLLECTION_BY_HANDLES', params: { handles: ['summer'] } } },
+      sections: [{ type: 'grid', dataSourceKey: 'main', data: {} }],
+    }),
+  };
+  const resolver: BindingResolver = {
+    fetch: async (src) => {
+      assert.equal(src.type, 'COLLECTION_BY_HANDLES'); // the source is passed through
+      return { value: { products: [{ title: 'Alpha' }, { title: 'Beta' }] }, tags: ['col:summer'] };
+    },
+  };
+  const html = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    { resolver, ctx: { tenantId: 't1' } }
+  );
+  assert.match(html, /<li>Alpha<\/li><li>Beta<\/li>/);
 });

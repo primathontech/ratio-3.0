@@ -526,7 +526,12 @@ app.all('*', async (c) => {
     );
     if (compiled && compiled[`templates/${page}.json`] != null) {
       const sections = await timed(c, 'compose', () =>
-        renderThemePage(compiled, page, { theme: (liquid, data) => renderUntrusted(liquid, data) })
+        renderThemePage(
+          compiled,
+          page,
+          { theme: (liquid, data) => renderUntrusted(liquid, data) },
+          { resolver, ctx: { tenantId: tenantId as string, commerce: tenant.commerce } }
+        )
       );
       const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;
       c.header('x-tenant', tenantId as string);

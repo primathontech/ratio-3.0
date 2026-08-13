@@ -7,6 +7,8 @@
 // renderer (@ratio/builder-render/isolate) for merchant sections; a first-party/trusted path may pass
 // an in-process one. This module is pure composition and never renders in-process itself.
 import type { ThemeFiles } from './bundle';
+import type { DataSource } from './doc';
+import type { BindingResolver, ResolveContext } from './resolve';
 
 // Renders one THEME section's Liquid with its data context to HTML. Theme sections (base or merchant)
 // carry their Liquid in the bundle; for untrusted merchant sections this MUST run inside the
@@ -28,9 +30,11 @@ export interface SectionRenderers {
 interface SectionInstance {
   type: string;
   data?: Record<string, unknown>; // the section's render context (settings values + bound data)
+  dataSourceKey?: string; // binds this section to a page-level dataSource, resolved at render
 }
 interface PageTemplate {
   sections: SectionInstance[];
+  dataSources?: Record<string, DataSource>; // named live-data sources sections bind to
 }
 
 const templatePath = (page: string) => `templates/${page}.json`;
@@ -43,16 +47,31 @@ const sectionPath = (type: string) => `sections/${type}.liquid`;
 export async function renderThemePage(
   compiled: ThemeFiles,
   page: string,
-  renderers: SectionRenderers
+  renderers: SectionRenderers,
+  opts: { resolver?: BindingResolver; ctx?: ResolveContext } = {}
 ): Promise<string> {
   const raw = compiled[templatePath(page)];
   if (raw == null) throw new Error(`no template for page '${page}'`);
   const tpl = JSON.parse(raw) as PageTemplate;
 
+  // Resolve page-level data sources once via the injected resolver (the same BindingResolver the
+  // legacy path uses), then merge each resolved value's keys into the sections that bind to it — so
+  // a theme section's Liquid can reference live data (e.g. {% for product in products %}) by name.
+  const resolved: Record<string, Record<string, unknown>> = {};
+  if (opts.resolver && tpl.dataSources) {
+    const ctx = opts.ctx ?? { tenantId: '' };
+    const entries = Object.entries(tpl.dataSources);
+    const values = await Promise.all(entries.map(([, src]) => opts.resolver!.fetch(src, ctx)));
+    entries.forEach(([key], i) => {
+      resolved[key] = values[i].value;
+    });
+  }
+
   const parts: string[] = [];
   for (const inst of tpl.sections) {
+    const bound = inst.dataSourceKey ? (resolved[inst.dataSourceKey] ?? {}) : {};
     const liquid = compiled[sectionPath(inst.type)];
-    const data = inst.data ?? {};
+    const data = { ...(inst.data ?? {}), ...bound };
     if (liquid != null) {
       parts.push(await renderers.theme(liquid, data));
     } else if (renderers.platform) {
