@@ -2,7 +2,7 @@
 // plan yet (analytics lives outside this DB — ADR-017), so we synthesize DETERMINISTIC numbers from
 // the store id: stable across renders, obviously demo-grade, wired to real data later. The platform
 // KPI + incident strips are static demo content.
-import type { Store } from './api';
+import type { Store } from '../../common/api';
 
 export type StatusKey = 'live' | 'review' | 'risk' | 'onboarding';
 export const MERCHANT_STATUS: Record<

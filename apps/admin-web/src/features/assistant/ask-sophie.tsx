@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { Api, AssistantAction } from './api';
-import { Spinner } from './ui';
+import type { Api, AssistantAction } from '../../common/api';
+import { Spinner } from '../../common/ui';
 
 const SUGGESTIONS = ['Show top products', 'Create a discount campaign', 'Forecast next week'];
 // With no store open the assistant is in onboarding scope (create_store is available), so the

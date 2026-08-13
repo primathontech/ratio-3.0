@@ -14,10 +14,10 @@ import type {
   PbCollection,
   PbPageMeta,
   Store,
-} from './api';
-import { ApiError } from './api';
-import { Icon, Spinner, Badge, useToast } from './ui';
-import { storefrontUrl } from './store-context';
+} from '../../common/api';
+import { ApiError } from '../../common/api';
+import { Icon, Spinner, Badge, useToast } from '../../common/ui';
+import { storefrontUrl } from '../../common/store-context';
 
 function getPath(o: unknown, key: string): unknown {
   return key.split('.').reduce<unknown>((a, k) => {

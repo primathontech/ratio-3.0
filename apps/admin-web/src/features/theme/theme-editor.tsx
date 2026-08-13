@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, type Api, type Store, type ThemeFiles } from './api';
-import { EmptyState, Icon, Spinner, useToast } from './ui';
-import { storefrontUrl } from './store-context';
+import { ApiError, type Api, type Store, type ThemeFiles } from '../../common/api';
+import { EmptyState, Icon, Spinner, useToast } from '../../common/ui';
+import { storefrontUrl } from '../../common/store-context';
 import { CodeEditor } from './code-editor';
 import './theme-editor.css';
 

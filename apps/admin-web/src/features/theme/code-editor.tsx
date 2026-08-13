@@ -1,7 +1,7 @@
 import Editor, { loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
-import { useTheme } from './theme';
-import { Spinner } from './ui';
+import { useTheme } from '../../common/theme';
+import { Spinner } from '../../common/ui';
 
 // Self-host Monaco: hand @monaco-editor/react the locally-bundled monaco instead of letting it fetch
 // from a CDN (which fails behind a firewall/offline and is a runtime dependency we don't want). Run

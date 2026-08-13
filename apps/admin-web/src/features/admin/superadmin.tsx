@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { Store } from './api';
-import { Icon, useToast } from './ui';
-import { storefrontUrl, storeSlug } from './store-context';
+import type { Store } from '../../common/api';
+import { Icon, useToast } from '../../common/ui';
+import { storefrontUrl, storeSlug } from '../../common/store-context';
 import {
   merchantOf,
   MERCHANT_STATUS,

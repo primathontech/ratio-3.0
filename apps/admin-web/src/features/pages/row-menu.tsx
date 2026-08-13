@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Icon } from './ui';
+import { Icon } from '../../common/ui';
 
 export type MenuAction = {
   label: string;

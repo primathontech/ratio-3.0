@@ -9,7 +9,7 @@ import {
   type AuditEntry,
   type AssistantAction,
   type ThemeVersion,
-} from './api';
+} from './common/api';
 import {
   Dialog,
   EmptyState,
@@ -19,19 +19,19 @@ import {
   Spinner,
   ToastProvider,
   useToast,
-} from './ui';
-import { PageEditor } from './pagebuilder';
-import { PagesList } from './pages-list';
+} from './common/ui';
+import { PageEditor } from './features/pages/pagebuilder';
+import { PagesList } from './features/pages/pages-list';
 // Lazy: the code editor pulls in CodeMirror (~200KB) — keep it out of the main bundle so it only
 // loads when a merchant actually opens the theme-code route.
 const ThemeCodeEditor = lazy(() =>
-  import('./theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
+  import('./features/theme/theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
 );
-import { ThemeSettingsPanel } from './theme-settings';
-import { SuperAdmin } from './superadmin';
-import { DashboardHome } from './dashboard';
-import { MerchantLayout, PlatformLayout, ComingSoon } from './app-shell';
-import { AskRatio } from './ask-sophie';
+import { ThemeSettingsPanel } from './features/theme/theme-settings';
+import { SuperAdmin } from './features/admin/superadmin';
+import { DashboardHome } from './features/dashboard/dashboard';
+import { MerchantLayout, PlatformLayout, ComingSoon } from './features/shell/app-shell';
+import { AskRatio } from './features/assistant/ask-sophie';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   StoreDataProvider,
@@ -40,7 +40,7 @@ import {
   useMerchant,
   useStoreData,
   type Me,
-} from './store-context';
+} from './common/store-context';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 

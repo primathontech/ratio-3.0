@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { useTheme } from './theme';
-import { Icon } from './ui';
-import { NAV, type NavItem } from './dashboard-data';
-import { AskRatio } from './ask-sophie';
+import { useTheme } from '../../common/theme';
+import { Icon } from '../../common/ui';
+import { NAV, type NavItem } from '../dashboard/dashboard-data';
+import { AskRatio } from '../assistant/ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
-import { resolveStore, storeSlug, storefrontUrl, useStoreData } from './store-context';
+import { resolveStore, storeSlug, storefrontUrl, useStoreData } from '../../common/store-context';
 
 // The merchant shell for a single store (/stores/:storeId/*): sidebar + top bar + Ask rail, with
 // the route content in <Outlet>. The current store lives in the URL.

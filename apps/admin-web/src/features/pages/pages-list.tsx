@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { Api, PbPageMeta, Store } from './api';
-import { ApiError } from './api';
-import { Icon, Spinner, useToast } from './ui';
+import type { Api, PbPageMeta, Store } from '../../common/api';
+import { ApiError } from '../../common/api';
+import { Icon, Spinner, useToast } from '../../common/ui';
 import { NewPageDialog } from './new-page-dialog';
 import { RowMenu } from './row-menu';
 import { pageName, pageStatus } from './pagebuilder';
