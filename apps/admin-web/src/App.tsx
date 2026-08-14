@@ -28,6 +28,7 @@ const ThemeCodeEditor = lazy(() =>
   import('./features/theme/theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
 );
 import { ThemeSettingsPanel } from './features/theme/theme-settings';
+import { ThemesList } from './features/theme/themes-list';
 import { SuperAdmin } from './features/admin/superadmin';
 import { DashboardHome } from './features/dashboard/dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './features/shell/app-shell';
@@ -185,7 +186,8 @@ function AuthedRoutes() {
         <Route path="/stores/:storeId/editor" element={<FullScreenEditorPage />} />
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="theme" element={<ThemePage />} />
+          <Route path="theme" element={<ThemesListPage />} />
+          <Route path="theme/settings" element={<ThemePage />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -224,8 +226,13 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
-// Theme = brand settings + version history, as tabs (Versions is owner-only). "Edit code" launches
-// the full-screen code editor (its own chrome-less route), Shopify-style.
+// Themes landing — the store's live theme as a card with a preview thumbnail (see themes-list.tsx).
+function ThemesListPage() {
+  const { api, store } = useMerchant();
+  return <ThemesList api={api} store={store} />;
+}
+// Theme customize = brand settings + version history, as tabs (Versions is owner-only). Reached from
+// the Themes list; "Edit code" launches the full-screen code editor (its own chrome-less route).
 function ThemePage() {
   const { api, store } = useMerchant();
   const navigate = useNavigate();
@@ -235,7 +242,14 @@ function ThemePage() {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="head-text">
-          <h1>Theme</h1>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginBottom: 6 }}
+            onClick={() => navigate(`/stores/${storeSlug(store)}/theme`)}
+          >
+            <Icon.back /> Themes
+          </button>
+          <h1>{store.name} theme</h1>
           <p className="muted">Your storefront's brand settings and published versions.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
