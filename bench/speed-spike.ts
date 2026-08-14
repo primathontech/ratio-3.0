@@ -20,7 +20,7 @@ import { S3ObjectStore } from '@ratio/data-objects';
 import { ThemeStore } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
-import { render } from '@ratio/builder-render';
+import { render, clearCache } from '@ratio/builder-render';
 import { renderUntrusted, RenderTimeout, RenderFailed } from '@ratio/builder-render/isolate';
 
 // Capture the origin's structured logs IN-PROCESS, so every request's `evt:render` JSON line
@@ -185,16 +185,34 @@ async function measureB() {
   }));
   const data = { products };
 
-  // Warm the in-process compile cache + JIT so the raw-engine sample is render-only, not first-parse.
+  // Three baselines so the isolate overhead can be DECOMPOSED honestly (spawn+IPC vs parse+build vs
+  // render), rather than attributing it all to worker spawn:
+  //  - engineWarm : in-process, compile cache HIT → render only (what a pooled+warm engine would cost).
+  //  - engineCold : in-process, cache CLEARED each call → a fresh Liquid engine build + template parse
+  //                 + render, but NO worker thread (isolates the parse/build cost).
+  //  - isolate    : a fresh worker_threads spawn + a fresh engine + parse + render + IPC, per call
+  //                 (exactly what the origin does today — isolate.ts spawns per render).
+  // isolate − engineCold ≈ worker spawn + IPC ; engineCold − engineWarm ≈ engine build + parse.
   for (let i = 0; i < WARMUP; i++) await render(PRODUCT_LIST_LIQUID, data, { trusted: false });
-  const engine: number[] = [];
+  const engineWarm: number[] = [];
   for (let i = 0; i < N; i++) {
     const t0 = performance.now();
     await render(PRODUCT_LIST_LIQUID, data, { trusted: false });
-    engine.push(performance.now() - t0);
+    engineWarm.push(performance.now() - t0);
   }
 
-  // Isolate = spawn a fresh worker thread + render inside it, per call (isolate.ts spawns per render).
+  for (let i = 0; i < WARMUP; i++) {
+    clearCache();
+    await render(PRODUCT_LIST_LIQUID, data, { trusted: false });
+  }
+  const engineCold: number[] = [];
+  for (let i = 0; i < N; i++) {
+    clearCache();
+    const t0 = performance.now();
+    await render(PRODUCT_LIST_LIQUID, data, { trusted: false });
+    engineCold.push(performance.now() - t0);
+  }
+
   for (let i = 0; i < WARMUP; i++) await renderUntrusted(PRODUCT_LIST_LIQUID, data);
   const isolate: number[] = [];
   for (let i = 0; i < N; i++) {
@@ -202,7 +220,7 @@ async function measureB() {
     await renderUntrusted(PRODUCT_LIST_LIQUID, data);
     isolate.push(performance.now() - t0);
   }
-  return { engine, isolate };
+  return { engineWarm, engineCold, isolate };
 }
 
 async function measureC() {
@@ -271,7 +289,8 @@ async function main() {
   const sCompose = stats(a.compose);
   const sOther = stats(a.other);
   const sDb = stats(a.dbTenant);
-  const sEngine = stats(b.engine);
+  const sEngineWarm = stats(b.engineWarm);
+  const sEngineCold = stats(b.engineCold);
   const sIsolate = stats(b.isolate);
   const sBase = stats(c.baseline);
   const sWith = stats(c.withRunaway);
@@ -283,12 +302,13 @@ async function main() {
   );
   console.log('-'.repeat(90));
   printRow('A. MISS render total (ms)', sTotal);
-  printRow('A.   ├─ bundle (S3 load)', sBundle);
+  printRow('A.   ├─ bundle (S3 load, post-warm=LRU)', sBundle);
   printRow('A.   ├─ compose (render)', sCompose);
   printRow('A.   ├─ db_tenant', sDb);
   printRow('A.   └─ other (shell/nav/http)', sOther);
-  printRow('B. isolate render (worker/call)', sIsolate);
-  printRow('B. raw engine render (in-proc)', sEngine);
+  printRow('B. isolate (spawn+build+parse+render)', sIsolate);
+  printRow('B. engine COLD (build+parse, no worker)', sEngineCold);
+  printRow('B. engine WARM (render only, cached)', sEngineWarm);
   printRow('C. legit 20x — NO runaway', sBase);
   printRow('C. legit 20x — WITH runaway', sWith);
   console.log('-'.repeat(90));
@@ -302,11 +322,23 @@ async function main() {
       `other ${f2(sOther.mean)}ms (${f2((sOther.mean / totMean) * 100)}%)`
   );
   console.log('  note: Date.now() ms granularity — sub-ms phases quantise to 0/1ms.');
-
-  console.log('\nB. isolate spawn overhead (per-render worker cold-start):');
   console.log(
-    `  isolate p50 ${f2(sIsolate.p50)}ms − raw-engine p50 ${f2(sEngine.p50)}ms = ` +
-      `~${f2(sIsolate.p50 - sEngine.p50)}ms spawn cost per render.`
+    '  note: "bundle" post-warmup is an in-proc LRU hit (immutable, hash-keyed), not S3 I/O.'
+  );
+
+  console.log(
+    '\nB. per-section isolate overhead, DECOMPOSED (what worker-pooling would amortize):'
+  );
+  console.log(
+    `  isolate p50 ${f2(sIsolate.p50)}ms − engineCold p50 ${f2(sEngineCold.p50)}ms = ` +
+      `~${f2(sIsolate.p50 - sEngineCold.p50)}ms worker spawn + IPC`
+  );
+  console.log(
+    `  engineCold p50 ${f2(sEngineCold.p50)}ms − engineWarm p50 ${f2(sEngineWarm.p50)}ms = ` +
+      `~${f2(sEngineCold.p50 - sEngineWarm.p50)}ms fresh engine build + template parse`
+  );
+  console.log(
+    `  engineWarm p50 ${f2(sEngineWarm.p50)}ms = the actual Liquid render (a pooled warm worker's cost)`
   );
 
   console.log('\nC. co-tenant safety (runaway in flight vs not):');
