@@ -529,9 +529,6 @@
 .app-shell {
   grid-template-columns: 1fr;
 }
-.sidebar {
-  display: none;
-}
 .sa-grid {
   grid-template-columns: 1fr;
 }
@@ -581,9 +578,6 @@
 @media (min-width: 64rem) {
   .app-shell {
     grid-template-columns: 248px minmax(0, 1fr);
-  }
-  .sidebar {
-    display: flex;
   }
   .sa-grid {
     grid-template-columns: minmax(0, 1fr) 340px;
