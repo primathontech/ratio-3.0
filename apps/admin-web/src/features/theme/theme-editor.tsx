@@ -236,7 +236,12 @@ export function ThemeCodeEditor({
       return true;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        toast('This theme was changed elsewhere. Reload to get the latest before saving.', 'error');
+        // Keep the buffer (dirty stays true) so the user can copy their edits out; Refresh replaces it
+        // with the latest, so warn before they lose work.
+        toast(
+          'This theme was changed elsewhere. Copy any edits you want to keep, then Refresh to load the latest.',
+          'error'
+        );
         return false;
       }
       toast((e as Error).message, 'error');

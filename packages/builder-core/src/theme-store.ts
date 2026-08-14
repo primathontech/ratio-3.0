@@ -108,7 +108,9 @@ export class ThemeStore {
     try {
       await client.query('BEGIN');
       // Serialize concurrent saves of this theme on its row; the S3 read+write happen inside the lock,
-      // so the re-read sees any earlier committed save.
+      // so the re-read sees any earlier committed save. lock_timeout bounds how long a contended save
+      // waits for the lock (a stuck peer fails its waiters fast instead of piling up connections).
+      await client.query("SET LOCAL lock_timeout = '5s'");
       const locked = await client.query('SELECT 1 FROM theme WHERE id = $1 FOR UPDATE', [
         ref.themeId,
       ]);
@@ -117,10 +119,14 @@ export class ThemeStore {
       if (current !== opts.expectedRevision)
         throw new DraftConflict(opts.expectedRevision, current);
       await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
-      await client.query('COMMIT');
+      // The put is the authoritative, durable write. This transaction changed no Postgres rows — COMMIT
+      // only releases the row lock (which also releases when the connection is torn down) — so a COMMIT
+      // failure can't lose the draft. Swallow it rather than report a durable save as an error, which
+      // would strand the client on a stale revision and spuriously 409 its retry.
+      await client.query('COMMIT').catch(() => {});
       return { hash };
     } catch (e) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw e;
     } finally {
       client.release();

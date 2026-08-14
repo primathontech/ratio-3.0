@@ -783,6 +783,11 @@ export function createApp(
       files?: ThemeFiles;
       revision?: string;
     };
+    // The editor always sends the revision it loaded; require it so a malformed/omitted body fails
+    // loud (400) instead of silently falling through to a blind last-write-wins save. GET /draft (or
+    // scaffold) supplies the current revision.
+    if (typeof body.revision !== 'string')
+      return c.json({ error: 'revision is required to save a draft' }, 400);
     await ensureStoreTheme(id);
     // The editor sends the full composed tree (base ⊕ overrides) plus the revision it loaded; store
     // only the delta from the base (untouched files keep tracking base updates) and reject the save if
