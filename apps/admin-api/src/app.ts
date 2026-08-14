@@ -767,7 +767,9 @@ export function createApp(
     const id = c.req.param('id');
     const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles };
     await ensureStoreTheme(id);
-    const { hash } = await themes.saveDraft({ themeId: mainThemeId(id) }, body.files ?? {});
+    // The editor sends the full composed tree (base ⊕ overrides); store only the delta from the base
+    // so untouched files keep tracking base updates.
+    const { hash } = await themes.saveOverrides({ themeId: mainThemeId(id) }, body.files ?? {});
     c.set('auditTenant', id);
     return c.json({ ok: true, hash });
   });

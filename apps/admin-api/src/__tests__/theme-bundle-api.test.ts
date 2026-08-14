@@ -111,20 +111,33 @@ after(async () => {
   await pool.end();
 });
 
-test('draft save then preview round-trips base ⊕ overrides for the derived theme', async () => {
-  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'index.liquid': 'HELLO', 'header.liquid': 'H' },
-  });
-  assert.strictEqual(save.status, 200);
-  assert.strictEqual(((await save.json()) as { ok: boolean }).ok, true);
+test('draft save stores only the delta from base (base ⊕ overrides), not a full copy', async () => {
+  // Adopt the base, then read the full composed tree the editor works with.
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const composed = (
+    (await (await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)).json()) as {
+      files: Record<string, string>;
+    }
+  ).files;
 
-  const view = await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice);
-  assert.strictEqual(view.status, 200);
-  const files = ((await view.json()) as { files: Record<string, string> }).files;
-  // GET draft returns base ⊕ overrides: the saved overrides win, and the base's files come through.
-  assert.strictEqual(files['index.liquid'], 'HELLO');
-  assert.strictEqual(files['header.liquid'], 'H');
-  assert.ok(files['layout/theme.liquid'], 'the base layout composes in');
+  // The merchant changes ONE section and saves the whole composed tree back.
+  const edited = { ...composed, 'sections/hero.liquid': '<section>MINE</section>' };
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, { files: edited });
+  assert.strictEqual(save.status, 200);
+
+  // GET draft = base ⊕ overrides: the edit wins, untouched base files still compose in.
+  const view = (
+    (await (await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)).json()) as {
+      files: Record<string, string>;
+    }
+  ).files;
+  assert.strictEqual(view['sections/hero.liquid'], '<section>MINE</section>');
+  assert.ok(view['layout/theme.liquid'], 'the base layout still composes in');
+
+  // The stored OVERRIDES are ONLY the delta — just the one edited section, not a full base copy.
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {
+    'sections/hero.liquid': '<section>MINE</section>',
+  });
 });
 
 test('owner publishes → 200 with version 1 and the tenant live pointer moves', async () => {

@@ -24,6 +24,23 @@ export function composeTheme(base: ThemeFiles, overrides: ThemeFiles): ThemeFile
   return out;
 }
 
+// The inverse of composeTheme: given the immutable base and the FULL theme the editor sees, compute
+// the minimal OVERRIDES bundle — only changed/added files, plus a `_deletes` manifest for base files
+// the merchant removed — so untouched files keep tracking the base. Guarantees
+// composeTheme(base, diffFromBase(base, full)) === full.
+export function diffFromBase(base: ThemeFiles, full: ThemeFiles): ThemeFiles {
+  const overrides: ThemeFiles = {};
+  for (const [path, content] of Object.entries(full)) {
+    if (path === DELETES_MANIFEST) continue; // recomputed below — never trust an incoming manifest
+    if (base[path] !== content) overrides[path] = content; // changed vs base, or new
+  }
+  const deletes = Object.keys(base)
+    .filter((p) => !(p in full))
+    .sort();
+  if (deletes.length) overrides[DELETES_MANIFEST] = JSON.stringify(deletes);
+  return overrides;
+}
+
 function parseDeletes(raw: string | undefined): string[] {
   if (raw == null) return [];
   try {

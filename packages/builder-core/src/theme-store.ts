@@ -4,7 +4,7 @@
 // Publish records the version + flips the store's live pointer (Postgres); loadLiveCompiled is the
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
-import { composeTheme } from './theme-compose';
+import { composeTheme, diffFromBase } from './theme-compose';
 import { tenantTag } from './tags';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
@@ -86,6 +86,15 @@ export class ThemeStore {
   async deleteDraft(ref: ThemeRef): Promise<void> {
     assertThemeId(ref.themeId);
     await this.objects.delete(draftKey(ref.themeId));
+  }
+
+  // Save the theme from the FULL composed tree the editor works with (base ⊕ overrides), storing only
+  // the delta from the base — changed/added files + a `_deletes` manifest for base files the merchant
+  // removed. This keeps untouched files tracking base updates instead of shadowing the base with a
+  // full per-store copy. The inverse of readComposed; a root theme (no base) stores the whole tree.
+  async saveOverrides(ref: ThemeRef, full: ThemeFiles): Promise<{ hash: string }> {
+    const base = await this.loadBaseSource(ref.themeId);
+    return this.saveDraft(ref, diffFromBase(base, full));
   }
 
   // Freeze the current draft into immutable, content-addressed source + compiled bundles. The draft
