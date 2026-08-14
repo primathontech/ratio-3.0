@@ -275,7 +275,11 @@ function ThemePage() {
           )}
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => navigate(`/stores/${storeSlug(store)}/themes/${store.id}/editor`)}
+            onClick={() =>
+              navigate(`/stores/${storeSlug(store)}/themes/${store.id}/editor`, {
+                state: { fromApp: true },
+              })
+            }
           >
             Edit code
           </button>
@@ -315,8 +319,12 @@ function FullScreenEditorPage() {
   const { api, stores, me } = useStoreData();
   const { storeId, themeId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const store = resolveStore(stores, storeId);
   if (!store) return <Navigate to="/" replace />;
+  // Prefer real "go back" (list vs settings, wherever the user came from), but only when we opened
+  // the editor from within the app — a deep-linked editor URL falls back to the theme's page.
+  const cameFromApp = (location.state as { fromApp?: boolean } | null)?.fromApp;
   return (
     <ErrorBoundary>
       <Suspense
@@ -331,7 +339,7 @@ function FullScreenEditorPage() {
           store={store}
           isLocal={!!me?.isLocal}
           onBack={() =>
-            window.history.length > 1
+            cameFromApp
               ? navigate(-1)
               : navigate(`/stores/${storeSlug(store)}/themes/${themeId ?? store.id}`)
           }

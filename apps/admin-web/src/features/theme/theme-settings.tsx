@@ -172,6 +172,7 @@ function Choice<T extends string>({
         <button
           key={o}
           className={value === o ? 'ts-choice on' : 'ts-choice'}
+          aria-pressed={value === o}
           onClick={() => onChange(o)}
         >
           {icons?.[o]}
@@ -213,6 +214,7 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
         <button
           key={key}
           className={value === key ? 'ts-font on' : 'ts-font'}
+          aria-pressed={value === key}
           onClick={() => onChange(key)}
         >
           <span className="ts-font-ag" style={{ fontFamily: FONT_STACK[key] }}>
@@ -344,7 +346,9 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
     setTheme((t) => ({ ...(t ?? {}), headingFont: v, bodyFont: v }));
   }
   function applyPreset(p: Preset) {
-    setTheme({ ...p.theme });
+    // Content width has no control, so a preset must not change it — keep whatever the theme already
+    // has, otherwise the width would shift silently with nothing in the change summary.
+    setTheme((t) => ({ ...p.theme, container: t?.container ?? p.theme.container }));
   }
 
   const changes = useMemo(() => {
@@ -395,6 +399,7 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
                 <button
                   key={p.id}
                   className={activePreset?.id === p.id ? 'ts-preset on' : 'ts-preset'}
+                  aria-pressed={activePreset?.id === p.id}
                   onClick={() => applyPreset(p)}
                 >
                   <span className="ts-preset-head">
@@ -418,6 +423,7 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
                   className={
                     r.color.toLowerCase() === c.toLowerCase() ? 'ts-swatch on' : 'ts-swatch'
                   }
+                  aria-pressed={r.color.toLowerCase() === c.toLowerCase()}
                   style={{ background: c }}
                   aria-label={c}
                   onClick={() => set('color', c)}

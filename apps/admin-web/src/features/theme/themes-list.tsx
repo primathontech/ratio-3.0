@@ -169,7 +169,11 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => navigate(`/stores/${slug}/themes/${store.id}/editor`)}
+              onClick={() =>
+                navigate(`/stores/${slug}/themes/${store.id}/editor`, {
+                  state: { fromApp: true },
+                })
+              }
             >
               Edit code
             </button>
