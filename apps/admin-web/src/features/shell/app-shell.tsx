@@ -27,6 +27,8 @@ export function MerchantLayout() {
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [storePickerOpen, setStorePickerOpen] = useState(false);
+  // Below lg the sidebar is a slide-in drawer (see layout.css); this drives it open/closed.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -34,17 +36,20 @@ export function MerchantLayout() {
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
-  // Focus the main region on navigation so keyboard/SR users aren't stranded (WCAG 2.4.3).
+  // Focus the main region on navigation so keyboard/SR users aren't stranded (WCAG 2.4.3); also
+  // close the mobile sidebar drawer once a nav choice lands.
   useEffect(() => {
     mainRef.current?.focus();
+    setSidebarOpen(false);
   }, [location.pathname]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen((o) => !o);
-      } else if (e.key === 'Escape' && narrow) {
-        setAskOpen(false);
+      } else if (e.key === 'Escape') {
+        setSidebarOpen(false);
+        if (narrow) setAskOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -93,7 +98,10 @@ export function MerchantLayout() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} aria-hidden />
+      )}
+      <aside className={sidebarOpen ? 'sidebar open' : 'sidebar'}>
         <button
           className="sidebar-brand"
           aria-haspopup={multiStore ? 'dialog' : undefined}
@@ -141,6 +149,14 @@ export function MerchantLayout() {
 
       <div className="main-area">
         <header className="appbar">
+          <button
+            className="sidebar-toggle"
+            aria-label="Open menu"
+            aria-expanded={sidebarOpen}
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Icon.menu size={20} />
+          </button>
           <div className="right">
             <button
               className="cmdk-trigger"

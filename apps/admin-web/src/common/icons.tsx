@@ -29,6 +29,7 @@ export const Icon = {
   moon: ({ size }: IconProps) =>
     svg(<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />, size),
   plus: ({ size }: IconProps) => svg(<path d="M12 5v14M5 12h14" />, size),
+  menu: ({ size }: IconProps) => svg(<path d="M4 6h16M4 12h16M4 18h16" />, size),
   external: ({ size }: IconProps) =>
     svg(
       <>
