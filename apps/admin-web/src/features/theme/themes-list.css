@@ -8,6 +8,7 @@
 /* Live theme card: preview panel | details */
 .theme-live {
   display: flex;
+  flex-direction: column;
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
@@ -15,9 +16,9 @@
 }
 .theme-live-preview {
   flex: none;
-  width: 460px;
+  width: auto;
   background: var(--surface-2);
-  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   padding: 24px;
   display: flex;
   align-items: flex-end;
@@ -226,14 +227,14 @@
   font-size: 12px;
 }
 
-@media (max-width: 860px) {
+@media (min-width: 48rem) {
   .theme-live {
-    flex-direction: column;
+    flex-direction: row;
   }
   .theme-live-preview {
-    width: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+    width: 460px;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
   }
 }
 
