@@ -44,7 +44,9 @@ export async function ensureDefaultBaseTheme(
     if (latest && latest.source_hash === wantHash) {
       // The default content already matches the latest base version. Ensure THIS object store holds
       // the frozen bytes (a fresh store won't) by re-freezing them under the SAME version — bundles
-      // are content-addressed, so this rewrites the same keys and cuts no new version.
+      // are content-addressed, so this rewrites the same keys and cuts no new version. We check only
+      // the SOURCE bytes: the base is never a live theme, so nothing reads its compiled bundle, and a
+      // missing compiled blob for the base is inert. Re-freezing rewrites both regardless.
       if (!(await store.loadSource(latest.source_hash))) {
         await store.saveDraft({ themeId: DEFAULT_BASE_THEME_ID }, files);
         await store.freezeBundles({ themeId: DEFAULT_BASE_THEME_ID }, { compile: opts.compile });

@@ -320,6 +320,13 @@ export function createApp(
   // BaseTheme content-addressed); a no-op without a bundle store configured.
   async function ensureStoreTheme(tenantId: string): Promise<void> {
     if (!themes) return;
+    // Hot path: once the store's theme row already tracks a base, this is a guaranteed no-op — skip it
+    // before touching the global base-provisioning advisory lock, so editor autosaves across all
+    // tenants don't serialize through one mutex.
+    const { rows } = await pool.query('SELECT base_theme_id FROM theme WHERE id = $1', [
+      mainThemeId(tenantId),
+    ]);
+    if (rows[0]?.base_theme_id) return;
     const base = await ensureDefaultBaseTheme(themes, { compile: identityCompile });
     await themes.ensureTheme(tenantId, mainThemeId(tenantId), 'Theme', base);
   }
@@ -524,7 +531,9 @@ export function createApp(
     await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
     // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides), so it
     // opens in the code editor tracking base updates instead of a self-contained copy. Best-effort.
-    await ensureStoreTheme(tenantId).catch(() => {});
+    await ensureStoreTheme(tenantId).catch((e) => {
+      console.error('ensureStoreTheme failed for', tenantId, e);
+    });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
