@@ -20,16 +20,11 @@ import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
-import {
-  ThemeStore as BundleThemeStore,
-  defaultBundleTheme,
-  renderThemePage,
-  StubResolver,
-} from '@ratio/builder-core';
+import { ThemeStore as BundleThemeStore, renderThemePage, StubResolver } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { scaffoldStorefront } from '@ratio/builder-core';
+import { scaffoldStorefront, ensureDefaultBaseTheme } from '@ratio/builder-core';
 import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
 import { FONTS, BASE_SIZE, RADIUS, CONTAINER, type ThemeTokens } from '@ratio/builder-core';
@@ -319,6 +314,23 @@ export function createApp(
   // only an absent option falls back to the module-scoped one (null when S3 is unconfigured).
   const themes = opts.bundleThemes !== undefined ? opts.bundleThemes : bundleThemes;
 
+  // Create a store's working bundle theme adopting the shared Default base (base ⊕ overrides): the
+  // base provides the default files via composition, so a new store keeps only its own overrides —
+  // no per-store copy of the default theme. Idempotent (ensureTheme is create-only, ensureDefault-
+  // BaseTheme content-addressed); a no-op without a bundle store configured.
+  async function ensureStoreTheme(tenantId: string): Promise<void> {
+    if (!themes) return;
+    // Hot path: once the store's theme row exists, this is a guaranteed no-op — ensureTheme is
+    // create-only, so it can never change an existing row's base. Skip before touching the global
+    // base-provisioning advisory lock, so editor autosaves across all tenants don't serialize through
+    // one mutex. Checking existence (not base_theme_id) also lets a legacy baseless root theme
+    // converge to the fast path instead of re-provisioning forever.
+    const { rows } = await pool.query('SELECT 1 FROM theme WHERE id = $1', [mainThemeId(tenantId)]);
+    if (rows[0]) return;
+    const base = await ensureDefaultBaseTheme(themes, { compile: identityCompile });
+    await themes.ensureTheme(tenantId, mainThemeId(tenantId), 'Theme', base);
+  }
+
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
   // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
   // gets a much tighter budget because each call fans out to several Anthropic requests.
@@ -517,6 +529,11 @@ export function createApp(
     // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
     // pages in the editor.
     await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
+    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides), so it
+    // opens in the code editor tracking base updates instead of a self-contained copy. Best-effort.
+    await ensureStoreTheme(tenantId).catch((e) => {
+      console.error('ensureStoreTheme failed for', tenantId, e);
+    });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
@@ -757,12 +774,11 @@ export function createApp(
   app.put('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as {
-      files?: ThemeFiles;
-      base?: { themeId: string; version: number };
-    };
-    await themes.ensureTheme(id, mainThemeId(id), 'Theme', body.base);
-    const { hash } = await themes.saveDraft({ themeId: mainThemeId(id) }, body.files ?? {});
+    const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles };
+    await ensureStoreTheme(id);
+    // The editor sends the full composed tree (base ⊕ overrides); store only the delta from the base
+    // so untouched files keep tracking base updates.
+    const { hash } = await themes.saveOverrides({ themeId: mainThemeId(id) }, body.files ?? {});
     c.set('auditTenant', id);
     return c.json({ ok: true, hash });
   });
@@ -774,19 +790,18 @@ export function createApp(
     return c.json({ files });
   });
 
-  // Seed the working theme with a default starter (folders + a working home/collection/product page)
-  // when it has none yet, so the code editor opens populated instead of empty. Member-writable; a
-  // no-op (returns the existing draft) once the theme has files.
+  // Ensure the working theme exists so the code editor opens populated instead of empty. Adopts the
+  // shared Default base (base ⊕ overrides) — the base supplies the default files via composition, so
+  // there's no per-store copy. Member-writable; a no-op (returns the existing theme) once it exists.
   app.post('/stores/:id/theme/bundle/scaffold', requireMembership, async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const id = c.req.param('id');
-    // Gate on the COMPOSED theme (base ⊕ overrides), matching GET /draft — so a base-backed theme
-    // with zero overrides is NOT treated as empty and overwritten with the placeholder default.
+    // Gate on the COMPOSED theme (base ⊕ overrides), matching GET /draft — so an already-adopted
+    // theme (base + zero overrides) is not re-created.
     const existing = await themes.readComposed({ themeId: mainThemeId(id) });
     if (Object.keys(existing).length > 0) return c.json({ files: existing, seeded: false });
-    const files = defaultBundleTheme();
-    await themes.ensureTheme(id, mainThemeId(id));
-    await themes.saveDraft({ themeId: mainThemeId(id) }, files);
+    await ensureStoreTheme(id);
+    const files = await themes.readComposed({ themeId: mainThemeId(id) });
     c.set('auditTenant', id);
     return c.json({ files, seeded: true });
   });

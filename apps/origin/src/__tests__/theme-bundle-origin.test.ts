@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ThemeStore, tenantTag } from '@ratio/builder-core';
+import { ThemeStore, tenantTag, ensureDefaultBaseTheme } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { app } from '../index';
@@ -32,6 +32,8 @@ const T5 = 'themebundle_o5';
 const THEME5 = 'themebundle_o5_main';
 const T6 = 'themebundle_o6';
 const THEME6 = 'themebundle_o6_main';
+const T7 = 'themebundle_o7';
+const THEME7 = 'themebundle_o7_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -44,10 +46,10 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [T, T2, T3, T4, T5, T6])
-    await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [T, T2, T3, T4, T5, T6, T7])
+    await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
   ]);
@@ -67,6 +69,9 @@ before(async () => {
   );
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Data Bundle', 'active')", [
     T6,
+  ]);
+  await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Base Adopt', 'active')", [
+    T7,
   ]);
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
@@ -133,13 +138,25 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME6 }, { compile: (s) => s });
+
+  // A store that ADOPTS the shared Default base and overrides ONE section (its hero). The origin must
+  // render the BASE's own sections (header, footer) alongside the merchant's OVERRIDE (hero) on a real
+  // page — the OFCE-601 P0 acceptance: base + one merchant-edited Liquid section, end-to-end.
+  const base = await ensureDefaultBaseTheme(store, { compile: (s) => s });
+  await store.ensureTheme(T7, THEME7, 'Store', { themeId: base.themeId, version: base.version });
+  await store.saveDraft(
+    { themeId: THEME7 },
+    { 'sections/hero.liquid': '<section class="mine"><h1>MERCHANT {{ heading }}</h1></section>' }
+  );
+  await store.publish({ themeId: THEME7 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6])
+  // The shared library base (library-default / _library) is left in place — a persistent fixture.
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5, T6])
+  for (const id of [T, T2, T3, T4, T5, T6, T7])
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
@@ -231,3 +248,27 @@ test('a data-sourced page carries its data tags in x-surrogate-keys', { skip }, 
   // The resolver's collection tag rides along so a collection change purges this page (D2).
   assert.ok(keys.includes('col:summer'), `expected col:summer in surrogate keys, got: ${keys}`);
 });
+
+test(
+  'OFCE-601 P0: a base-adopting store renders base sections + one override section end-to-end',
+  { skip },
+  async () => {
+    const res = await call('/', edge({ 'x-ratio-tenant': T7 }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+    assert.ok(res.headers.get('x-theme-version'), 'served a published version');
+    const body = await res.text();
+    assert.match(body, /^<!doctype html>/);
+    // Sections from the shared library BASE render (the store didn't touch them)...
+    assert.match(body, /class="site-header"/, 'base header section composes in');
+    assert.match(body, /class="site-footer"/, 'base footer section composes in');
+    // ...alongside the merchant's OVERRIDE section, which replaced the base hero and still binds the
+    // base template's data through the sandbox isolate.
+    assert.match(body, /<section class="mine"><h1>MERCHANT Welcome to your store<\/h1><\/section>/);
+    assert.doesNotMatch(
+      body,
+      /class="hero"/,
+      'the override replaced the base hero, not appended to it'
+    );
+  }
+);

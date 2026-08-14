@@ -6,7 +6,7 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../app';
-import { ThemeStore } from '@ratio/builder-core';
+import { ThemeStore, DEFAULT_BASE_THEME_ID } from '@ratio/builder-core';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 
@@ -42,7 +42,8 @@ function memStore(): ObjectStore & { clear: () => void } {
 }
 
 const objects = memStore();
-const app = createApp(verify, { bundleThemes: new ThemeStore(objects) });
+const store = new ThemeStore(objects);
+const app = createApp(verify, { bundleThemes: store });
 // A second app with NO bundle store wired — exercises the 503 gate.
 const appNoStore = createApp(verify, { bundleThemes: null });
 
@@ -77,6 +78,8 @@ async function cleanup() {
   await pool.query('DELETE FROM theme WHERE id = $1', [MAIN]);
   await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
+  // The shared Default base (library-default / _library) is left in place — a persistent, idempotent
+  // fixture that adoption re-freezes on demand; deleting it would race other suites that also adopt it.
 }
 
 before(async () => {
@@ -92,7 +95,9 @@ before(async () => {
   );
 });
 beforeEach(async () => {
-  objects.clear();
+  // Reset this store's theme rows and wipe the object bytes between tests (so one test's draft/version
+  // can't leak into the next). The shared base's DB rows survive, so the next adoption re-freezes its
+  // bytes on demand (ensureDefaultBaseTheme self-heals a fresh store) and composes over a real base.
   await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [MAIN]);
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [ID]);
   await pool.query(
@@ -100,24 +105,39 @@ beforeEach(async () => {
     [ID]
   );
   await pool.query('DELETE FROM theme WHERE id = $1', [MAIN]);
+  objects.clear();
 });
 after(async () => {
   await cleanup();
   await pool.end();
 });
 
-test('draft save then preview round-trips base ⊕ overrides for the derived theme', async () => {
-  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'index.liquid': 'HELLO', 'header.liquid': 'H' },
-  });
-  assert.strictEqual(save.status, 200);
-  assert.strictEqual(((await save.json()) as { ok: boolean }).ok, true);
+test('draft save stores only the delta from base (base ⊕ overrides), not a full copy', async () => {
+  // Adopt the base, then read the full composed tree the editor works with.
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const composed = (
+    (await (await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)).json()) as {
+      files: Record<string, string>;
+    }
+  ).files;
 
-  const view = await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice);
-  assert.strictEqual(view.status, 200);
-  assert.deepStrictEqual(((await view.json()) as { files: Record<string, string> }).files, {
-    'index.liquid': 'HELLO',
-    'header.liquid': 'H',
+  // The merchant changes ONE section and saves the whole composed tree back.
+  const edited = { ...composed, 'sections/hero.liquid': '<section>MINE</section>' };
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, { files: edited });
+  assert.strictEqual(save.status, 200);
+
+  // GET draft = base ⊕ overrides: the edit wins, untouched base files still compose in.
+  const view = (
+    (await (await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)).json()) as {
+      files: Record<string, string>;
+    }
+  ).files;
+  assert.strictEqual(view['sections/hero.liquid'], '<section>MINE</section>');
+  assert.ok(view['layout/theme.liquid'], 'the base layout still composes in');
+
+  // The stored OVERRIDES are ONLY the delta — just the one edited section, not a full base copy.
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {
+    'sections/hero.liquid': '<section>MINE</section>',
   });
 });
 
@@ -186,18 +206,56 @@ test('a member (non-owner) can save/preview a draft but cannot publish or rollba
   assert.strictEqual(rb.status, 403);
 });
 
-test('scaffold seeds a default starter theme when empty, and is a no-op once files exist', async () => {
+test('scaffold adopts the shared Default base (base ⊕ overrides), not a per-store copy', async () => {
   const first = await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
   assert.strictEqual(first.status, 200);
   const body1 = (await first.json()) as { files: Record<string, string>; seeded: boolean };
   assert.strictEqual(body1.seeded, true);
-  assert.ok(body1.files['layout/theme.liquid'], 'seeds a layout');
-  assert.ok(body1.files['templates/index.json'], 'seeds a home template');
+  // The composed theme has the default files — supplied by the base, not copied per-store.
+  assert.ok(body1.files['layout/theme.liquid'], 'composed theme has a layout (from the base)');
+  assert.ok(
+    body1.files['templates/index.json'],
+    'composed theme has a home template (from the base)'
+  );
 
-  // Second call: the theme already has files → returns them, does not re-seed.
+  // Adoption: the store theme tracks the shared base, and keeps NO per-store copy (overrides empty).
+  const { rows } = await pool.query<{ base_theme_id: string | null }>(
+    'SELECT base_theme_id FROM theme WHERE id = $1',
+    [MAIN]
+  );
+  assert.strictEqual(rows[0].base_theme_id, DEFAULT_BASE_THEME_ID, 'theme tracks the base');
+  assert.deepStrictEqual(
+    await store.readDraft({ themeId: MAIN }),
+    {},
+    'no per-store copy — overrides are empty'
+  );
+
+  // Second call: the theme already exists → no re-adopt.
   const second = await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
   const body2 = (await second.json()) as { seeded: boolean };
   assert.strictEqual(body2.seeded, false);
+});
+
+test('a legacy baseless theme (no base) can still save a draft and keeps its baseless identity', async () => {
+  // Back-compat: a theme row that predates base adoption (base_theme_id NULL, a self-contained root
+  // theme) must keep working. ensureStoreTheme skips it (the row already exists) and never forces it
+  // onto the shared base — ensureTheme is create-only. A baseless theme stores the whole tree as its
+  // "overrides" (diff from an empty base), so the save round-trips exactly what the editor sent.
+  await store.ensureTheme(ID, MAIN, 'Theme');
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { 'a.liquid': 'legacy' },
+  });
+  assert.strictEqual(save.status, 200);
+  const { rows } = await pool.query<{ base_theme_id: string | null }>(
+    'SELECT base_theme_id FROM theme WHERE id = $1',
+    [MAIN]
+  );
+  assert.strictEqual(
+    rows[0].base_theme_id,
+    null,
+    'a legacy root theme keeps its baseless identity'
+  );
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), { 'a.liquid': 'legacy' });
 });
 
 test('preview renders a page to HTML through the theme render path (layout + section + data)', async () => {
