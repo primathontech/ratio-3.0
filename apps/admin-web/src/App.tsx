@@ -1,37 +1,28 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { createApi, type Api, type Store } from './common/api';
 import { EmptyState, ErrorBoundary, Icon, Spinner, ToastProvider, useToast } from './common/ui';
-import { PageEditor } from './features/pages/pagebuilder';
-import { PagesList } from './features/pages/pages-list';
-// Lazy: the code editor pulls in CodeMirror (~200KB) — keep it out of the main bundle so it only
-// loads when a merchant actually opens the theme-code route.
-const ThemeCodeEditor = lazy(() =>
-  import('./features/theme/theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
-);
-import { ThemeSettingsPanel } from './features/theme/theme-settings';
-import { ThemeVersionsPanel } from './features/theme/theme-versions-panel';
-import { ThemesList } from './features/theme/themes-list';
 import { CreateStoreDialog } from './features/stores/create-store-dialog';
-import { DangerPanel } from './features/stores/danger-panel';
-import { CommercePanel } from './features/commerce/commerce-panel';
-import { AgentAccessPanel } from './features/access/agent-access-panel';
-import { AuditPanel } from './features/audit/audit-panel';
-import { DomainsPanel } from './features/domains/domains-panel';
-import { PageHeader } from './common/page-header';
-import { SuperAdmin } from './features/admin/superadmin';
-import { DashboardHome } from './features/dashboard/dashboard';
-import { MerchantLayout, PlatformLayout, ComingSoon } from './features/shell/app-shell';
+import { MerchantLayout, PlatformLayout } from './features/shell/app-shell';
 import { AskRatio } from './features/assistant/ask-sophie';
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
+import { StoreDataProvider, type Me } from './common/store-context';
+import { ThemePage } from './routes/theme-page';
+import { FullScreenEditorPage } from './routes/full-screen-editor-page';
+import { PagesPage } from './routes/pages-page';
 import {
-  StoreDataProvider,
-  storeSlug,
-  resolveStore,
-  useMerchant,
-  useStoreData,
-  type Me,
-} from './common/store-context';
+  AccessPage,
+  AuditPage,
+  CommercePage,
+  ComingSoonPage,
+  DangerPage,
+  DomainsPage,
+  HomePage,
+  RequireAdmin,
+  RoleRedirect,
+  SuperAdminPage,
+  ThemesListPage,
+} from './routes/route-pages';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -188,215 +179,6 @@ function AuthedRoutes() {
       {dialog}
     </StoreDataProvider>
   );
-}
-
-// Bare "/" (and any unknown path) → the right home for the role.
-function RoleRedirect() {
-  const { stores, me } = useStoreData();
-  if (me?.isPlatformAdmin) return <Navigate to="/admin" replace />;
-  return <Navigate to={`/stores/${storeSlug(stores[0])}`} replace />;
-}
-
-function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { me } = useStoreData();
-  if (!me?.isPlatformAdmin) return <Navigate to="/" replace />;
-  return <>{children}</>;
-}
-
-/* Route elements: thin wrappers that pull api + the resolved store from context (or the store list
-   for the platform view) and render the real panel. */
-function SuperAdminPage() {
-  const { stores, me, openCreate } = useStoreData();
-  return <SuperAdmin stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
-}
-function HomePage() {
-  const { store } = useMerchant();
-  return <DashboardHome storeName={store.name} />;
-}
-// Themes landing — the store's live theme as a card with a preview thumbnail (see themes-list.tsx).
-function ThemesListPage() {
-  const { api, store } = useMerchant();
-  return <ThemesList api={api} store={store} />;
-}
-// Theme customize = brand settings + version history, as tabs (Versions is owner-only). Reached from
-// the Themes list; "Edit code" launches the full-screen code editor (its own chrome-less route).
-function ThemePage() {
-  const { api, store } = useMerchant();
-  const navigate = useNavigate();
-  const owner = store.role === 'owner';
-  const [tab, setTab] = useState<'settings' | 'versions'>('settings');
-  return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <PageHeader
-        title={
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {store.name} theme <span className="theme-pill">Live</span>
-          </span>
-        }
-        description={
-          store.host ? (
-            <>
-              Brand, typography and layout ·{' '}
-              <a href={`https://${store.host}`} target="_blank" rel="noreferrer">
-                {store.host} ↗
-              </a>
-            </>
-          ) : (
-            'Brand, typography and layout for your storefront.'
-          )
-        }
-        onBack={() => navigate(`/stores/${storeSlug(store)}/themes`)}
-        backLabel="Themes"
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {store.host && (
-            <a
-              className="btn btn-ghost btn-sm"
-              href={`https://${store.host}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              View store ↗
-            </a>
-          )}
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() =>
-              navigate(`/stores/${storeSlug(store)}/themes/${store.id}/editor`, {
-                state: { fromApp: true },
-              })
-            }
-          >
-            Edit code
-          </button>
-        </div>
-      </PageHeader>
-      {/* Only owners have a second view (Versions), so the tab strip is owner-only — a member would
-          otherwise see a lone, pointless "Settings" tab. */}
-      {owner && (
-        <div className="seg" style={{ alignSelf: 'flex-start' }}>
-          <button
-            className={tab === 'settings' ? 'on' : ''}
-            aria-pressed={tab === 'settings'}
-            onClick={() => setTab('settings')}
-          >
-            Settings
-          </button>
-          <button
-            className={tab === 'versions' ? 'on' : ''}
-            aria-pressed={tab === 'versions'}
-            onClick={() => setTab('versions')}
-          >
-            Versions
-          </button>
-        </div>
-      )}
-      {tab === 'versions' && owner ? (
-        <ThemeVersionsPanel api={api} store={store} />
-      ) : (
-        <ThemeSettingsPanel api={api} store={store} />
-      )}
-    </div>
-  );
-}
-// The full-screen code editor route: resolves the store from the URL (it's outside MerchantLayout, so
-// there's no useMerchant context) and renders the IDE with a back button to the Theme page.
-function FullScreenEditorPage() {
-  const { api, stores, me } = useStoreData();
-  const { storeId, themeId } = useParams();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const store = resolveStore(stores, storeId);
-  if (!store) return <Navigate to="/" replace />;
-  // Prefer real "go back" (list vs settings, wherever the user came from), but only when we opened
-  // the editor from within the app — a deep-linked editor URL falls back to the theme's page.
-  const cameFromApp = (location.state as { fromApp?: boolean } | null)?.fromApp;
-  return (
-    <ErrorBoundary>
-      <Suspense
-        fallback={
-          <div className="center-pad">
-            <Spinner />
-          </div>
-        }
-      >
-        <ThemeCodeEditor
-          api={api}
-          store={store}
-          isLocal={!!me?.isLocal}
-          onBack={() =>
-            cameFromApp
-              ? navigate(-1)
-              : navigate(`/stores/${storeSlug(store)}/themes/${themeId ?? store.id}`)
-          }
-        />
-      </Suspense>
-    </ErrorBoundary>
-  );
-}
-function PagesPage() {
-  const { api, store } = useMerchant();
-  const { me } = useStoreData();
-  const [editing, setEditing] = useState<{ path: string; isNew: boolean; title?: string } | null>(
-    null
-  );
-  if (editing)
-    return (
-      <PageEditor
-        api={api}
-        store={store}
-        path={editing.path}
-        isNew={editing.isNew}
-        isLocal={!!me?.isLocal}
-        initialTitle={editing.title}
-        onBack={() => setEditing(null)}
-      />
-    );
-  return (
-    <PagesList
-      api={api}
-      store={store}
-      onOpen={(path, isNew, title) => setEditing({ path, isNew, title })}
-    />
-  );
-}
-function DomainsPage() {
-  const { api, store } = useMerchant();
-  return <DomainsPanel api={api} store={store} />;
-}
-function CommercePage() {
-  const { api, store } = useMerchant();
-  return <CommercePanel api={api} store={store} />;
-}
-function AccessPage() {
-  const { api, store } = useMerchant();
-  return <AgentAccessPanel api={api} store={store} />;
-}
-function AuditPage() {
-  const { api, store } = useMerchant();
-  return <AuditPanel api={api} store={store} />;
-}
-function DangerPage() {
-  const { api, store } = useMerchant();
-  const { reload } = useStoreData();
-  const navigate = useNavigate();
-  return (
-    <DangerPanel
-      api={api}
-      store={store}
-      onDeleted={() => {
-        reload();
-        navigate('/');
-      }}
-    />
-  );
-}
-function ComingSoonPage() {
-  const { store } = useMerchant();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const seg = location.pathname.split('/').pop() || '';
-  return <ComingSoon route={seg} onHome={() => navigate(`/stores/${store.id}`)} />;
 }
 
 function useApi(): Api {
