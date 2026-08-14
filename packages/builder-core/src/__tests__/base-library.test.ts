@@ -7,7 +7,7 @@ import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/clien
 import { S3ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 import { ThemeStore, type CompileFn } from '../theme-store';
-import { ensureDefaultBaseTheme, DEFAULT_BASE_THEME_ID, LIBRARY_TENANT_ID } from '../base-library';
+import { ensureDefaultBaseTheme, DEFAULT_BASE_THEME_ID } from '../base-library';
 import { defaultBundleTheme } from '../default-theme';
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
@@ -24,15 +24,13 @@ const STORE_THEME = 't_lib_store_main';
 const identity: CompileFn = (s) => s;
 let store: ThemeStore;
 
+// Clean up only this test's own store + tenant. The shared Default base (library-default / _library)
+// is a persistent, idempotent fixture — leaving it avoids a cross-file FK-delete race with other
+// suites that also adopt it, and ensureDefaultBaseTheme re-freezes its bytes on demand.
 async function cleanup() {
-  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = ANY($1)', [
-    [STORE_TENANT, LIBRARY_TENANT_ID],
-  ]);
-  // The store theme's base_theme_id FKs the library base, so delete the child first, then the base,
-  // then the tenants.
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [STORE_TENANT]);
   await pool.query('DELETE FROM theme WHERE id = $1', [STORE_THEME]);
-  await pool.query('DELETE FROM theme WHERE id = $1', [DEFAULT_BASE_THEME_ID]);
-  await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [[STORE_TENANT, LIBRARY_TENANT_ID]]);
+  await pool.query('DELETE FROM tenants WHERE id = $1', [STORE_TENANT]);
 }
 
 before(async () => {
@@ -53,18 +51,21 @@ after(async () => {
   await pool.end();
 });
 
-test('publishes the Default base once, idempotently', { skip }, async () => {
+test('publishes the Default base, idempotently', { skip }, async () => {
   const a = await ensureDefaultBaseTheme(store, { compile: identity });
   assert.equal(a.themeId, DEFAULT_BASE_THEME_ID);
-  assert.equal(a.version, 1);
-  // Same default content → same version; no second version row is cut.
-  const b = await ensureDefaultBaseTheme(store, { compile: identity });
-  assert.equal(b.version, 1);
-  const { rows } = await pool.query<{ n: number }>(
+  const before = await pool.query<{ n: number }>(
     'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
     [DEFAULT_BASE_THEME_ID]
   );
-  assert.equal(rows[0].n, 1);
+  // Same default content, bytes present → same version; no new version row is cut.
+  const b = await ensureDefaultBaseTheme(store, { compile: identity });
+  assert.equal(b.version, a.version);
+  const after = await pool.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
+    [DEFAULT_BASE_THEME_ID]
+  );
+  assert.equal(after.rows[0].n, before.rows[0].n);
 });
 
 test(

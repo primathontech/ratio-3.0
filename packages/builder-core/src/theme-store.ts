@@ -81,6 +81,13 @@ export class ThemeStore {
     return { hash: bundleId(files) };
   }
 
+  // Delete the editable draft (discarding unsaved overrides / resetting the theme to base). Published
+  // versions are immutable and content-addressed, so they are untouched.
+  async deleteDraft(ref: ThemeRef): Promise<void> {
+    assertThemeId(ref.themeId);
+    await this.objects.delete(draftKey(ref.themeId));
+  }
+
   // Freeze the current draft into immutable, content-addressed source + compiled bundles. The draft
   // is the theme's OVERRIDES (its changed files): the SOURCE bundle is those overrides (small, for
   // merges), and the COMPILED bundle is compile(base ⊕ overrides) — the full render-ready theme the
