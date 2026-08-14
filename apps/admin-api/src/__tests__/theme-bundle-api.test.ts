@@ -235,6 +235,27 @@ test('scaffold adopts the shared Default base (base ⊕ overrides), not a per-st
   assert.strictEqual(body2.seeded, false);
 });
 
+test('a legacy baseless theme row is left as-is on save, not force-adopted onto the base', async () => {
+  // A theme row created before base adoption existed (base_theme_id NULL, a self-contained root theme).
+  await store.ensureTheme(ID, MAIN, 'Theme');
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { 'a.liquid': 'legacy' },
+  });
+  assert.strictEqual(save.status, 200);
+  // ensureTheme is create-only, so the pre-existing row must stay baseless — the save converges to the
+  // fast path (short-circuit on row existence) instead of trying, and failing, to re-adopt forever.
+  const { rows } = await pool.query<{ base_theme_id: string | null }>(
+    'SELECT base_theme_id FROM theme WHERE id = $1',
+    [MAIN]
+  );
+  assert.strictEqual(
+    rows[0].base_theme_id,
+    null,
+    'a legacy root theme keeps its baseless identity'
+  );
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), { 'a.liquid': 'legacy' });
+});
+
 test('preview renders a page to HTML through the theme render path (layout + section + data)', async () => {
   const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
     files: {
