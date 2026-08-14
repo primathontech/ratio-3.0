@@ -273,9 +273,10 @@ export function createApi(
       req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/rollback`, {
         version,
       }),
-    // Render a page of the (possibly-unsaved) theme to HTML for the live preview. A template/Liquid
-    // error comes back as { error } rather than throwing, so the editor shows it in the preview pane.
-    previewBundle: (id: string, files: ThemeFiles, page = 'index') =>
+    // Render a page of the theme to HTML for the live preview. Pass `files` to render the editor's
+    // in-flight (possibly-unsaved) buffer; omit it to render the saved draft (base ⊕ overrides), e.g.
+    // for a thumbnail. A template/Liquid error comes back as { error } rather than throwing.
+    previewBundle: (id: string, files?: ThemeFiles, page = 'index') =>
       req<{ html?: string; error?: string }>('POST', `/stores/${id}/theme/bundle/preview`, {
         files,
         page,

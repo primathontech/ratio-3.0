@@ -28,6 +28,7 @@ const ThemeCodeEditor = lazy(() =>
   import('./features/theme/theme-editor').then((m) => ({ default: m.ThemeCodeEditor }))
 );
 import { ThemeSettingsPanel } from './features/theme/theme-settings';
+import { ThemesList } from './features/theme/themes-list';
 import { SuperAdmin } from './features/admin/superadmin';
 import { DashboardHome } from './features/dashboard/dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './features/shell/app-shell';
@@ -225,46 +226,10 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
-// Themes landing — lists the store's themes (one working theme per store today). Each opens Customize
-// (brand settings + versions) or the full-screen code editor.
+// Themes landing — the store's live theme as a card with a preview thumbnail (see themes-list.tsx).
 function ThemesListPage() {
-  const { store } = useMerchant();
-  const navigate = useNavigate();
-  const slug = storeSlug(store);
-  return (
-    <div className="fade-in" style={{ maxWidth: 900 }}>
-      <div className="page-head">
-        <div className="head-text">
-          <h1>Themes</h1>
-          <p className="muted">
-            Your storefront's themes — customize the settings or edit the code.
-          </p>
-        </div>
-      </div>
-      <div
-        className="card"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-          <strong>{store.name} theme</strong>
-          <span className="muted" style={{ fontSize: 13 }}>
-            Current live theme
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button className="btn btn-sm" onClick={() => navigate(`/stores/${slug}/theme/settings`)}>
-            Customize
-          </button>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => navigate(`/stores/${slug}/editor`)}
-          >
-            Edit code
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  const { api, store } = useMerchant();
+  return <ThemesList api={api} store={store} />;
 }
 // Theme customize = brand settings + version history, as tabs (Versions is owner-only). Reached from
 // the Themes list; "Edit code" launches the full-screen code editor (its own chrome-less route).
