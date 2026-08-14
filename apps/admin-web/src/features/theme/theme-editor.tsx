@@ -198,6 +198,7 @@ export function ThemeCodeEditor({
   }
 
   function deleteFile(path: string) {
+    const idx = openTabs.indexOf(path);
     const nextTabs = openTabs.filter((p) => p !== path);
     setFiles((f) => {
       const next = { ...f };
@@ -206,7 +207,9 @@ export function ThemeCodeEditor({
     });
     setOpenTabs(nextTabs);
     setPreviewTab((prev) => (prev === path ? null : prev));
-    setSelected((s) => (s === path ? (nextTabs[0] ?? null) : s));
+    setSelected((s) =>
+      s === path ? (nextTabs.length ? nextTabs[Math.min(idx, nextTabs.length - 1)] : null) : s
+    );
     setDirty(true);
   }
 
@@ -400,7 +403,7 @@ export function ThemeCodeEditor({
                   openTabs={openTabs}
                   selected={selected}
                   previewTab={previewTab}
-                  onSelect={setSelected}
+                  onSelect={openFile}
                   onClose={closeTab}
                   onPin={pinTab}
                 />
