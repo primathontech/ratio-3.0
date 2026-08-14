@@ -289,6 +289,14 @@
   margin: 4px 0 0;
   color: var(--muted);
 }
+.page-head-titlerow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-head-back {
+  flex: none;
+}
 .crumb {
   display: inline-flex;
   align-items: center;

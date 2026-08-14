@@ -163,13 +163,13 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
           <div className="theme-live-actions">
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => navigate(`/stores/${slug}/themes/settings`)}
+              onClick={() => navigate(`/stores/${slug}/themes/${store.id}`)}
             >
               Customize
             </button>
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => navigate(`/stores/${slug}/editor`)}
+              onClick={() => navigate(`/stores/${slug}/themes/${store.id}/editor`)}
             >
               Edit code
             </button>
