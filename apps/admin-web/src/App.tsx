@@ -185,7 +185,8 @@ function AuthedRoutes() {
         <Route path="/stores/:storeId/editor" element={<FullScreenEditorPage />} />
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="theme" element={<ThemePage />} />
+          <Route path="theme" element={<ThemesListPage />} />
+          <Route path="theme/settings" element={<ThemePage />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -224,8 +225,49 @@ function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
 }
-// Theme = brand settings + version history, as tabs (Versions is owner-only). "Edit code" launches
-// the full-screen code editor (its own chrome-less route), Shopify-style.
+// Themes landing — lists the store's themes (one working theme per store today). Each opens Customize
+// (brand settings + versions) or the full-screen code editor.
+function ThemesListPage() {
+  const { store } = useMerchant();
+  const navigate = useNavigate();
+  const slug = storeSlug(store);
+  return (
+    <div className="fade-in" style={{ maxWidth: 900 }}>
+      <div className="page-head">
+        <div className="head-text">
+          <h1>Themes</h1>
+          <p className="muted">
+            Your storefront's themes — customize the settings or edit the code.
+          </p>
+        </div>
+      </div>
+      <div
+        className="card"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <strong>{store.name} theme</strong>
+          <span className="muted" style={{ fontSize: 13 }}>
+            Current live theme
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <button className="btn btn-sm" onClick={() => navigate(`/stores/${slug}/theme/settings`)}>
+            Customize
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => navigate(`/stores/${slug}/editor`)}
+          >
+            Edit code
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+// Theme customize = brand settings + version history, as tabs (Versions is owner-only). Reached from
+// the Themes list; "Edit code" launches the full-screen code editor (its own chrome-less route).
 function ThemePage() {
   const { api, store } = useMerchant();
   const navigate = useNavigate();
@@ -235,7 +277,14 @@ function ThemePage() {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div className="page-head" style={{ marginBottom: 0 }}>
         <div className="head-text">
-          <h1>Theme</h1>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ marginBottom: 6 }}
+            onClick={() => navigate(`/stores/${storeSlug(store)}/theme`)}
+          >
+            <Icon.back /> Themes
+          </button>
+          <h1>{store.name} theme</h1>
           <p className="muted">Your storefront's brand settings and published versions.</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
