@@ -21,3 +21,4 @@ export * from './theme-compose';
 export * from './default-theme';
 export * from './theme-versions';
 export * from './tags';
+export * from './base-library';
