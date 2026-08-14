@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Api, Store, ThemeVersion } from '../../common/api';
 import { Field, Icon, Spinner, useToast } from '../../common/ui';
 
-// Connect the store's commerce backend (its GoKwik merchant id). Without it, the page builder can't
-// list collections/products ("connect the store's commerce backend"). Mirrors the theme panel.
+// Publish + rollback the store's theme versions. Publishing snapshots the whole store as an immutable
+// version and takes it live; rollback moves the live pointer to any earlier version (non-destructive).
 export function ThemeVersionsPanel({ api, store }: { api: Api; store: Store }) {
   const toast = useToast();
   const [published, setPublished] = useState<number | null>(null);
