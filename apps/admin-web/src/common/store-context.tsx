@@ -36,11 +36,11 @@ export function useMerchant(): MerchantCtx {
   return useOutletContext<MerchantCtx>();
 }
 
-// The URL identifier for a store: its primary domain (readable, unique), falling back to the
-// internal id only for stores that don't have a domain yet. So /stores/acme.ratiodev.in/theme,
-// not /stores/t_acme_1a2b.
+// The URL identifier for a store: its internal id — stable across domain changes, always present,
+// and URL-safe. So /stores/t_acme_1a2b/themes, not /stores/acme.ratiodev.in/themes. resolveStore
+// still accepts an old domain-based URL, so existing links keep working.
 export function storeSlug(store: Store): string {
-  return store.host ?? store.id;
+  return store.id;
 }
 
 // The live storefront URL to open in a browser. In local dev (RATIO_LOCAL / me.isLocal) the store

@@ -73,7 +73,7 @@ function MobilePreview({ preview }: { preview: Preview }) {
 export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const navigate = useNavigate();
   const slug = storeSlug(store);
-  const domain = store.host ?? slug;
+  const domain = store.host ?? store.id;
   const live = storefrontUrl(store, false);
   const toast = useToast();
   const [preview, setPreview] = useState<Preview>({ status: 'loading', html: '' });
