@@ -123,28 +123,33 @@
   height: 100%;
   overflow: hidden;
 }
-/* Content area under the top bar: main scrolls on its own; the Ask rail takes a column on wide
-   screens (>=1200px) and becomes an overlay drawer below that (see the media queries). */
+/* Content area under the top bar: main scrolls on its own. Mobile-first: the Ask rail is an overlay
+   drawer by default, and becomes an in-page column at the 2xl breakpoint (96rem/1536px, matching
+   ASK_RATIO_WIDTH in app-shell). All media queries are min-width only (Tailwind scale). */
 .shell-body {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
-@media (min-width: 1200px) {
+.ask-rail {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(360px, 88vw);
+  z-index: 40;
+  box-shadow: var(--shadow-lg);
+}
+@media (min-width: 96rem) {
   .shell-body.with-ask {
     grid-template-columns: minmax(0, 1fr) 344px;
   }
-}
-@media (max-width: 1199px) {
   .ask-rail {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(360px, 88vw);
-    z-index: 40;
-    box-shadow: var(--shadow-lg);
+    position: static;
+    width: auto;
+    box-shadow: none;
+    z-index: auto;
   }
 }
 .ask-backdrop {
