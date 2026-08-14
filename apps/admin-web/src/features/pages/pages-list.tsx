@@ -3,7 +3,7 @@ import type { Api, PbPageMeta, Store } from '../../common/api';
 import { ApiError } from '../../common/api';
 import { Icon, Spinner, useToast } from '../../common/ui';
 import { NewPageDialog } from './new-page-dialog';
-import { RowMenu } from './row-menu';
+import { RowMenu } from '../../common/row-menu';
 import { pageName, pageStatus } from './pagebuilder';
 
 const statusPill = (p: PbPageMeta) => (!p.published ? 'pill' : 'pill pill-ok');
