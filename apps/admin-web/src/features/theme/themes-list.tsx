@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { Api, Store } from '../../common/api';
 import { Icon, Spinner, useToast } from '../../common/ui';
 import { RowMenu } from '../../common/row-menu';
+import { PageHeader } from '../../common/page-header';
 import { storeSlug, storefrontUrl } from '../../common/store-context';
 import { ThemeDrafts } from './theme-drafts';
 import './themes-list.css';
@@ -94,16 +95,26 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
   }, [api, store.id]);
 
   return (
-    <div className="fade-in themes-page">
-      <div className="themes-head">
-        <div className="head-text">
-          <h1>Themes</h1>
-          <p className="muted">
+    <div className="fade-in">
+      <PageHeader
+        title="Themes"
+        description={
+          <>
             One theme is live on <span className="themes-domain">{domain}</span>. Customize it or
             edit the code.
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      >
+        <button
+          className="btn btn-ghost"
+          onClick={() => toast('Import theme — pick a .zip or connect a repository', 'ok')}
+        >
+          Import theme
+        </button>
+        <button className="btn btn-primary" onClick={() => toast('Add theme — coming soon', 'ok')}>
+          <Icon.plus /> Add theme
+        </button>
+      </PageHeader>
 
       <section className="theme-live">
         <div className="theme-live-preview">
@@ -152,7 +163,7 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
           <div className="theme-live-actions">
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => navigate(`/stores/${slug}/theme/settings`)}
+              onClick={() => navigate(`/stores/${slug}/themes/settings`)}
             >
               Customize
             </button>

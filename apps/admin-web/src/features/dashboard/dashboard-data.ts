@@ -329,7 +329,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { label: 'Pages', route: 'pages', real: true },
       // Themes landing lists the store's themes; each opens Customize (settings) or Edit code.
-      { label: 'Themes', route: 'theme', hint: 'G T', real: true },
+      { label: 'Themes', route: 'themes', hint: 'G T', real: true },
       { label: 'Domains', route: 'domains', real: true },
     ],
   },

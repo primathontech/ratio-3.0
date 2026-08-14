@@ -186,8 +186,8 @@ function AuthedRoutes() {
         <Route path="/stores/:storeId/editor" element={<FullScreenEditorPage />} />
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
-          <Route path="theme" element={<ThemesListPage />} />
-          <Route path="theme/settings" element={<ThemePage />} />
+          <Route path="themes" element={<ThemesListPage />} />
+          <Route path="themes/settings" element={<ThemePage />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -245,7 +245,7 @@ function ThemePage() {
           <button
             className="btn btn-ghost btn-sm"
             style={{ marginBottom: 6 }}
-            onClick={() => navigate(`/stores/${storeSlug(store)}/theme`)}
+            onClick={() => navigate(`/stores/${storeSlug(store)}/themes`)}
           >
             <Icon.back /> Themes
           </button>
@@ -310,7 +310,7 @@ function FullScreenEditorPage() {
           api={api}
           store={store}
           isLocal={!!me?.isLocal}
-          onBack={() => navigate(`/stores/${storeSlug(store)}/theme`)}
+          onBack={() => navigate(`/stores/${storeSlug(store)}/themes`)}
         />
       </Suspense>
     </ErrorBoundary>

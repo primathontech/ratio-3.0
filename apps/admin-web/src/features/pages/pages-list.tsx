@@ -4,6 +4,7 @@ import { ApiError } from '../../common/api';
 import { Icon, Spinner, useToast } from '../../common/ui';
 import { NewPageDialog } from './new-page-dialog';
 import { RowMenu } from '../../common/row-menu';
+import { PageHeader } from '../../common/page-header';
 import { pageName, pageStatus } from './pagebuilder';
 
 const statusPill = (p: PbPageMeta) => (!p.published ? 'pill' : 'pill pill-ok');
@@ -53,15 +54,14 @@ export function PagesList({
 
   return (
     <>
-      <div className="page-head">
-        <div className="head-text">
-          <h1>Pages</h1>
-          <p>Every page on your storefront. Select one to edit its sections.</p>
-        </div>
+      <PageHeader
+        title="Pages"
+        description="Every page on your storefront. Select one to edit its sections."
+      >
         <button className="btn btn-primary" onClick={() => setShowNew(true)}>
           <Icon.plus /> New page
         </button>
-      </div>
+      </PageHeader>
 
       <div className="card" style={{ overflow: 'hidden' }}>
         {!pages ? (

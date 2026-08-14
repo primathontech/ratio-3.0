@@ -1,11 +1,5 @@
 /* Themes landing — live-theme card (adapted from the reference themes-library UX; design tokens
    mapped to the Ratio admin DS: --line, --surface-2, --accent(-weak), --success(-weak), --text(-3)). */
-.themes-page {
-  max-width: 1040px;
-}
-.themes-head {
-  margin-bottom: 20px;
-}
 .themes-domain {
   color: var(--text);
   font-weight: 500;
@@ -17,7 +11,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface);
 }
 .theme-live-preview {
   flex: none;
@@ -293,6 +287,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
+  background: var(--surface);
 }
 .draft-row {
   display: flex;
@@ -300,6 +295,7 @@
   gap: 14px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 .draft-row:last-child {
   border-bottom: 0;
@@ -360,7 +356,7 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--surface);
 }
 .draft-card-thumb {
   height: 150px;
