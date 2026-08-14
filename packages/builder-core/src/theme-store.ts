@@ -81,13 +81,6 @@ export class ThemeStore {
     return { hash: bundleId(files) };
   }
 
-  // Delete the editable draft (discarding unsaved overrides / resetting the theme to base). Published
-  // versions are immutable and content-addressed, so they are untouched.
-  async deleteDraft(ref: ThemeRef): Promise<void> {
-    assertThemeId(ref.themeId);
-    await this.objects.delete(draftKey(ref.themeId));
-  }
-
   // Save the theme from the FULL composed tree the editor works with (base ⊕ overrides), storing only
   // the delta from the base — changed/added files + a `_deletes` manifest for base files the merchant
   // removed. This keeps untouched files tracking base updates instead of shadowing the base with a
