@@ -55,17 +55,39 @@ interface Pooled {
 
 const all = new Set<Pooled>();
 const idle: Pooled[] = [];
-const waiters: ((p: Pooled) => void)[] = [];
+interface Waiter {
+  resolve: (p: Pooled) => void;
+  reject: (e: Error) => void;
+}
+const waiters: Waiter[] = [];
 let everSpawned = 0; // test/observability counter
 
-function spawn(): Promise<Pooled> {
-  everSpawned++;
-  const worker = new Worker(WORKER, {
+// How a worker is constructed. A seam ONLY so a test can force a construction failure (the
+// resource-exhaustion path below); production always uses the default. Not a way to swap the render
+// sandbox — the default is the only real factory.
+type WorkerFactory = () => Worker;
+const defaultWorkerFactory: WorkerFactory = () =>
+  new Worker(WORKER, {
     workerData: { limits: UNTRUSTED_LIMITS, allowlist: FILTER_ALLOWLIST },
     // Self-contained .mjs — start it with a clean execArgv so it never inherits the parent's --import
     // preloads (tsx loader, test bootstrap): an isolation boundary, and those only add startup cost.
     execArgv: [],
   });
+let makeWorker: WorkerFactory = defaultWorkerFactory;
+
+function spawn(): Promise<Pooled> {
+  let worker: Worker;
+  try {
+    worker = makeWorker();
+  } catch (e) {
+    // Thread creation can fail synchronously under resource exhaustion (EMFILE/ENOMEM). Return a
+    // rejected promise so every caller (acquire, and destroy's replacement loop inside a timer/event
+    // callback) degrades to "fail this render" — never a synchronous throw that crashes the origin.
+    return Promise.reject(
+      new RenderFailed('worker spawn failed: ' + (e instanceof Error ? e.message : String(e)))
+    );
+  }
+  everSpawned++;
   const p: Pooled = { worker, ready: false, job: null, onReady: null, onSpawnError: null };
   all.add(p);
 
@@ -123,18 +145,19 @@ function destroy(p: Pooled): void {
   const i = idle.indexOf(p);
   if (i >= 0) idle.splice(i, 1);
   void p.worker.terminate();
+  // Freed a slot → spawn replacements for anyone waiting. If a replacement fails to construct, REJECT
+  // that waiter (fail fast) rather than dropping it — a queued render has no timer yet (the wall-clock
+  // starts only after acquire resolves), so a dropped waiter would hang forever.
   while (waiters.length > 0 && all.size < MAX_WORKERS) {
     const give = waiters.shift()!;
-    spawn().then(give, () => {
-      /* spawn failure: the caller's render rejects via its own path; drop the waiter */
-    });
+    spawn().then(give.resolve, give.reject);
   }
 }
 
 function release(p: Pooled): void {
   const give = waiters.shift();
   if (give) {
-    give(p); // straight to a waiting render — stays ref'd
+    give.resolve(p); // straight to a waiting render — stays ref'd
   } else {
     p.worker.unref(); // idle: don't keep the process alive
     idle.push(p);
@@ -148,7 +171,7 @@ function acquire(): Promise<Pooled> {
     return Promise.resolve(w);
   }
   if (all.size < MAX_WORKERS) return spawn(); // a spinning-up worker stays ref'd until idle
-  return new Promise<Pooled>((resolve) => waiters.push(resolve));
+  return new Promise<Pooled>((resolve, reject) => waiters.push({ resolve, reject }));
 }
 
 // Render UNTRUSTED source in a pooled, isolated worker. Resolves to HTML, or throws RenderTimeout /
@@ -186,4 +209,8 @@ export async function __shutdownRenderPool(): Promise<void> {
   idle.length = 0;
   waiters.length = 0;
   await Promise.all(workers.map((p) => p.worker.terminate()));
+}
+// Test-only: force worker construction to fail (simulate resource exhaustion). Pass null to restore.
+export function __setWorkerFactoryForTest(fn: WorkerFactory | null): void {
+  makeWorker = fn ?? defaultWorkerFactory;
 }

@@ -11,6 +11,7 @@ import {
   RenderFailed,
   __renderPoolStats,
   __shutdownRenderPool,
+  __setWorkerFactoryForTest,
 } from '@ratio/builder-render/isolate';
 
 after(async () => {
@@ -68,4 +69,25 @@ test('a runaway is killed by the wall-clock and its worker is replaced — the p
 
   // The pool self-healed: a render after the kill still works (the terminated worker was replaced).
   assert.equal(await renderUntrusted(tpl, { p: { title: 'after' } }), 'after');
+});
+
+test('a worker that fails to construct rejects the render cleanly — no hang, no crash', async () => {
+  await __shutdownRenderPool();
+  // Simulate resource exhaustion (EMFILE/ENOMEM): worker construction throws synchronously. The pool
+  // must degrade to "fail this render" (RenderFailed), never a synchronous throw in a timer/event
+  // callback (which would crash the origin) and never a waiter that hangs forever.
+  __setWorkerFactoryForTest(() => {
+    throw new Error('EMFILE: too many open files');
+  });
+  try {
+    await assert.rejects(
+      () => renderUntrusted('{{ x }}', { x: 1 }),
+      (e: unknown) => e instanceof RenderFailed
+    );
+  } finally {
+    __setWorkerFactoryForTest(null);
+  }
+  // And the pool recovers once construction works again.
+  await __shutdownRenderPool();
+  assert.equal(await renderUntrusted('{{ p.title }}', { p: { title: 'ok' } }), 'ok');
 });
