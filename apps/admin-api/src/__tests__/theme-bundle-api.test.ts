@@ -68,6 +68,18 @@ const call = (
     })
   );
 
+// Save a draft the way the editor does: read the current revision, then PUT with it. Used for the
+// setup saves whose point isn't the concurrency check (the CAS tests below pass revisions explicitly).
+async function putDraft(files: Record<string, string>, headers = alice) {
+  const got = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, headers)
+  ).json()) as { revision: string };
+  return call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, headers, {
+    files,
+    revision: got.revision,
+  });
+}
+
 async function cleanup() {
   await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [MAIN]);
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [ID]);
@@ -123,7 +135,7 @@ test('draft save stores only the delta from base (base ⊕ overrides), not a ful
 
   // The merchant changes ONE section and saves the whole composed tree back.
   const edited = { ...composed, 'sections/hero.liquid': '<section>MINE</section>' };
-  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, { files: edited });
+  const save = await putDraft(edited);
   assert.strictEqual(save.status, 200);
 
   // GET draft = base ⊕ overrides: the edit wins, untouched base files still compose in.
@@ -141,10 +153,77 @@ test('draft save stores only the delta from base (base ⊕ overrides), not a ful
   });
 });
 
-test('owner publishes → 200 with version 1 and the tenant live pointer moves', async () => {
-  await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'index.liquid': 'HELLO' },
+test('a stale draft save is rejected with 409 (optimistic concurrency, no silent clobber)', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const loaded = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    files: Record<string, string>;
+    revision: string;
+  };
+  assert.ok(loaded.revision, 'GET draft returns a revision token');
+
+  // Editor A saves an edit against the revision it loaded → wins.
+  const a = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { ...loaded.files, 'sections/hero.liquid': '<section>A</section>' },
+    revision: loaded.revision,
   });
+  assert.strictEqual(a.status, 200);
+
+  // Editor B, still holding the ORIGINAL revision, saves over A → must be rejected, not silently win.
+  const b = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { ...loaded.files, 'sections/hero.liquid': '<section>B</section>' },
+    revision: loaded.revision,
+  });
+  assert.strictEqual(b.status, 409);
+
+  // A's edit survived; B's was not applied.
+  const now = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    files: Record<string, string>;
+  };
+  assert.strictEqual(now.files['sections/hero.liquid'], '<section>A</section>');
+});
+
+test('a draft save with the current revision succeeds, and the revision advances', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const first = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    files: Record<string, string>;
+    revision: string;
+  };
+  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { ...first.files, 'sections/hero.liquid': '<section>edit</section>' },
+    revision: first.revision,
+  });
+  assert.strictEqual(save.status, 200);
+  const next = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    revision: string;
+  };
+  assert.notStrictEqual(next.revision, first.revision, 'the revision moves after a save');
+
+  // The now-current revision saves cleanly (no false conflict).
+  const again = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { ...first.files, 'sections/hero.liquid': '<section>edit2</section>' },
+    revision: next.revision,
+  });
+  assert.strictEqual(again.status, 200);
+});
+
+test('a draft save without a revision is rejected with 400 (fail loud, no blind write)', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const res = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: { 'sections/hero.liquid': '<section>no-rev</section>' },
+  });
+  assert.strictEqual(res.status, 400);
+});
+
+test('owner publishes → 200 with version 1 and the tenant live pointer moves', async () => {
+  await putDraft({ 'index.liquid': 'HELLO' });
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 200);
   assert.strictEqual(((await pub.json()) as { version: number }).version, 1);
@@ -165,13 +244,9 @@ test('a non-owner cannot save a draft (403) or publish (403)', async () => {
 });
 
 test('owner rolls back to an earlier version → 200 and the pointer moves back', async () => {
-  await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'a.liquid': 'v1' },
-  });
+  await putDraft({ 'a.liquid': 'v1' });
   await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {}); // v1
-  await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'a.liquid': 'v2' },
-  });
+  await putDraft({ 'a.liquid': 'v2' });
   await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {}); // v2
 
   const rb = await call(app, 'POST', `/stores/${ID}/theme/bundle/rollback`, alice, { version: 1 });
@@ -185,18 +260,14 @@ test('owner rolls back to an earlier version → 200 and the pointer moves back'
 });
 
 test('rollback to an unknown version → 404', async () => {
-  await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'a.liquid': 'v1' },
-  });
+  await putDraft({ 'a.liquid': 'v1' });
   await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {}); // v1
   const rb = await call(app, 'POST', `/stores/${ID}/theme/bundle/rollback`, alice, { version: 99 });
   assert.strictEqual(rb.status, 404);
 });
 
 test('a member (non-owner) can save/preview a draft but cannot publish or rollback', async () => {
-  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, carol, {
-    files: { 'a.liquid': 'by-editor' },
-  });
+  const save = await putDraft({ 'a.liquid': 'by-editor' }, carol);
   assert.strictEqual(save.status, 200);
   const view = await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, carol);
   assert.strictEqual(view.status, 200);
@@ -242,9 +313,7 @@ test('a legacy baseless theme (no base) can still save a draft and keeps its bas
   // onto the shared base — ensureTheme is create-only. A baseless theme stores the whole tree as its
   // "overrides" (diff from an empty base), so the save round-trips exactly what the editor sent.
   await store.ensureTheme(ID, MAIN, 'Theme');
-  const save = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
-    files: { 'a.liquid': 'legacy' },
-  });
+  const save = await putDraft({ 'a.liquid': 'legacy' });
   assert.strictEqual(save.status, 200);
   const { rows } = await pool.query<{ base_theme_id: string | null }>(
     'SELECT base_theme_id FROM theme WHERE id = $1',
