@@ -20,7 +20,12 @@ import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { PgThemeStore, ThemeConflict } from '@ratio/builder-core';
-import { ThemeStore as BundleThemeStore, renderThemePage, StubResolver } from '@ratio/builder-core';
+import {
+  ThemeStore as BundleThemeStore,
+  renderThemePage,
+  StubResolver,
+  DraftConflict,
+} from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
@@ -774,20 +779,37 @@ export function createApp(
   app.put('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
     const id = c.req.param('id');
-    const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      files?: ThemeFiles;
+      revision?: string;
+    };
     await ensureStoreTheme(id);
-    // The editor sends the full composed tree (base ⊕ overrides); store only the delta from the base
-    // so untouched files keep tracking base updates.
-    const { hash } = await themes.saveOverrides({ themeId: mainThemeId(id) }, body.files ?? {});
-    c.set('auditTenant', id);
-    return c.json({ ok: true, hash });
+    // The editor sends the full composed tree (base ⊕ overrides) plus the revision it loaded; store
+    // only the delta from the base (untouched files keep tracking base updates) and reject the save if
+    // another editor moved the draft first (409), rather than silently clobbering it.
+    try {
+      const { hash } = await themes.saveOverrides({ themeId: mainThemeId(id) }, body.files ?? {}, {
+        expectedRevision: body.revision,
+      });
+      c.set('auditTenant', id);
+      return c.json({ ok: true, hash });
+    } catch (e) {
+      if (e instanceof DraftConflict)
+        return c.json({ error: 'conflict', currentRevision: e.actual }, 409);
+      throw e;
+    }
   });
 
-  // Preview the working theme: the base composed with the current draft overrides.
+  // Preview the working theme: the base composed with the current draft overrides, plus the revision
+  // token the editor round-trips on save (optimistic concurrency).
   app.get('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
     if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
-    const files = await themes.readComposed({ themeId: mainThemeId(c.req.param('id')) });
-    return c.json({ files });
+    const themeId = mainThemeId(c.req.param('id'));
+    const [files, revision] = await Promise.all([
+      themes.readComposed({ themeId }),
+      themes.draftRevision({ themeId }),
+    ]);
+    return c.json({ files, revision });
   });
 
   // Ensure the working theme exists so the code editor opens populated instead of empty. Adopts the
@@ -798,12 +820,21 @@ export function createApp(
     const id = c.req.param('id');
     // Gate on the COMPOSED theme (base ⊕ overrides), matching GET /draft — so an already-adopted
     // theme (base + zero overrides) is not re-created.
-    const existing = await themes.readComposed({ themeId: mainThemeId(id) });
-    if (Object.keys(existing).length > 0) return c.json({ files: existing, seeded: false });
+    const themeId = mainThemeId(id);
+    const existing = await themes.readComposed({ themeId });
+    if (Object.keys(existing).length > 0)
+      return c.json({
+        files: existing,
+        seeded: false,
+        revision: await themes.draftRevision({ themeId }),
+      });
     await ensureStoreTheme(id);
-    const files = await themes.readComposed({ themeId: mainThemeId(id) });
+    const [files, revision] = await Promise.all([
+      themes.readComposed({ themeId }),
+      themes.draftRevision({ themeId }),
+    ]);
     c.set('auditTenant', id);
-    return c.json({ files, seeded: true });
+    return c.json({ files, seeded: true, revision });
   });
 
   // Live preview: render a page of the theme to HTML (the editor shows it in an iframe). Renders the

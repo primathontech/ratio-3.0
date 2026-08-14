@@ -13,6 +13,21 @@ export interface ThemeRef {
   themeId: string;
 }
 
+// Raised when a draft save's expected revision no longer matches the stored draft — a concurrent
+// editor saved first (BC1 optimistic concurrency). Callers map it to HTTP 409. Revisions are content
+// hashes of the stored overrides bundle.
+export class DraftConflict extends Error {
+  constructor(
+    public expected: string,
+    public actual: string
+  ) {
+    super(
+      `draft was saved concurrently (expected ${expected.slice(0, 12)}, now ${actual.slice(0, 12)})`
+    );
+    this.name = 'DraftConflict';
+  }
+}
+
 // Compile a source tree into the render-ready tree (flatten base+overrides, precompile templates,
 // resolve asset URLs). Injected so the store stays independent of the Liquid engine — the app wires
 // the real compiler; tests can pass a trivial one.
@@ -74,20 +89,63 @@ export class ThemeStore {
     return blob ? unpackBundle(Buffer.from(blob)) : {};
   }
 
-  // Write the whole editable draft as one source bundle; returns its content hash.
-  async saveDraft(ref: ThemeRef, files: ThemeFiles): Promise<{ hash: string }> {
+  // Write the whole editable draft as one source bundle; returns its content hash. With
+  // `expectedRevision`, a compare-and-swap: the theme row is locked, the current draft re-read, and
+  // the write rejected with DraftConflict if it moved since the caller loaded (BC1) — so two editors
+  // can't silently clobber. Omit it (base provisioning, non-editor callers) for last-write-wins.
+  async saveDraft(
+    ref: ThemeRef,
+    files: ThemeFiles,
+    opts: { expectedRevision?: string } = {}
+  ): Promise<{ hash: string }> {
     assertThemeId(ref.themeId);
-    await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
-    return { hash: bundleId(files) };
+    const hash = bundleId(files);
+    if (opts.expectedRevision === undefined) {
+      await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
+      return { hash };
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Serialize concurrent saves of this theme on its row; the S3 read+write happen inside the lock,
+      // so the re-read sees any earlier committed save.
+      const locked = await client.query('SELECT 1 FROM theme WHERE id = $1 FOR UPDATE', [
+        ref.themeId,
+      ]);
+      if (locked.rowCount === 0) throw new Error(`unknown theme '${ref.themeId}'`);
+      const current = bundleId(await this.readDraft(ref));
+      if (current !== opts.expectedRevision)
+        throw new DraftConflict(opts.expectedRevision, current);
+      await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
+      await client.query('COMMIT');
+      return { hash };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  // The current draft's revision token — the content hash of the stored overrides (the empty-bundle
+  // hash when nothing is saved yet). The editor round-trips it so saveOverrides can reject a stale
+  // write; it moves whenever the stored draft's content changes.
+  async draftRevision(ref: ThemeRef): Promise<string> {
+    assertThemeId(ref.themeId);
+    return bundleId(await this.readDraft(ref));
   }
 
   // Save the theme from the FULL composed tree the editor works with (base ⊕ overrides), storing only
   // the delta from the base — changed/added files + a `_deletes` manifest for base files the merchant
   // removed. This keeps untouched files tracking base updates instead of shadowing the base with a
   // full per-store copy. The inverse of readComposed; a root theme (no base) stores the whole tree.
-  async saveOverrides(ref: ThemeRef, full: ThemeFiles): Promise<{ hash: string }> {
+  async saveOverrides(
+    ref: ThemeRef,
+    full: ThemeFiles,
+    opts: { expectedRevision?: string } = {}
+  ): Promise<{ hash: string }> {
     const base = await this.loadBaseSource(ref.themeId);
-    return this.saveDraft(ref, diffFromBase(base, full));
+    return this.saveDraft(ref, diffFromBase(base, full), opts);
   }
 
   // Freeze the current draft into immutable, content-addressed source + compiled bundles. The draft

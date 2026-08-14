@@ -29,6 +29,9 @@ export function ThemeCodeEditor({
 }) {
   const toast = useToast();
   const [files, setFiles] = useState<ThemeFiles>({});
+  // The draft revision last loaded/saved — round-tripped on save so the server rejects (409) a write
+  // that would clobber another editor's newer save. A ref, not state: it never drives rendering.
+  const revisionRef = useRef<string>('');
   const [selected, setSelected] = useState<string | null>(null);
   // Files open as tabs, in the order they were opened.
   const [openTabs, setOpenTabs] = useState<string[]>([]);
@@ -137,12 +140,13 @@ export function ThemeCodeEditor({
       .getBundleDraft(store.id)
       // A brand-new store has no theme files yet — seed a default starter so the editor opens with a
       // working folder structure instead of empty. The seed is persisted server-side (not a dirty edit).
-      .then((f) => (Object.keys(f).length === 0 ? api.scaffoldBundleDraft(store.id) : f))
-      .then((f) => {
+      .then((d) => (Object.keys(d.files).length === 0 ? api.scaffoldBundleDraft(store.id) : d))
+      .then((d) => {
         // Start with no file open — the editor shows the welcome panel until the user picks a file.
-        setFiles(f);
+        setFiles(d.files);
+        revisionRef.current = d.revision;
         setStatus('ready');
-        void runPreview(f, 'index');
+        void runPreview(d.files, 'index');
       })
       .catch((e: unknown) => {
         if (e instanceof ApiError && e.status === 503) {
@@ -226,10 +230,15 @@ export function ThemeCodeEditor({
   async function save(): Promise<boolean> {
     setBusy(true);
     try {
-      await api.saveBundleDraft(store.id, files);
+      const res = await api.saveBundleDraft(store.id, files, revisionRef.current);
+      revisionRef.current = res.hash;
       setDirty(false);
       return true;
     } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        toast('This theme was changed elsewhere. Reload to get the latest before saving.', 'error');
+        return false;
+      }
       toast((e as Error).message, 'error');
       return false;
     } finally {
