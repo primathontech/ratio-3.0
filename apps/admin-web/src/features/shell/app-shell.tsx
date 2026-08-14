@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { UserButton } from '@clerk/clerk-react';
-import { useTheme } from '../../common/theme';
+import { ThemeToggle } from '../../common/theme-toggle';
 import { Icon } from '../../common/ui';
 import { NAV, type NavItem } from '../dashboard/dashboard-data';
 import { AskRatio } from '../assistant/ask-sophie';
@@ -15,10 +15,9 @@ export function MerchantLayout() {
   const { api, stores, me, reload, openCreate } = useStoreData();
   const navigate = useNavigate();
   const location = useLocation();
-  const { resolved, cycle } = useTheme();
 
   const [askOpen, setAskOpen] = useState(
-    typeof window !== 'undefined' ? window.innerWidth >= 1200 : true
+    typeof window !== 'undefined' ? window.innerWidth >= 1536 : true
   );
   const [narrow, setNarrow] = useState(
     typeof window !== 'undefined' ? window.innerWidth < 1200 : false
@@ -157,14 +156,7 @@ export function MerchantLayout() {
               <span className="label">Search or ask Ratio to do something…</span>
               <span className="kbd">⌘K</span>
             </button>
-            <button
-              className="icon-btn"
-              onClick={cycle}
-              aria-label={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              title={resolved === 'dark' ? 'Light' : 'Dark'}
-            >
-              {resolved === 'dark' ? <Icon.sun /> : <Icon.moon />}
-            </button>
+            <ThemeToggle />
             {liveUrl && (
               <a
                 className="btn btn-ghost"
@@ -231,7 +223,6 @@ export function MerchantLayout() {
 export function PlatformLayout() {
   const { stores } = useStoreData();
   const navigate = useNavigate();
-  const { resolved, cycle } = useTheme();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const first = stores[0];
 
@@ -275,14 +266,7 @@ export function PlatformLayout() {
               <span className="label">Search platform…</span>
               <span className="kbd">⌘K</span>
             </button>
-            <button
-              className="icon-btn"
-              onClick={cycle}
-              aria-label={resolved === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-              title={resolved === 'dark' ? 'Light' : 'Dark'}
-            >
-              {resolved === 'dark' ? <Icon.sun /> : <Icon.moon />}
-            </button>
+            <ThemeToggle />
             {first && (
               <a
                 className="btn btn-ghost"

@@ -3,68 +3,19 @@ import { ApiError, type Api, type Store, type ThemeFiles } from '../../common/ap
 import { EmptyState, Icon, Spinner, useToast } from '../../common/ui';
 import { storefrontUrl } from '../../common/store-context';
 import { CodeEditor } from './code-editor';
+import { groupByFolder, languageLabel, THEME_FOLDERS } from './editor-helpers';
+import { EditorTitleBar } from './editor-titlebar';
+import { EditorExplorer } from './editor-explorer';
+import { EditorTabs } from './editor-tabs';
+import { EditorPreview } from './editor-preview';
 import './theme-editor.css';
 
 type Status = 'loading' | 'ready' | 'disabled' | 'error';
 
-// Group flat file paths into one level of folders (like a Shopify theme: sections/, snippets/,
-// templates/, …), with root-level files last. One level covers real theme layouts.
-function groupByFolder(
-  paths: string[]
-): { folder: string; files: { path: string; name: string }[] }[] {
-  const groups = new Map<string, { path: string; name: string }[]>();
-  for (const p of paths) {
-    const slash = p.indexOf('/');
-    const folder = slash === -1 ? '' : p.slice(0, slash);
-    const name = slash === -1 ? p : p.slice(slash + 1);
-    const list = groups.get(folder) ?? [];
-    list.push({ path: p, name });
-    groups.set(folder, list);
-  }
-  return [...groups.entries()]
-    .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)))
-    .map(([folder, files]) => ({
-      folder,
-      files: files.sort((x, y) => x.name.localeCompare(y.name)),
-    }));
-}
-
-// A small VS Code-Seti-style file glyph (text badge + colour class) by extension.
-function fileGlyph(path: string): { text: string; cls: string } {
-  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-  if (ext === 'js' || ext === 'mjs' || ext === 'ts') return { text: 'JS', cls: 'fi-js' };
-  if (ext === 'json') return { text: '{}', cls: 'fi-json' };
-  if (ext === 'css') return { text: '#', cls: 'fi-css' };
-  if (ext === 'html' || ext === 'htm') return { text: '<>', cls: 'fi-html' };
-  if (ext === 'liquid') return { text: '≈', cls: 'fi-liquid' };
-  return { text: '•', cls: 'fi-default' };
-}
-
-// A friendly label for a preview target (a templates/<page>.json name).
-function pageLabel(page: string): string {
-  if (page === 'index') return 'Home';
-  if (page.startsWith('page.')) return `Page: ${page.slice(5)}`;
-  return page.charAt(0).toUpperCase() + page.slice(1);
-}
-
-function languageLabel(path: string): string {
-  const ext = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
-  return (
-    {
-      js: 'JavaScript',
-      mjs: 'JavaScript',
-      ts: 'TypeScript',
-      json: 'JSON',
-      css: 'CSS',
-      liquid: 'Liquid',
-      html: 'HTML',
-    }[ext] ?? 'Plain Text'
-  );
-}
-
 // The merchant theme code editor (OFCE-601): a VS Code-style workbench — activity bar, Explorer, Monaco
-// editor, live preview, status bar — over the store's working bundle theme. `onBack` renders it as a
-// full-screen route (its own chrome-less page); without it, it renders inline.
+// editor, live preview, status bar — over the store's working bundle theme. This is the container: it
+// owns all state and handlers and composes the presentational pieces (title bar, explorer, tabs,
+// preview) from ./editor-*. `onBack` renders it as a full-screen route; without it, inline.
 export function ThemeCodeEditor({
   api,
   store,
@@ -79,6 +30,15 @@ export function ThemeCodeEditor({
   const toast = useToast();
   const [files, setFiles] = useState<ThemeFiles>({});
   const [selected, setSelected] = useState<string | null>(null);
+  // Files open as tabs, in the order they were opened.
+  const [openTabs, setOpenTabs] = useState<string[]>([]);
+  // VS Code-style preview tab: opening a file from the tree reuses this single ephemeral slot instead
+  // of piling up tabs. It becomes permanent (leaves the slot) when double-clicked or edited. null =
+  // no ephemeral tab open.
+  const [previewTab, setPreviewTab] = useState<string | null>(null);
+  // Tree selection is single: either the open file OR a folder the user clicked — never both, and no
+  // folder is selected by default. null = the open file is the highlighted row.
+  const [folderSel, setFolderSel] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>('loading');
   const [errMsg, setErrMsg] = useState('');
   const [dirty, setDirty] = useState(false);
@@ -86,10 +46,11 @@ export function ThemeCodeEditor({
   const [newPath, setNewPath] = useState('');
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // All folders start collapsed (like Shopify's theme editor); the user expands what they need.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(THEME_FOLDERS));
   const [filter, setFilter] = useState('');
-  const [showExplorer, setShowExplorer] = useState(true);
-  const [showSearch, setShowSearch] = useState(false);
+  // Activity bar: one view active at a time, or none — which collapses the sidebar (VS Code-style).
+  const [activeView, setActiveView] = useState<'explorer' | 'search' | null>('explorer');
   const [showPreview, setShowPreview] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewErr, setPreviewErr] = useState('');
@@ -99,6 +60,42 @@ export function ThemeCodeEditor({
   // the file the user just cancelled.
   const addCancelled = useRef(false);
   const canPublish = store.role === 'owner';
+  // Where a new file lands: the selected folder, or the open file's folder, else null (root — the
+  // input then takes a full path). Lets "New file" drop the input right inside that folder.
+  const targetFolder =
+    folderSel ??
+    (selected && selected.includes('/') ? selected.slice(0, selected.indexOf('/')) : null);
+
+  // Open a file from the tree: activate it if already open, otherwise show it in the single preview
+  // slot, replacing whatever ephemeral tab was there (so tree browsing doesn't pile up tabs).
+  function openFile(path: string) {
+    setFolderSel(null); // opening a file moves the single tree selection off any folder
+    setSelected(path);
+    if (openTabs.includes(path)) return;
+    setOpenTabs((tabs) =>
+      previewTab && tabs.includes(previewTab)
+        ? tabs.map((p) => (p === previewTab ? path : p))
+        : [...tabs, path]
+    );
+    setPreviewTab(path);
+  }
+
+  // Pin a tab so it stays open (double-click on the tab, or editing the file) — it leaves the preview
+  // slot and behaves like a normal tab until closed.
+  function pinTab(path: string) {
+    setPreviewTab((prev) => (prev === path ? null : prev));
+  }
+
+  // Close a tab; if it was the active one, fall back to its neighbour (or nothing).
+  function closeTab(path: string) {
+    const idx = openTabs.indexOf(path);
+    const next = openTabs.filter((p) => p !== path);
+    setOpenTabs(next);
+    setPreviewTab((prev) => (prev === path ? null : prev));
+    if (selected === path) {
+      setSelected(next.length ? next[Math.min(idx, next.length - 1)] : null);
+    }
+  }
 
   function toggleFolder(folder: string) {
     setCollapsed((c) => {
@@ -107,6 +104,13 @@ export function ThemeCodeEditor({
       else next.add(folder);
       return next;
     });
+  }
+
+  // Clicking a folder selects it (highlight) and toggles it open/closed — this also clears the file
+  // highlight, so only one row is ever selected.
+  function selectFolder(folder: string) {
+    setFolderSel(folder);
+    toggleFolder(folder);
   }
 
   // Render the given files server-side (the storefront's own render path) into the preview iframe.
@@ -135,8 +139,8 @@ export function ThemeCodeEditor({
       // working folder structure instead of empty. The seed is persisted server-side (not a dirty edit).
       .then((f) => (Object.keys(f).length === 0 ? api.scaffoldBundleDraft(store.id) : f))
       .then((f) => {
+        // Start with no file open — the editor shows the welcome panel until the user picks a file.
         setFiles(f);
-        setSelected((s) => s ?? Object.keys(f).sort()[0] ?? null);
         setStatus('ready');
         void runPreview(f, 'index');
       })
@@ -151,9 +155,17 @@ export function ThemeCodeEditor({
   }, [api, store.id, runPreview]);
   useEffect(load, [load]);
 
+  // Leaving the Search view drops the filter, so the Explorer never shows a filtered tree with no
+  // visible search box.
+  useEffect(() => {
+    if (activeView !== 'search' && filter) setFilter('');
+  }, [activeView, filter]);
+
   function editFile(path: string, content: string) {
     setFiles((f) => ({ ...f, [path]: content }));
     setDirty(true);
+    // Editing a preview tab pins it, so it isn't replaced out from under an unsaved change.
+    setPreviewTab((prev) => (prev === path ? null : prev));
   }
 
   function addFile() {
@@ -163,16 +175,22 @@ export function ThemeCodeEditor({
       setNewPath('');
       return;
     }
-    const path = newPath.trim();
-    if (!path) {
+    const name = newPath.trim();
+    if (!name) {
       setAdding(false);
       return;
     }
+    // Inside a selected folder we know the prefix, so the input took just the filename; at root the
+    // user typed the full path.
+    const path = targetFolder ? `${targetFolder}/${name}` : name;
     if (path in files) {
       toast('That file already exists', 'error');
       return;
     }
     setFiles((f) => ({ ...f, [path]: '' }));
+    // A just-created file opens as a permanent tab (not the ephemeral preview slot).
+    setOpenTabs((tabs) => (tabs.includes(path) ? tabs : [...tabs, path]));
+    setFolderSel(null);
     setSelected(path);
     setNewPath('');
     setAdding(false);
@@ -180,12 +198,15 @@ export function ThemeCodeEditor({
   }
 
   function deleteFile(path: string) {
+    const nextTabs = openTabs.filter((p) => p !== path);
     setFiles((f) => {
       const next = { ...f };
       delete next[path];
       return next;
     });
-    setSelected((s) => (s === path ? null : s));
+    setOpenTabs(nextTabs);
+    setPreviewTab((prev) => (prev === path ? null : prev));
+    setSelected((s) => (s === path ? (nextTabs[0] ?? null) : s));
     setDirty(true);
   }
 
@@ -242,7 +263,9 @@ export function ThemeCodeEditor({
   const shown = filter
     ? allPaths.filter((p) => p.toLowerCase().includes(filter.toLowerCase()))
     : allPaths;
-  const groups = groupByFolder(shown.sort());
+  // Show the full Shopify folder set (empty ones as placeholders) when browsing; while filtering,
+  // only show folders that actually contain a match.
+  const groups = groupByFolder(shown.sort(), filter ? [] : THEME_FOLDERS);
   // Preview targets = the theme's page templates (templates/<page>.json), home first.
   const templatePages = Object.keys(files)
     .filter((p) => p.startsWith('templates/') && p.endsWith('.json'))
@@ -259,41 +282,19 @@ export function ThemeCodeEditor({
 
   return (
     <div className={onBack ? 'wb' : 'wb wb-inline'}>
-      {/* Title bar: navigation + save/publish (VS Code's menu bar sits here; we keep actions). */}
-      <div className="wb-titlebar">
-        <div className="wb-title-left">
-          {onBack && (
-            <button className="btn btn-ghost btn-sm" onClick={onBack}>
-              <Icon.back /> Back
-            </button>
-          )}
-          <span className="wb-title-name">
-            {store.name} — Theme code {dirty && <span className="wb-dirty">●</span>}
-          </span>
-        </div>
-        <div className="row" style={{ gap: 8 }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            onClick={() => setShowPreview((v) => !v)}
-            disabled={!ready}
-          >
-            {showPreview ? 'Hide preview' : 'Show preview'}
-          </button>
-          {url && (
-            <a className="btn btn-ghost btn-sm" href={url} target="_blank" rel="noreferrer">
-              View live <Icon.external />
-            </a>
-          )}
-          <button className="btn btn-sm" onClick={saveDraft} disabled={busy || !dirty || !ready}>
-            Save draft
-          </button>
-          {canPublish && (
-            <button className="btn btn-primary btn-sm" onClick={publish} disabled={busy || !ready}>
-              Publish
-            </button>
-          )}
-        </div>
-      </div>
+      <EditorTitleBar
+        storeName={store.name}
+        dirty={dirty}
+        ready={ready}
+        busy={busy}
+        showPreview={showPreview}
+        liveUrl={url}
+        canPublish={canPublish}
+        onBack={onBack}
+        onTogglePreview={() => setShowPreview((v) => !v)}
+        onSaveDraft={saveDraft}
+        onPublish={publish}
+      />
 
       {status === 'loading' && (
         <div className="wb-center">
@@ -327,229 +328,128 @@ export function ThemeCodeEditor({
             {/* Activity bar */}
             <div className="wb-activitybar">
               <button
-                className={showExplorer ? 'active' : ''}
+                className={activeView === 'explorer' ? 'active' : ''}
                 title="Explorer"
                 aria-label="Explorer"
-                onClick={() => setShowExplorer((v) => !v)}
+                aria-pressed={activeView === 'explorer'}
+                onClick={() => setActiveView((v) => (v === 'explorer' ? null : 'explorer'))}
               >
                 <Icon.files size={22} />
               </button>
               <button
-                className={showSearch ? 'active' : ''}
+                className={activeView === 'search' ? 'active' : ''}
                 title="Search files"
                 aria-label="Search files"
-                onClick={() => setShowSearch((v) => !v)}
+                aria-pressed={activeView === 'search'}
+                onClick={() => setActiveView((v) => (v === 'search' ? null : 'search'))}
               >
                 <Icon.search size={22} />
               </button>
             </div>
 
-            {/* Explorer */}
-            {showExplorer && (
-              <aside className="wb-sidebar">
-                <div className="wb-sidebar-title">
-                  <span>Explorer</span>
-                </div>
-                <div className="wb-ws">
-                  <span className="wb-ws-name">{store.name}</span>
-                  <div className="wb-ws-actions">
-                    <button
-                      className="btn-icon"
-                      title="New file"
-                      aria-label="New file"
-                      onClick={() => {
-                        setAdding(true);
-                        setNewPath('');
-                      }}
-                    >
-                      <Icon.newFile size={15} />
-                    </button>
-                    <button
-                      className="btn-icon"
-                      title="Collapse folders"
-                      aria-label="Collapse folders"
-                      onClick={collapseAll}
-                    >
-                      <Icon.collapseAll size={15} />
-                    </button>
-                  </div>
-                </div>
-
-                {showSearch && (
-                  <input
-                    className="input wb-search"
-                    placeholder="Filter files…"
-                    value={filter}
-                    autoFocus
-                    onChange={(e) => setFilter(e.target.value)}
-                  />
-                )}
-
-                <div className="wb-tree">
-                  {shown.length === 0 ? (
-                    <div className="muted tree-empty">{filter ? 'No matches' : 'No files yet'}</div>
-                  ) : (
-                    <ul className="tree-list">
-                      {groups.map((g) => {
-                        const open = !collapsed.has(g.folder);
-                        return (
-                          <li key={g.folder || '/'}>
-                            {g.folder && (
-                              <button
-                                className="tree-folder"
-                                aria-expanded={open}
-                                onClick={() => toggleFolder(g.folder)}
-                              >
-                                <span className="caret">{open ? '▾' : '▸'}</span>
-                                {g.folder}
-                              </button>
-                            )}
-                            {open && (
-                              <ul className={g.folder ? 'tree-files nested' : 'tree-files'}>
-                                {g.files.map((f) => {
-                                  const glyph = fileGlyph(f.path);
-                                  return (
-                                    <li
-                                      key={f.path}
-                                      className={f.path === selected ? 'active' : ''}
-                                    >
-                                      <button
-                                        className="tree-item"
-                                        onClick={() => setSelected(f.path)}
-                                      >
-                                        <span className={`fi ${glyph.cls}`}>{glyph.text}</span>
-                                        {f.name}
-                                      </button>
-                                      {confirmDelete === f.path ? (
-                                        <span className="row" style={{ gap: 2 }}>
-                                          <button
-                                            className="btn-icon danger"
-                                            aria-label={`Confirm delete ${f.path}`}
-                                            onClick={() => {
-                                              deleteFile(f.path);
-                                              setConfirmDelete(null);
-                                            }}
-                                          >
-                                            <Icon.check />
-                                          </button>
-                                          <button
-                                            className="btn-icon"
-                                            aria-label="Cancel delete"
-                                            onClick={() => setConfirmDelete(null)}
-                                          >
-                                            ✕
-                                          </button>
-                                        </span>
-                                      ) : (
-                                        <button
-                                          className="btn-icon"
-                                          aria-label={`Delete ${f.path}`}
-                                          onClick={() => setConfirmDelete(f.path)}
-                                        >
-                                          <Icon.trash />
-                                        </button>
-                                      )}
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                  {adding && (
-                    <div className="wb-add">
-                      <input
-                        className="input"
-                        placeholder="sections/new.liquid"
-                        value={newPath}
-                        autoFocus
-                        onChange={(e) => setNewPath(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') addFile();
-                          if (e.key === 'Escape') {
-                            addCancelled.current = true;
-                            setAdding(false);
-                          }
-                        }}
-                        onBlur={addFile}
-                      />
-                    </div>
-                  )}
-                </div>
-              </aside>
+            {activeView && (
+              <EditorExplorer
+                storeName={store.name}
+                groups={groups}
+                hasFiles={groups.length > 0}
+                filter={filter}
+                showSearch={activeView === 'search'}
+                onFilterChange={setFilter}
+                collapsed={collapsed}
+                onFolderClick={selectFolder}
+                selected={selected}
+                selectedFolder={folderSel}
+                targetFolder={targetFolder}
+                onSelect={openFile}
+                onNewFile={() => {
+                  setAdding(true);
+                  setNewPath('');
+                  // Make sure the target folder is open so the inline input is visible.
+                  if (targetFolder) {
+                    setCollapsed((c) => {
+                      const n = new Set(c);
+                      n.delete(targetFolder);
+                      return n;
+                    });
+                  }
+                }}
+                onRefresh={load}
+                onCollapseAll={collapseAll}
+                confirmDelete={confirmDelete}
+                onRequestDelete={setConfirmDelete}
+                onConfirmDelete={(path) => {
+                  deleteFile(path);
+                  setConfirmDelete(null);
+                }}
+                onCancelDelete={() => setConfirmDelete(null)}
+                adding={adding}
+                newPath={newPath}
+                onNewPathChange={setNewPath}
+                onAddCommit={addFile}
+                onAddCancel={() => {
+                  addCancelled.current = true;
+                  setAdding(false);
+                }}
+              />
             )}
 
             {/* Editor + preview */}
             <div className="wb-main">
               <div className="wb-editor">
-                {selected && files[selected] !== undefined ? (
-                  <CodeEditor
-                    path={selected}
-                    initialValue={files[selected]}
-                    onChange={(v) => editFile(selected, v)}
-                  />
-                ) : (
-                  <div className="wb-welcome">
-                    <div className="wb-welcome-mark">{'</>'}</div>
-                    <p>Select a file from the Explorer to start editing.</p>
-                    <p className="muted">
-                      Your theme lives in <code>layout/</code>, <code>templates/</code>, and{' '}
-                      <code>sections/</code>. Edits preview live and go live on Publish.
-                    </p>
-                  </div>
-                )}
+                <EditorTabs
+                  openTabs={openTabs}
+                  selected={selected}
+                  previewTab={previewTab}
+                  onSelect={setSelected}
+                  onClose={closeTab}
+                  onPin={pinTab}
+                />
+                <div className="wb-editor-body">
+                  {selected && files[selected] !== undefined ? (
+                    <CodeEditor
+                      path={selected}
+                      initialValue={files[selected]}
+                      onChange={(v) => editFile(selected, v)}
+                    />
+                  ) : (
+                    <div className="wb-welcome">
+                      <svg
+                        className="wb-welcome-mark"
+                        width="52"
+                        height="52"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 8l-4 4 4 4M15 8l4 4-4 4M13.5 6l-3 12" />
+                      </svg>
+                      <p>Select a file from the Explorer to start editing.</p>
+                      <p className="muted">
+                        Your theme lives in <code>layout/</code>, <code>templates/</code>, and{' '}
+                        <code>sections/</code>. Edits preview live and go live on Publish.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {showPreview && (
-                <div className="wb-preview">
-                  <div className="wb-preview-bar">
-                    <span className="muted">Preview{previewing ? ' · rendering…' : ''}</span>
-                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <select
-                        className="wb-preview-page"
-                        aria-label="Preview page"
-                        value={previewPage}
-                        disabled={templatePages.length === 0}
-                        onChange={(e) => {
-                          setPreviewPage(e.target.value);
-                          void runPreview(files, e.target.value);
-                        }}
-                      >
-                        {templatePages.length === 0 ? (
-                          <option value="">No pages</option>
-                        ) : (
-                          templatePages.map((p) => (
-                            <option key={p} value={p}>
-                              {pageLabel(p)}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                      <button
-                        className="btn-icon"
-                        aria-label="Refresh preview"
-                        title="Refresh preview"
-                        onClick={() => runPreview(files, previewPage)}
-                        disabled={previewing}
-                      >
-                        <Icon.refresh size={15} />
-                      </button>
-                    </div>
-                  </div>
-                  {previewErr ? (
-                    <div className="wb-preview-error">{previewErr}</div>
-                  ) : (
-                    <iframe
-                      className="wb-preview-frame"
-                      title="Theme preview"
-                      sandbox=""
-                      srcDoc={previewHtml}
-                    />
-                  )}
-                </div>
+                <EditorPreview
+                  previewing={previewing}
+                  previewErr={previewErr}
+                  previewHtml={previewHtml}
+                  previewPage={previewPage}
+                  templatePages={templatePages}
+                  onPageChange={(page) => {
+                    setPreviewPage(page);
+                    void runPreview(files, page);
+                  }}
+                  onRefresh={() => runPreview(files, previewPage)}
+                />
               )}
             </div>
           </div>
