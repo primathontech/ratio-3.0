@@ -1,70 +1,327 @@
-// Theme Settings: the store's global style knobs (brand colour + a few scale-picked choices).
-// Every option except the brand colour is a fixed scale, so a merchant can't produce an off-brand
-// or broken result. Saving purges the storefront (theme is baked into every cached page).
-import { useCallback, useEffect, useState } from 'react';
+// Theme Settings: the store's global style knobs (brand colour + typography + layout), with a live
+// mock-storefront preview. Every option except the brand colour is a fixed scale (values mirror the
+// backend @ratio/builder-core scales), so a merchant can't produce a broken or off-brand result.
+// Saving purges the storefront (the theme is baked into every cached page).
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { Api, Store, StoreTheme } from '../../common/api';
 import { ApiError } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
+import './theme-settings.css';
 
-const FONT_OPTIONS = [
-  { value: 'system', label: 'System' },
-  { value: 'sans', label: 'Sans' },
-  { value: 'serif', label: 'Serif' },
-  { value: 'rounded', label: 'Rounded' },
-  { value: 'mono', label: 'Mono' },
-];
-const SIZE_OPTIONS = [
-  { value: 's', label: 'Small' },
-  { value: 'm', label: 'Medium' },
-  { value: 'l', label: 'Large' },
-];
-const RADIUS_OPTIONS = [
-  { value: 'square', label: 'Square' },
-  { value: 'soft', label: 'Soft' },
-  { value: 'rounded', label: 'Rounded' },
-];
-const CONTAINER_OPTIONS = [
-  { value: 'narrow', label: 'Narrow' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'wide', label: 'Wide' },
+// CSS values per token value — mirror packages/builder-core/src/storefront.ts so the preview matches
+// what the origin actually renders.
+const FONT_STACK: Record<string, string> = {
+  system: `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`,
+  sans: `'Helvetica Neue',Arial,sans-serif`,
+  serif: `Georgia,'Times New Roman',serif`,
+  rounded: `'Trebuchet MS','Segoe UI',system-ui,sans-serif`,
+  mono: `ui-monospace,'SF Mono',Menlo,monospace`,
+};
+const FONT_LABEL: Record<string, string> = {
+  system: 'System',
+  sans: 'Sans',
+  serif: 'Serif',
+  rounded: 'Rounded',
+  mono: 'Mono',
+};
+const FONT_ORDER = ['system', 'sans', 'serif', 'rounded', 'mono'];
+const SIZE_PX: Record<string, number> = { s: 15, m: 16, l: 18 };
+const SIZE_LABEL: Record<string, string> = { s: 'Small', m: 'Default', l: 'Large' };
+const RADIUS_PX: Record<string, number> = { square: 0, soft: 10, rounded: 18 };
+const RADIUS_LABEL: Record<string, string> = { square: 'Square', soft: 'Soft', rounded: 'Rounded' };
+// Each corner option previews its own shape, so the choice reads at a glance.
+const CORNER_ICON: Record<string, ReactNode> = {
+  square: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="12" rx="0" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
+  soft: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <rect x="2" y="2" width="12" height="12" rx="3.5" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
+  rounded: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  ),
+};
+// Content width has no control (fixed at the default), but the preview still renders at its width.
+const WIDTH_PX: Record<string, number> = { narrow: 960, normal: 1120, wide: 1200 };
+
+// Human labels for the save-bar change summary, in the order they appear in the panel. Heading and
+// body font move together (one typeface), so only the body font drives the "font" line.
+const CHANGE_LABELS: Partial<Record<keyof StoreTheme, string>> = {
+  color: 'brand colour',
+  bodyFont: 'font',
+  baseSize: 'base text size',
+  radius: 'corner roundness',
+};
+const CHANGE_ORDER = Object.keys(CHANGE_LABELS) as (keyof StoreTheme)[];
+
+const BRAND_SWATCHES = ['#3F53FE', '#131927', '#217005', '#E88B00', '#1A2C44', '#667691'];
+
+const DEFAULTS: Required<StoreTheme> = {
+  color: '#2563eb',
+  headingFont: 'sans',
+  bodyFont: 'sans',
+  baseSize: 'm',
+  radius: 'soft',
+  container: 'normal',
+};
+
+type Preset = { id: string; name: string; theme: Required<StoreTheme>; desc: string };
+const PRESETS: Preset[] = [
+  {
+    id: 'default',
+    name: 'Ratio default',
+    theme: {
+      color: '#3F53FE',
+      headingFont: 'sans',
+      bodyFont: 'sans',
+      baseSize: 'm',
+      radius: 'soft',
+      container: 'normal',
+    },
+    desc: 'Sans · soft corners',
+  },
+  {
+    id: 'editorial',
+    name: 'Editorial',
+    theme: {
+      color: '#131927',
+      headingFont: 'serif',
+      bodyFont: 'serif',
+      baseSize: 'm',
+      radius: 'square',
+      container: 'normal',
+    },
+    desc: 'Serif · square',
+  },
+  {
+    id: 'market',
+    name: 'Market',
+    theme: {
+      color: '#E88B00',
+      headingFont: 'sans',
+      bodyFont: 'sans',
+      baseSize: 'm',
+      radius: 'rounded',
+      container: 'normal',
+    },
+    desc: 'Sans · round',
+  },
 ];
 
-function Select({
-  label,
-  value,
+const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
+
+// WCAG relative luminance + contrast ratio of a colour on white.
+function contrastOnWhite(hex: string): number {
+  const c = hex.replace('#', '');
+  const lin = [0, 2, 4]
+    .map((i) => parseInt(c.slice(i, i + 2), 16) / 255)
+    .map((v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+  const L = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return 1.05 / (L + 0.05);
+}
+function contrastGrade(ratio: number): string {
+  if (ratio >= 7) return 'AAA';
+  if (ratio >= 4.5) return 'AA';
+  if (ratio >= 3) return 'AA large only';
+  return 'below AA';
+}
+
+// Resolve a (possibly partial) theme to concrete values for rendering.
+function resolve(t: StoreTheme): Required<StoreTheme> {
+  return {
+    color: t.color || DEFAULTS.color,
+    headingFont: t.headingFont || DEFAULTS.headingFont,
+    bodyFont: t.bodyFont || DEFAULTS.bodyFont,
+    baseSize: t.baseSize || DEFAULTS.baseSize,
+    radius: t.radius || DEFAULTS.radius,
+    container: t.container || DEFAULTS.container,
+  };
+}
+
+/* ── controls ─────────────────────────────────────────────────────────────── */
+
+function Choice<T extends string>({
   options,
+  value,
+  labels,
+  icons,
   onChange,
 }: {
-  label: string;
-  value: string | undefined;
-  options: { value: string; label: string }[];
-  onChange: (v: string | undefined) => void;
+  options: T[];
+  value: T;
+  labels: Record<string, string>;
+  icons?: Record<string, ReactNode>;
+  onChange: (v: T) => void;
 }) {
   return (
-    <label className="field" style={{ display: 'block', marginBottom: 10 }}>
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
-      <select
-        className="input"
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value || undefined)}
-      >
-        <option value="">Default</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="ts-choice-row">
+      {options.map((o) => (
+        <button
+          key={o}
+          className={value === o ? 'ts-choice on' : 'ts-choice'}
+          aria-pressed={value === o}
+          onClick={() => onChange(o)}
+        >
+          {icons?.[o]}
+          <span>{labels[o]}</span>
+        </button>
+      ))}
+    </div>
   );
 }
+
+function FieldHead({
+  label,
+  value,
+  canReset,
+  onReset,
+}: {
+  label: string;
+  value: string;
+  canReset: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div className="ts-field-head">
+      <span className="ts-field-label">{label}</span>
+      <span className="muted">{value}</span>
+      {canReset && (
+        <button className="ts-reset" onClick={onReset}>
+          Reset
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FontPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="ts-fonts">
+      {FONT_ORDER.map((key) => (
+        <button
+          key={key}
+          className={value === key ? 'ts-font on' : 'ts-font'}
+          aria-pressed={value === key}
+          onClick={() => onChange(key)}
+        >
+          <span className="ts-font-ag" style={{ fontFamily: FONT_STACK[key] }}>
+            Ag
+          </span>
+          <span className="muted ts-font-label">{FONT_LABEL[key]}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ── live mock storefront preview ──────────────────────────────────────────── */
+
+const PREVIEW_PRODUCTS = [
+  { name: 'Linen shirt — Ecru', price: '$128' },
+  { name: 'Wide trouser — Sand', price: '$164' },
+  { name: 'Camp collar — Slate', price: '$118' },
+];
+
+function StorefrontPreview({ t, mobile }: { t: Required<StoreTheme>; mobile: boolean }) {
+  const brand = isHex(t.color) ? t.color : DEFAULTS.color;
+  const radius = RADIUS_PX[t.radius];
+  const base = SIZE_PX[t.baseSize];
+  const head = FONT_STACK[t.headingFont];
+  const body = FONT_STACK[t.bodyFont];
+  const btn: CSSProperties = {
+    height: 34,
+    padding: '0 16px',
+    borderRadius: radius,
+    display: 'inline-flex',
+    alignItems: 'center',
+    fontFamily: body,
+    fontSize: base - 3,
+    fontWeight: 600,
+    cursor: 'default',
+  };
+  return (
+    <div className={mobile ? 'sf sf-mobile' : 'sf'} style={{ fontFamily: body, fontSize: base }}>
+      <div className="sf-inner" style={{ maxWidth: mobile ? '100%' : WIDTH_PX[t.container] }}>
+        <div className="sf-header">
+          <span style={{ fontFamily: head, fontSize: base + 2, fontWeight: 700 }}>
+            Aster &amp; Oak
+          </span>
+          <nav className="sf-nav" style={{ fontSize: base - 3 }}>
+            <span>Shop</span>
+            <span>Journal</span>
+            <span>About</span>
+            <span style={{ color: brand, fontWeight: 600 }}>Cart · 2</span>
+          </nav>
+        </div>
+        <div className="sf-hero">
+          <div className="sf-eyebrow" style={{ color: brand, fontSize: base - 4 }}>
+            NEW SEASON
+          </div>
+          <h2
+            style={{
+              fontFamily: head,
+              fontSize: base * 2,
+              lineHeight: 1.08,
+              margin: '6px 0 0',
+              fontWeight: 700,
+            }}
+          >
+            Linen, cut for warm mornings
+          </h2>
+          <p className="muted" style={{ fontSize: base - 2, margin: '10px 0 16px', maxWidth: 420 }}>
+            Naturally breathable pieces, made in small runs and shipped the day you order.
+          </p>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <span style={{ ...btn, background: brand, color: '#fff' }}>Shop the edit</span>
+            <span
+              style={{
+                ...btn,
+                background: 'transparent',
+                boxShadow: 'inset 0 0 0 1px #000',
+                color: '#000',
+              }}
+            >
+              Look book
+            </span>
+          </div>
+        </div>
+        <div className={mobile ? 'sf-grid sf-grid-mobile' : 'sf-grid'}>
+          {PREVIEW_PRODUCTS.map((p) => (
+            <div key={p.name}>
+              <div className="sf-thumb" style={{ borderRadius: radius }} />
+              <div style={{ fontSize: base - 3, marginTop: 8 }}>{p.name}</div>
+              <div className="muted" style={{ fontSize: base - 4, marginTop: 2 }}>
+                {p.price}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── panel ─────────────────────────────────────────────────────────────────── */
 
 export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
   const toast = useToast();
   const [theme, setTheme] = useState<StoreTheme | null>(null);
+  const [saved, setSaved] = useState<StoreTheme | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mobile, setMobile] = useState(false);
 
   const err = useCallback(
     (e: unknown, fallback: string) => toast(e instanceof ApiError ? e.message : fallback, 'error'),
@@ -74,22 +331,43 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
   useEffect(() => {
     api
       .getTheme(store.id)
-      .then(setTheme)
+      .then((t) => {
+        setTheme(t);
+        setSaved(t);
+      })
       .catch((e) => err(e, 'Failed to load theme'));
   }, [api, store.id, err]);
 
   function set<K extends keyof StoreTheme>(key: K, value: StoreTheme[K]) {
     setTheme((t) => ({ ...(t ?? {}), [key]: value }));
   }
+  // One typeface for the whole storefront: heading and body font stay in sync.
+  function setFont(v: string) {
+    setTheme((t) => ({ ...(t ?? {}), headingFont: v, bodyFont: v }));
+  }
+  function applyPreset(p: Preset) {
+    // Content width has no control, so a preset must not change it — keep whatever the theme already
+    // has, otherwise the width would shift silently with nothing in the change summary.
+    setTheme((t) => ({ ...p.theme, container: t?.container ?? p.theme.container }));
+  }
+
+  const changes = useMemo(() => {
+    if (!theme || !saved) return [] as (keyof StoreTheme)[];
+    const a = resolve(theme);
+    const b = resolve(saved);
+    return CHANGE_ORDER.filter((k) => a[k] !== b[k]);
+  }, [theme, saved]);
+  const dirty = changes.length > 0;
 
   async function save() {
     if (!theme) return;
     setBusy(true);
     try {
-      const saved = await api.saveTheme(store.id, theme);
-      setTheme(saved.theme);
+      const res = await api.saveTheme(store.id, theme);
+      setTheme(res.theme);
+      setSaved(res.theme);
       toast('Theme saved', 'ok');
-      if (saved.edgePurged === false)
+      if (res.edgePurged === false)
         toast('Saved, but the edge cache purge failed — it may serve stale briefly', 'error');
     } catch (e) {
       err(e, 'Save failed');
@@ -98,69 +376,151 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
     }
   }
 
-  return (
-    <div className="card pane" style={{ marginBottom: 18 }}>
-      <div className="pane-head">
-        <h2>Theme settings</h2>
+  if (!theme) {
+    return (
+      <div className="center-pad">
+        <Spinner />
       </div>
-      {!theme ? (
-        <div className="center-pad">
-          <Spinner />
-        </div>
-      ) : (
-        <>
-          <label className="field" style={{ display: 'block', marginBottom: 10 }}>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Brand colour
-            </span>
-            <div className="row" style={{ alignItems: 'center', gap: 10 }}>
-              <input
-                type="color"
-                value={theme.color || '#2563eb'}
-                onChange={(e) => set('color', e.target.value)}
-                aria-label="Brand colour"
-              />
-              <span className="mono" style={{ fontSize: 13 }}>
-                {theme.color || '#2563eb'}
-              </span>
+    );
+  }
+
+  const r = resolve(theme);
+  const ratio = isHex(r.color) ? contrastOnWhite(r.color) : null;
+  const activePreset = PRESETS.find((p) => JSON.stringify(p.theme) === JSON.stringify(r));
+
+  return (
+    <div className="ts">
+      <div className="ts-grid">
+        <div className="ts-controls">
+          <section>
+            <div className="ts-label">Start from</div>
+            <div className="ts-presets">
+              {PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  className={activePreset?.id === p.id ? 'ts-preset on' : 'ts-preset'}
+                  aria-pressed={activePreset?.id === p.id}
+                  onClick={() => applyPreset(p)}
+                >
+                  <span className="ts-preset-head">
+                    <span className="ts-preset-dot" style={{ background: p.theme.color }} />
+                    <strong>{p.name}</strong>
+                  </span>
+                  <span className="muted ts-preset-desc">{p.desc}</span>
+                </button>
+              ))}
             </div>
-          </label>
-          <Select
-            label="Body font"
-            value={theme.bodyFont}
-            options={FONT_OPTIONS}
-            onChange={(v) => set('bodyFont', v)}
-          />
-          <Select
-            label="Heading font"
-            value={theme.headingFont}
-            options={FONT_OPTIONS}
-            onChange={(v) => set('headingFont', v)}
-          />
-          <Select
-            label="Base text size"
-            value={theme.baseSize}
-            options={SIZE_OPTIONS}
-            onChange={(v) => set('baseSize', v)}
-          />
-          <Select
-            label="Corner roundness"
-            value={theme.radius}
-            options={RADIUS_OPTIONS}
-            onChange={(v) => set('radius', v)}
-          />
-          <Select
-            label="Content width"
-            value={theme.container}
-            options={CONTAINER_OPTIONS}
-            onChange={(v) => set('container', v)}
-          />
-          <div style={{ marginTop: 12 }}>
-            <button className="btn btn-primary" onClick={save} disabled={busy}>
-              Save theme
-            </button>
+          </section>
+
+          <section>
+            <div className="ts-label">Brand</div>
+            <p className="muted ts-desc">Sets buttons, links and accents across the storefront.</p>
+            <div className="ts-field-label">Brand colour</div>
+            <div className="ts-brand">
+              {BRAND_SWATCHES.map((c) => (
+                <button
+                  key={c}
+                  className={
+                    r.color.toLowerCase() === c.toLowerCase() ? 'ts-swatch on' : 'ts-swatch'
+                  }
+                  aria-pressed={r.color.toLowerCase() === c.toLowerCase()}
+                  style={{ background: c }}
+                  aria-label={c}
+                  onClick={() => set('color', c)}
+                />
+              ))}
+              <span className="ts-brand-divider" />
+              <div className="ts-hex">
+                <span
+                  className="ts-hex-chip"
+                  style={{ background: isHex(r.color) ? r.color : 'var(--surface-2)' }}
+                />
+                <input
+                  value={r.color}
+                  onChange={(e) => set('color', e.target.value)}
+                  aria-label="Brand colour hex"
+                />
+              </div>
+            </div>
+            {ratio !== null && (
+              <div className={`ts-contrast ${ratio < 4.5 ? 'warn' : ''}`}>
+                {ratio.toFixed(2)}:1 on white · {contrastGrade(ratio)}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="ts-label">Typography</div>
+            <p className="muted ts-desc">Each option previews in its own typeface.</p>
+            <div className="ts-field-label">Font</div>
+            <FontPicker value={r.bodyFont} onChange={setFont} />
+            <FieldHead
+              label="Base text size"
+              value={`${SIZE_PX[r.baseSize]}px`}
+              canReset={r.baseSize !== DEFAULTS.baseSize}
+              onReset={() => set('baseSize', DEFAULTS.baseSize)}
+            />
+            <Choice
+              options={['s', 'm', 'l']}
+              value={r.baseSize}
+              labels={SIZE_LABEL}
+              onChange={(v) => set('baseSize', v)}
+            />
+          </section>
+
+          <section>
+            <div className="ts-label">Layout</div>
+            <FieldHead
+              label="Corner roundness"
+              value={`${RADIUS_PX[r.radius]}px`}
+              canReset={r.radius !== DEFAULTS.radius}
+              onReset={() => set('radius', DEFAULTS.radius)}
+            />
+            <Choice
+              options={['square', 'soft', 'rounded']}
+              value={r.radius}
+              labels={RADIUS_LABEL}
+              icons={CORNER_ICON}
+              onChange={(v) => set('radius', v)}
+            />
+          </section>
+        </div>
+
+        <div className="ts-preview">
+          <div className="ts-preview-bar">
+            <span className="ts-label" style={{ flex: 1 }}>
+              {dirty ? 'Showing your changes' : 'Live preview'}
+            </span>
+            <div className="seg ts-seg">
+              <button className={!mobile ? 'on' : ''} onClick={() => setMobile(false)}>
+                Desktop
+              </button>
+              <button className={mobile ? 'on' : ''} onClick={() => setMobile(true)}>
+                Mobile
+              </button>
+            </div>
           </div>
-        </>
+          <StorefrontPreview t={r} mobile={mobile} />
+          <p className="muted ts-preview-note">
+            Preview only — nothing changes on the storefront until you save.
+          </p>
+        </div>
+      </div>
+
+      {dirty && (
+        <div className="ts-savebar">
+          <span className="ts-status warn">
+            {`${changes.length} change${changes.length > 1 ? 's' : ''}: ${changes
+              .map((k) => CHANGE_LABELS[k])
+              .join(', ')}`}
+          </span>
+          <button className="btn btn-ghost btn-sm" onClick={() => setTheme(saved)} disabled={busy}>
+            Discard
+          </button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
+            Save theme
+          </button>
+        </div>
       )}
     </div>
   );

@@ -29,6 +29,7 @@ const ThemeCodeEditor = lazy(() =>
 );
 import { ThemeSettingsPanel } from './features/theme/theme-settings';
 import { ThemesList } from './features/theme/themes-list';
+import { PageHeader } from './common/page-header';
 import { SuperAdmin } from './features/admin/superadmin';
 import { DashboardHome } from './features/dashboard/dashboard';
 import { MerchantLayout, PlatformLayout, ComingSoon } from './features/shell/app-shell';
@@ -183,11 +184,11 @@ function AuthedRoutes() {
         </Route>
         {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search / Ask
             Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
-        <Route path="/stores/:storeId/editor" element={<FullScreenEditorPage />} />
+        <Route path="/stores/:storeId/themes/:themeId/editor" element={<FullScreenEditorPage />} />
         <Route path="/stores/:storeId" element={<MerchantLayout />}>
           <Route index element={<HomePage />} />
           <Route path="themes" element={<ThemesListPage />} />
-          <Route path="themes/settings" element={<ThemePage />} />
+          <Route path="themes/:themeId" element={<ThemePage />} />
           <Route path="pages" element={<PagesPage />} />
           <Route path="domains" element={<DomainsPage />} />
           <Route path="commerce" element={<CommercePage />} />
@@ -240,47 +241,70 @@ function ThemePage() {
   const [tab, setTab] = useState<'settings' | 'versions'>('settings');
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div className="page-head" style={{ marginBottom: 0 }}>
-        <div className="head-text">
+      <PageHeader
+        title={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {store.name} theme <span className="theme-pill">Live</span>
+          </span>
+        }
+        description={
+          store.host ? (
+            <>
+              Brand, typography and layout ·{' '}
+              <a href={`https://${store.host}`} target="_blank" rel="noreferrer">
+                {store.host} ↗
+              </a>
+            </>
+          ) : (
+            'Brand, typography and layout for your storefront.'
+          )
+        }
+        onBack={() => navigate(`/stores/${storeSlug(store)}/themes`)}
+        backLabel="Themes"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {store.host && (
+            <a
+              className="btn btn-ghost btn-sm"
+              href={`https://${store.host}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View store ↗
+            </a>
+          )}
           <button
             className="btn btn-ghost btn-sm"
-            style={{ marginBottom: 6 }}
-            onClick={() => navigate(`/stores/${storeSlug(store)}/themes`)}
-          >
-            <Icon.back /> Themes
-          </button>
-          <h1>{store.name} theme</h1>
-          <p className="muted">Your storefront's brand settings and published versions.</p>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            className="btn btn-sm"
-            onClick={() => navigate(`/stores/${storeSlug(store)}/editor`)}
+            onClick={() =>
+              navigate(`/stores/${storeSlug(store)}/themes/${store.id}/editor`, {
+                state: { fromApp: true },
+              })
+            }
           >
             Edit code
           </button>
-          {/* Only owners have a second view (Versions), so the tab switcher is owner-only — a member
-              would otherwise see a lone, pointless "Settings" tab. */}
-          {owner && (
-            <div className="seg">
-              <button
-                className={tab === 'settings' ? 'on' : ''}
-                aria-pressed={tab === 'settings'}
-                onClick={() => setTab('settings')}
-              >
-                Settings
-              </button>
-              <button
-                className={tab === 'versions' ? 'on' : ''}
-                aria-pressed={tab === 'versions'}
-                onClick={() => setTab('versions')}
-              >
-                Versions
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      </PageHeader>
+      {/* Only owners have a second view (Versions), so the tab strip is owner-only — a member would
+          otherwise see a lone, pointless "Settings" tab. */}
+      {owner && (
+        <div className="seg" style={{ alignSelf: 'flex-start' }}>
+          <button
+            className={tab === 'settings' ? 'on' : ''}
+            aria-pressed={tab === 'settings'}
+            onClick={() => setTab('settings')}
+          >
+            Settings
+          </button>
+          <button
+            className={tab === 'versions' ? 'on' : ''}
+            aria-pressed={tab === 'versions'}
+            onClick={() => setTab('versions')}
+          >
+            Versions
+          </button>
+        </div>
+      )}
       {tab === 'versions' && owner ? (
         <ThemeVersionsPanel api={api} store={store} />
       ) : (
@@ -293,10 +317,14 @@ function ThemePage() {
 // there's no useMerchant context) and renders the IDE with a back button to the Theme page.
 function FullScreenEditorPage() {
   const { api, stores, me } = useStoreData();
-  const { storeId } = useParams();
+  const { storeId, themeId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const store = resolveStore(stores, storeId);
   if (!store) return <Navigate to="/" replace />;
+  // Prefer real "go back" (list vs settings, wherever the user came from), but only when we opened
+  // the editor from within the app — a deep-linked editor URL falls back to the theme's page.
+  const cameFromApp = (location.state as { fromApp?: boolean } | null)?.fromApp;
   return (
     <ErrorBoundary>
       <Suspense
@@ -310,7 +338,11 @@ function FullScreenEditorPage() {
           api={api}
           store={store}
           isLocal={!!me?.isLocal}
-          onBack={() => navigate(`/stores/${storeSlug(store)}/themes`)}
+          onBack={() =>
+            cameFromApp
+              ? navigate(-1)
+              : navigate(`/stores/${storeSlug(store)}/themes/${themeId ?? store.id}`)
+          }
         />
       </Suspense>
     </ErrorBoundary>
