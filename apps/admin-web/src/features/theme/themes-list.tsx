@@ -170,18 +170,18 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
           </>
         }
       >
-        {canManage && (
-          <button
-            className="btn btn-primary"
-            disabled={status !== 'ready'}
-            onClick={() => {
-              setNewName('New theme');
-              setCreating(true);
-            }}
-          >
-            <Icon.plus /> New theme
-          </button>
-        )}
+        {/* Creating a theme is member-allowed (backend requireMembership), same as the card's
+            Duplicate — only publish/activate/delete are owner-only. */}
+        <button
+          className="btn btn-primary"
+          disabled={status !== 'ready'}
+          onClick={() => {
+            setNewName('New theme');
+            setCreating(true);
+          }}
+        >
+          <Icon.plus /> New theme
+        </button>
       </PageHeader>
 
       {status === 'loading' && (

@@ -31,6 +31,9 @@ export function FullScreenEditorPage() {
         }
       >
         <ThemeCodeEditor
+          // Remount on theme switch so per-theme editor state (open tabs, selected file, dirty) never
+          // leaks between themes on a same-component navigation (e.g. browser back/forward).
+          key={themeId}
           api={api}
           store={store}
           themeId={themeId}
