@@ -16,15 +16,13 @@ import {
   readCartToken,
   cartCookie,
   expireCartCookie,
-  renderCartPage,
   renderOrderPage,
-  emptyCart,
-  type Cart,
   type CartBackend,
 } from '@ratio/builder-core';
 import {
   composeGokwik,
   gokwikCartCookies,
+  openCartCookie,
   mergeCsp,
   cspToString,
   type CspDirectives,
@@ -69,8 +67,9 @@ export function edgeAuthOk(provided: string | undefined, secret: string): boolea
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-// /cart is handled here (server-rendered cart, no-store); /checkout + /account are app-owned and
-// still stubbed as reserved. The cart routes live below, after the tenant is resolved.
+// /cart is handled here (no page — mutate + open the side-cart drawer, no-store); /checkout +
+// /account are app-owned and still stubbed as reserved. The cart routes live below, after the tenant
+// is resolved.
 const RESERVED = ['/checkout', '/account'];
 
 let renders = 0;
@@ -162,8 +161,9 @@ function setStorefrontSecurity(c: Context, csp: string = STRICT_CSP): void {
   c.header('referrer-policy', 'strict-origin-when-cross-origin');
 }
 
-// Cart (no-JS). The cart lives on the commerce backend; the origin holds only the token cookie and
-// renders the cart server-side. Add/remove are form POSTs → mutate → 303 back to /cart.
+// Cart. The cart lives on the commerce backend; the origin holds only the token cookie. There is no
+// cart PAGE — the GoKwik side-cart drawer is the cart. Add/update are form POSTs → mutate → 303 back
+// to where the shopper was, flagging the drawer to open (rt_open_cart, read by the widget trigger).
 type CartTenant = {
   name: string;
   theme?: unknown;
@@ -193,46 +193,24 @@ function cartBackendFor(commerce: CartTenant['commerce']): CartBackend | null {
   return buildCustomClient(commerce, urls) as CartBackend | null;
 }
 
-async function renderCartResponse(
-  c: Context<Vars>,
-  tenant: CartTenant,
-  tenantId: string,
-  cart: Cart
-): Promise<Response> {
-  const merchantId = tenant.commerce?.merchantId ?? '';
-  const ix = composeGokwik(integrationContext(tenant.commerce, 'cart'));
-  const [compiled, [menu, footerData]] = await Promise.all([
-    liveCompiled(tenant, tenantId),
-    timed(c, 'nav', () =>
-      Promise.all([
-        fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-        fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-      ])
-    ),
-  ]);
-  const { header, footer } = await timed(c, 'chrome', () =>
-    renderChrome(compiled ?? {}, (l, d) => renderUntrusted(l, d), {
-      menu,
-      footer: footerData,
-      siteName: tenant.name,
-    })
-  );
-  const html = renderCartPage(cart, {
-    siteName: tenant.name,
-    styleHead: storefrontHead(
-      resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
-      (compiled ?? {})['assets/theme.css'] ?? ''
-    ),
-    header,
-    footer,
-    headExtra: ix.head,
-    bodyEnd: ix.bodyEnd,
-  });
-  c.header('x-tenant', tenantId);
-  c.header('x-handler', 'cart');
-  c.header('x-cache', 'no-store');
-  setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
-  return c.html(html);
+// There is no cart PAGE — the GoKwik side-cart drawer is the cart (view + checkout). Add-to-cart and
+// the cart-icon link bounce the shopper back to where they were and flag the drawer to open (the
+// side-cart trigger reads the rt_open_cart cookie). We redirect to the referring PATH only (never the
+// raw Referer), so the target is always same-origin — no open-redirect.
+function backToReferer(c: Context<Vars>): string {
+  const ref = c.req.header('referer');
+  if (ref) {
+    try {
+      const u = new URL(ref);
+      const dest = u.pathname + u.search;
+      // Never bounce back into a cart route (would loop); fall through to home. Match the /cart route
+      // exactly, not merely a /cart* prefix (so /cartier etc. still bounce back correctly).
+      if (u.pathname !== '/cart' && !u.pathname.startsWith('/cart/')) return dest;
+    } catch {
+      /* malformed Referer → home */
+    }
+  }
+  return '/';
 }
 
 // Order confirmation (thank-you) page. The checkout SDK redirects here after order-complete with the
@@ -356,31 +334,20 @@ async function handleCart(
         logCommerceError(log, path === '/cart/add' ? 'add' : 'update', tenantId, e);
       }
     }
+    // The cart is mutated server-side; the side-cart drawer (not a cart page) shows it. Bounce back to
+    // where the shopper was and flag the drawer to open (rt_open_cart, read by the widget trigger).
+    c.header('set-cookie', openCartCookie(), { append: true });
     c.header('x-cache', 'no-store');
-    return c.redirect('/cart', 303);
+    c.header('x-handler', 'cart-add');
+    return c.redirect(backToReferer(c), 303);
   }
 
-  let cart: Cart = emptyCart();
-  if (backend && token) {
-    try {
-      cart = await timed(c, 'commerce', () =>
-        withSpan(
-          'gokwik.cart.get',
-          { 'ratio.op': 'cart.get', 'ratio.tenant': tenantId, 'ratio.reqId': reqId },
-          async (span) => {
-            const cc = await new CartService(backend).get(token);
-            span.setAttribute('ratio.cart.lines', cc.items.length);
-            return cc;
-          },
-          SpanKind.CLIENT
-        )
-      );
-    } catch (e) {
-      logCommerceError(log, 'get', tenantId, e);
-      cart = emptyCart();
-    }
-  }
-  return renderCartResponse(c, tenant, tenantId, cart);
+  // GET /cart (the header cart icon still links here): there is no cart page — open the drawer where
+  // the shopper is, the same way add-to-cart does.
+  c.header('set-cookie', openCartCookie(), { append: true });
+  c.header('x-cache', 'no-store');
+  c.header('x-handler', 'cart-open');
+  return c.redirect(backToReferer(c), 303);
 }
 
 type Vars = { Variables: { reqId: string; log: ReqLog; timings: Record<string, number> } };
@@ -540,8 +507,9 @@ app.all('*', async (c) => {
     return c.body(out.body, out.status as 200 | 404 | 500);
   }
 
-  // Cart (no-JS, server-rendered). Add-to-cart is a form POST; the cart itself lives on the commerce
-  // backend, keyed by a token in an httpOnly cookie. Always no-store (per-shopper).
+  // Cart. Add-to-cart is a form POST; the cart lives on the commerce backend, keyed by a token in an
+  // httpOnly cookie. No cart page — mutate then bounce back and open the side-cart drawer. Always
+  // no-store (per-shopper).
   if (path === '/cart' || path.startsWith('/cart/')) {
     return handleCart(c, tenant, tenantId as string);
   }
