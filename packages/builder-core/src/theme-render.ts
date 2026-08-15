@@ -9,6 +9,7 @@
 import type { ThemeFiles } from './bundle';
 import type { DataSource } from './doc';
 import type { BindingResolver, ResolveContext } from './resolve';
+import { interpolateParams } from './resolve';
 
 // Renders one THEME section's Liquid with its data context to HTML. Theme sections (base or merchant)
 // carry their Liquid in the bundle; for untrusted merchant sections this MUST run inside the
@@ -63,8 +64,16 @@ export async function renderThemePage(
   const tags: string[] = [];
   if (opts.resolver && tpl.dataSources) {
     const ctx = opts.ctx ?? { tenantId: '' };
+    const routeParams = ctx.routeParams ?? {};
     const entries = Object.entries(tpl.dataSources);
-    const values = await Promise.all(entries.map(([, src]) => opts.resolver!.fetch(src, ctx)));
+    const values = await Promise.all(
+      entries.map(([, src]) =>
+        opts.resolver!.fetch(
+          { ...src, params: interpolateParams(src.params ?? {}, routeParams) },
+          ctx
+        )
+      )
+    );
     entries.forEach(([key], i) => {
       resolved[key] = values[i].value;
       tags.push(...values[i].tags);
