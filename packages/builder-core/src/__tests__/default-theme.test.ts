@@ -56,9 +56,14 @@ test('default theme renders the product detail page', async () => {
   assert.match(html, /₹999\.00/, 'the product price is formatted to rupees');
 });
 
-test('default theme home shows a featured product grid out of the box', async () => {
+test('default theme home shows product rows (New arrivals + Trending) out of the box', async () => {
   const { html } = await renderPage('index');
-  assert.match(html, /Featured products/, 'the featured section heading renders');
-  assert.match(html, /Sample product 1/, 'featured products render on the home page');
-  assert.match(html, /₹499\.00/, 'featured prices are formatted to rupees');
+  assert.match(html, /New arrivals/, 'the New arrivals row heading renders');
+  assert.match(html, /Trending now/, 'the Trending row heading renders');
+  assert.match(html, /Sample product 1/, 'products render on the home page');
+  assert.match(html, /₹499\.00/, 'home prices are formatted to rupees');
+  // Uses the platform design-system classes so it's styled by the origin's storefront stylesheet.
+  assert.match(html, /class="grid"/, 'product rows use the .grid card layout');
+  assert.match(html, /class="hdr"/, 'the header renders');
+  assert.match(html, /class="ftr"/, 'the footer renders');
 });
