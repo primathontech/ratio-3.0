@@ -56,6 +56,18 @@ test('default theme renders the product detail page', async () => {
   assert.match(html, /₹999\.00/, 'the product price is formatted to rupees');
 });
 
+test('default theme PDP leaves variantId empty so the origin resolves it from the handle', async () => {
+  // The canonical product shape carries no real variant id. If the add-to-cart form sent the product
+  // id/handle as variantId it would look authoritative to /cart/add and skip resolveVariant(handle).
+  const { html } = await renderPage('product', { handle: 'air-max-90' });
+  assert.match(html, /name="variantId"\s+value=""/, 'variantId is empty on the sample product');
+  assert.match(
+    html,
+    /name="handle"\s+value="air-max-90"/,
+    'the handle is sent for server-side resolution'
+  );
+});
+
 test('default theme home shows product rows (New arrivals + Trending) out of the box', async () => {
   const { html } = await renderPage('index');
   assert.match(html, /New arrivals/, 'the New arrivals row heading renders');
