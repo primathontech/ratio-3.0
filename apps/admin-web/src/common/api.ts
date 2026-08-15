@@ -226,8 +226,21 @@ export function createApi(
     me: () => req<{ userId: string; isPlatformAdmin: boolean; isLocal?: boolean }>('GET', '/me'),
     listStores: () =>
       req<Record<string, unknown>>('GET', '/stores').then((d) => pickArray<Store>(d, 'stores')),
-    createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
-      req<{ id: string; url: string }>('POST', '/stores', s),
+    createStore: (s: {
+      name: string;
+      host: string;
+      color?: string;
+      merchantId?: string;
+      draft?: boolean;
+    }) => req<{ id: string; url: string; draft: boolean }>('POST', '/stores', s),
+    // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
+    // the backend isn't wired in this env; verified=true + collectionCount when the id reached it.
+    verifyMerchant: (merchantId: string) =>
+      req<{ configured: boolean; verified: boolean; collectionCount?: number }>(
+        'POST',
+        '/commerce/verify',
+        { merchantId }
+      ),
     deleteStore: (id: string) => req<unknown>('DELETE', `/stores/${id}`),
     getCommerce: (id: string) =>
       req<{ merchantId: string }>('GET', `/stores/${id}/commerce`).then((d) => d.merchantId ?? ''),

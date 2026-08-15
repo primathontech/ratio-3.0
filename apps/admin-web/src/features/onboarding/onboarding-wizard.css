@@ -1,0 +1,185 @@
+/* Guided onboarding wizard (OFCE-618) — a chrome-less, full-viewport flow. */
+.ob-wrap {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.ob-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.ob-top-spacer {
+  width: 72px; /* balances the Cancel button so the stepper stays centred */
+}
+
+/* progress rail */
+.ob-stepper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ob-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.ob-step:not(:last-child)::after {
+  content: '';
+  width: 28px;
+  height: 1px;
+  background: var(--line-strong);
+  margin-left: 8px;
+}
+.ob-step-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+.ob-step.on {
+  color: var(--text);
+}
+.ob-step.on .ob-step-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+.ob-step.done {
+  color: var(--text);
+}
+.ob-step.done .ob-step-dot {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ob-step-label {
+  white-space: nowrap;
+}
+
+/* body */
+.ob-main {
+  flex: 1;
+  display: grid;
+  place-items: start center;
+  padding: 48px 24px;
+}
+.ob-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 32px;
+}
+.ob-title {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+.ob-lede {
+  margin: 0 0 24px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.ob-inline {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.ob-inline .input {
+  flex: 1;
+}
+
+.ob-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+.ob-actions-center {
+  justify-content: center;
+}
+.ob-actions .btn-primary {
+  margin-left: auto;
+}
+.ob-link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+}
+.ob-link:hover {
+  color: var(--text);
+}
+
+/* review + success */
+.ob-review {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--line);
+}
+.ob-review > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--surface);
+}
+.ob-review dt {
+  color: var(--muted);
+}
+.ob-review dd {
+  margin: 0;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ob-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  display: inline-block;
+}
+.ob-success {
+  text-align: center;
+}
+.ob-success-emoji {
+  font-size: 48px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 560px) {
+  .ob-step-label {
+    display: none;
+  }
+  .ob-card {
+    padding: 24px;
+  }
+}

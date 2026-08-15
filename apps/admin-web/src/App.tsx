@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { createApi, type Api, type Store } from './common/api';
-import { EmptyState, ErrorBoundary, Icon, Spinner, ToastProvider, useToast } from './common/ui';
-import { CreateStoreDialog } from './features/stores/create-store-dialog';
+import { EmptyState, ErrorBoundary, Icon, Spinner, ToastProvider } from './common/ui';
 import { MerchantLayout, PlatformLayout } from './features/shell/app-shell';
 import { AskRatio } from './features/assistant/ask-sophie';
-import { Route, Routes } from 'react-router-dom';
+import { OnboardingWizard } from './features/onboarding/onboarding-wizard';
+import { Route, Routes, useNavigate } from 'react-router-dom';
 import { StoreDataProvider, type Me } from './common/store-context';
 import { ThemePage } from './routes/theme-page';
 import { FullScreenEditorPage } from './routes/full-screen-editor-page';
@@ -56,12 +56,12 @@ export function App() {
 // Super admins default to /admin; everyone else to their first store (/stores/:id).
 function AuthedRoutes() {
   const api = useApi();
-  const toast = useToast();
+  const navigate = useNavigate();
   const [stores, setStores] = useState<Store[] | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [meLoaded, setMeLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const openCreate = useCallback(() => navigate('/stores/new'), [navigate]);
 
   const load = useCallback(() => {
     setError(null);
@@ -93,18 +93,6 @@ function AuthedRoutes() {
     };
   }, [api]);
 
-  const dialog = creating && (
-    <CreateStoreDialog
-      api={api}
-      onClose={() => setCreating(false)}
-      onCreated={() => {
-        setCreating(false);
-        toast('Store created');
-        load();
-      }}
-    />
-  );
-
   if (error) {
     return (
       <main className="container">
@@ -122,61 +110,69 @@ function AuthedRoutes() {
       </div>
     );
   }
-  if (stores.length === 0) {
-    return (
-      <main className="container">
-        <EmptyState emoji="🏪" title="No stores yet">
-          <p className="muted" style={{ maxWidth: 320 }}>
-            Create your first store — it goes live instantly at its own subdomain.
-          </p>
-          <button className="btn btn-primary" onClick={() => setCreating(true)}>
-            <Icon.plus /> Create a store
-          </button>
-        </EmptyState>
-        <div className="onboard-ask">
-          <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>
-            …or just tell Ratio to set it up for you.
-          </p>
-          <AskRatio api={api} storeId={null} onChanged={load} />
-        </div>
-        {dialog}
-      </main>
-    );
-  }
+  // A brand-new merchant with no stores yet — the empty state is the onboarding entry point.
+  const emptyState = (
+    <main className="container">
+      <EmptyState emoji="🏪" title="No stores yet">
+        <p className="muted" style={{ maxWidth: 320 }}>
+          Create your first store — it goes live instantly at its own subdomain.
+        </p>
+        <button className="btn btn-primary" onClick={openCreate}>
+          <Icon.plus /> Create a store
+        </button>
+      </EmptyState>
+      <div className="onboard-ask">
+        <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>
+          …or just tell Ratio to set it up for you.
+        </p>
+        <AskRatio api={api} storeId={null} onChanged={load} />
+      </div>
+    </main>
+  );
 
   return (
-    <StoreDataProvider
-      value={{ api, stores, me, reload: load, openCreate: () => setCreating(true) }}
-    >
+    <StoreDataProvider value={{ api, stores, me, reload: load, openCreate }}>
       <Routes>
-        <Route
-          path="/admin"
-          element={
-            <RequireAdmin>
-              <PlatformLayout />
-            </RequireAdmin>
-          }
-        >
-          <Route index element={<SuperAdminPage />} />
-        </Route>
-        {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search / Ask
-            Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
-        <Route path="/stores/:storeId/themes/:themeId/editor" element={<FullScreenEditorPage />} />
-        <Route path="/stores/:storeId" element={<MerchantLayout />}>
-          <Route index element={<HomePage />} />
-          <Route path="themes" element={<ThemesListPage />} />
-          <Route path="themes/:themeId" element={<ThemePage />} />
-          <Route path="pages" element={<PagesPage />} />
-          <Route path="domains" element={<DomainsPage />} />
-          <Route path="commerce" element={<CommercePage />} />
-          <Route path="access" element={<AccessPage />} />
-          <Route path="audit" element={<AuditPage />} />
-          <Route path="danger" element={<DangerPage />} />
-          <Route path="*" element={<ComingSoonPage />} />
-        </Route>
-        <Route path="*" element={<RoleRedirect />} />
+        {/* Guided onboarding — chrome-less (its own header/stepper), OUTSIDE MerchantLayout, and
+            BEFORE /stores/:storeId so "new" isn't captured as a store id. Always mounted, so a
+            merchant with zero stores can still reach it (that's who it's for). */}
+        <Route path="/stores/new" element={<OnboardingWizard />} />
+        {stores.length === 0 ? (
+          <Route path="*" element={emptyState} />
+        ) : (
+          <>
+            <Route
+              path="/admin"
+              element={
+                <RequireAdmin>
+                  <PlatformLayout />
+                </RequireAdmin>
+              }
+            >
+              <Route index element={<SuperAdminPage />} />
+            </Route>
+            {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search /
+                Ask Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
+            <Route
+              path="/stores/:storeId/themes/:themeId/editor"
+              element={<FullScreenEditorPage />}
+            />
+            <Route path="/stores/:storeId" element={<MerchantLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="themes" element={<ThemesListPage />} />
+              <Route path="themes/:themeId" element={<ThemePage />} />
+              <Route path="pages" element={<PagesPage />} />
+              <Route path="domains" element={<DomainsPage />} />
+              <Route path="commerce" element={<CommercePage />} />
+              <Route path="access" element={<AccessPage />} />
+              <Route path="audit" element={<AuditPage />} />
+              <Route path="danger" element={<DangerPage />} />
+              <Route path="*" element={<ComingSoonPage />} />
+            </Route>
+            <Route path="*" element={<RoleRedirect />} />
+          </>
+        )}
       </Routes>
-      {dialog}
     </StoreDataProvider>
   );
 }
