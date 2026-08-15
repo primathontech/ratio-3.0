@@ -54,39 +54,49 @@ export function defaultBundleTheme(): ThemeFiles {
             heading: 'New season, new look',
             subheading: 'Discover the pieces everyone is talking about — curated for you.',
             cta_label: 'Shop new arrivals',
-            cta_href: '/collections/new-arrivals',
+            cta_href: '/collections/all',
           },
         },
         { type: 'promo' },
         {
           type: 'collection-row',
-          dataSourceKey: 'new_arrivals',
-          data: { heading: 'New arrivals', cta_href: '/collections/new-arrivals' },
+          dataSourceKey: 'all',
+          data: { heading: 'New arrivals', cta_href: '/collections/all' },
         },
         {
           type: 'collection-row',
-          dataSourceKey: 'trending',
-          data: { heading: 'Trending now', cta_href: '/collections/trending' },
+          dataSourceKey: 'new-launches',
+          data: { heading: 'New launches', cta_href: '/collections/new-launches' },
         },
         { type: 'brand-story' },
       ],
       {
-        new_arrivals: {
+        // `available: false` asks the commerce backend for the FULL catalog. Its default is
+        // available-only, which returns nothing for a store that doesn't flag product availability
+        // (so the row renders empty though the collection has products). A theme that wants only
+        // in-stock products flips this to true.
+        all: {
           type: 'COLLECTION_BY_HANDLES',
-          params: { handles: ['new-arrivals'], productLimit: 8 },
+          params: { handles: ['all'], productLimit: 8, filters: [{ available: false }] },
         },
-        trending: {
+        'new-launches': {
           type: 'COLLECTION_BY_HANDLES',
-          params: { handles: ['trending'], productLimit: 8 },
+          params: { handles: ['new-launches'], productLimit: 8, filters: [{ available: false }] },
         },
       }
     ),
 
     // ── Collection page ─────────────────────────────────────────────────────
     'templates/collection.json': template([{ type: 'main-collection', dataSourceKey: 'main' }], {
+      // `available: false` = the full catalog (the backend default is available-only, which is empty
+      // for a store that doesn't flag availability). See the home template's data sources.
       main: {
         type: 'COLLECTION_BY_HANDLES',
-        params: { handles: ['{{params.handle}}'], productLimit: 12 },
+        params: {
+          handles: ['{{params.handle}}'],
+          productLimit: 12,
+          filters: [{ available: false }],
+        },
       },
     }),
 
