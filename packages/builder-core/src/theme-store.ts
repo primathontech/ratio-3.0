@@ -315,16 +315,31 @@ export class ThemeStore {
   // Delete a tenant's theme (its versions + file index cascade). Refuses the live theme — deleting it
   // would strand the tenant's live pointer at a row that no longer exists. Best-effort draft cleanup.
   async deleteTheme(tenantId: string, themeId: string): Promise<void> {
-    const live = await pool.query('SELECT 1 FROM tenants WHERE id = $1 AND live_theme_id = $2', [
-      tenantId,
-      themeId,
-    ]);
-    if (live.rowCount && live.rowCount > 0) throw new Error('cannot delete the live theme');
-    const r = await pool.query('DELETE FROM theme WHERE id = $1 AND tenant_id = $2', [
-      themeId,
-      tenantId,
-    ]);
-    if (r.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Lock the theme row FIRST (same order as publish/setLive) so a concurrent activate can't make
+      // this theme live between the live-check and the DELETE — which would strand tenants.live_theme_id
+      // at a row that no longer exists. Making a theme live requires this same row lock, so once we
+      // hold it the live-check can't go stale.
+      const th = await client.query(
+        'SELECT 1 FROM theme WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+        [themeId, tenantId]
+      );
+      if (th.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+      const live = await client.query(
+        'SELECT 1 FROM tenants WHERE id = $1 AND live_theme_id = $2',
+        [tenantId, themeId]
+      );
+      if (live.rowCount && live.rowCount > 0) throw new Error('cannot delete the live theme');
+      await client.query('DELETE FROM theme WHERE id = $1 AND tenant_id = $2', [themeId, tenantId]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
     await this.objects.delete(draftKey(themeId)).catch(() => {});
   }
 
@@ -336,10 +351,12 @@ export class ThemeStore {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const t = await client.query('SELECT 1 FROM theme WHERE id = $1 AND tenant_id = $2', [
-        themeId,
-        tenantId,
-      ]);
+      // Lock the theme row FIRST (same order as publish/deleteTheme) so activate-vs-delete serialize
+      // on one lock: a delete can't remove this theme after we've validated it and before we repoint.
+      const t = await client.query(
+        'SELECT 1 FROM theme WHERE id = $1 AND tenant_id = $2 FOR UPDATE',
+        [themeId, tenantId]
+      );
       if (t.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
       let v: number;
       if (version != null) {
@@ -377,8 +394,11 @@ export class ThemeStore {
     }
   }
 
-  // A theme's published versions, newest first (the version history panel).
+  // A theme's published versions, newest first (the version history panel). Tenant-scoped in SQL (join
+  // through theme) so the store layer itself never leaks another tenant's version history — defense in
+  // depth, not relying on the route's assertThemeInStore alone.
   async listVersions(
+    tenantId: string,
     themeId: string
   ): Promise<{ version: number; createdBy: string | null; createdAt: string }[]> {
     const { rows } = await pool.query<{
@@ -386,8 +406,12 @@ export class ThemeStore {
       created_by: string | null;
       created_at: Date;
     }>(
-      'SELECT version, created_by, created_at FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC',
-      [themeId]
+      `SELECT bv.version, bv.created_by, bv.created_at
+         FROM theme_bundle_version bv
+         JOIN theme th ON th.id = bv.theme_id
+        WHERE bv.theme_id = $1 AND th.tenant_id = $2
+        ORDER BY bv.version DESC`,
+      [themeId, tenantId]
     );
     return rows.map((r) => ({
       version: Number(r.version),

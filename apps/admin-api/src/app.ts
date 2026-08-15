@@ -1025,7 +1025,7 @@ export function createApp(
     const id = c.req.param('id');
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
-    const versions = await themes.listVersions(themeId);
+    const versions = await themes.listVersions(id, themeId);
     const { rows } = await pool.query<{ live_theme_version: number }>(
       'SELECT live_theme_version FROM tenants WHERE id = $1 AND live_theme_id = $2',
       [id, themeId]
