@@ -310,25 +310,14 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Store',
     items: [
-      { label: 'Home', route: 'home', hint: 'G H', real: true },
-      { label: 'Orders', route: 'orders', hint: 'G O' },
-      { label: 'Products', route: 'products', hint: 'G P' },
-      { label: 'Customers', route: 'customers' },
-    ],
-  },
-  {
-    title: 'Grow',
-    items: [
-      { label: 'Analytics', route: 'analytics' },
-      { label: 'Marketing', route: 'marketing' },
-      { label: 'Discounts', route: 'discounts' },
+      { label: 'All Stores', route: 'home', hint: 'G H', real: true },
+      { label: 'Dashboard', route: 'dashboard', hint: 'G D' },
     ],
   },
   {
     title: 'Storefront',
     items: [
       { label: 'Pages', route: 'pages', real: true },
-      // Themes landing lists the store's themes; each opens Customize (settings) or Edit code.
       { label: 'Themes', route: 'themes', hint: 'G T', real: true },
       { label: 'Domains', route: 'domains', real: true },
     ],

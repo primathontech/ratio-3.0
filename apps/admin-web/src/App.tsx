@@ -22,6 +22,7 @@ import {
   RoleRedirect,
   SuperAdminPage,
   ThemesListPage,
+  Stores,
 } from './routes/route-pages';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
@@ -158,7 +159,8 @@ function AuthedRoutes() {
               element={<FullScreenEditorPage />}
             />
             <Route path="/stores/:storeId" element={<MerchantLayout />}>
-              <Route index element={<HomePage />} />
+              <Route index element={<Stores />} />
+              <Route path="dashboard" element={<HomePage />} />
               <Route path="themes" element={<ThemesListPage />} />
               <Route path="themes/:themeId" element={<ThemePage />} />
               <Route path="pages" element={<PagesPage />} />
