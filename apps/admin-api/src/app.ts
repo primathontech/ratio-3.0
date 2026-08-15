@@ -629,12 +629,33 @@ export function createApp(
     }
     const urls = commerceUrlsFromEnv(process.env);
     const client = urls ? buildCustomClient({ merchantId: mid }, urls) : null;
-    if (!client) return c.json({ configured: false, verified: false });
+    if (!client) {
+      console.warn(
+        '[commerce/verify] not configured — set COMMERCE_PRODUCT_API_URL, COMMERCE_CART_API_URL and COMMERCE_ORDER_API_URL (base URLs, no /api/v1 suffix)'
+      );
+      return c.json({ configured: false, verified: false });
+    }
     try {
-      // The client resolves { success:false } rather than throwing on a bad id / down backend, so the
-      // envelope decides verified — not the try/catch (which only guards a hard client throw).
-      return c.json(interpretCollectionsEnvelope(await client.getCollections({ first: 100 })));
-    } catch {
+      // Fetch just ONE collection: verify only needs "does this merchant have any", and the backend
+      // returns the true total in meta.pagination.total regardless of the page size — so first:1 is
+      // the minimal call. The client resolves { success:false } rather than throwing on a bad id /
+      // down backend, so the envelope decides verified — not the try/catch (a hard client throw only).
+      const res = await client.getCollections({ first: 1 });
+      const result = interpretCollectionsEnvelope(res);
+      if (!result.verified) {
+        // Surface WHY the backend didn't verify (unknown/inactive merchant, wrong base URL → 404, …)
+        // instead of returning a silent verified:false.
+        const env = res as { message?: string; error?: { message?: string } } | null;
+        console.warn(
+          `[commerce/verify] merchant ${mid} not verified: ${env?.error?.message ?? env?.message ?? 'backend returned no successful collections envelope'}`
+        );
+      }
+      return c.json(result);
+    } catch (e) {
+      console.error(
+        `[commerce/verify] request threw for merchant ${mid}:`,
+        e instanceof Error ? e.message : e
+      );
       return c.json({ configured: true, verified: false });
     }
   });
