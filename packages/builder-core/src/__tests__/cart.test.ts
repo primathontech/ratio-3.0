@@ -225,6 +225,5 @@ test('renderOrderPage: omits rows that are absent (only id → no total/payment 
   assert.doesNotMatch(html, /Payment<\/span>/);
 });
 
-// The cart PAGE was removed (OFCE): the GoKwik side-cart drawer is the cart. The origin now bounces
-// add-to-cart / the cart-icon back to the shopper and opens the drawer (see the origin handler +
-// gokwik openCartCookie/OPEN_TRIGGER); there is no renderCartPage to test here.
+// The cart PAGE was removed (OFCE): the GoKwik side-cart widget (loaded on every page) is the cart —
+// it intercepts add-to-cart and opens its drawer itself. There is no renderCartPage to test here.

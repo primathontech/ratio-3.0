@@ -37,31 +37,9 @@ export function sideCartTag(cfg: Partial<SideCartConfig> | null | undefined): st
     `window.merchantInfo=${merchantInfo};window.kwikCartActive=true;` +
     `try{var _t=document.cookie.match(/(?:^|;\\s*)X-Cart-Token=([^;]+)/);` +
     `if(_t)localStorage.setItem(${tokenKey},decodeURIComponent(_t[1]));}catch(e){}</script>` +
-    `<script src="${esc(cfg.scriptUrl)}" async></script>` +
-    OPEN_TRIGGER
+    `<script src="${esc(cfg.scriptUrl)}" async></script>`
   );
 }
-
-// The short-lived, JS-readable cookie the origin sets to ask the next page to open the drawer.
-export const OPEN_CART_COOKIE = 'rt_open_cart';
-export function openCartCookie(): string {
-  return `${OPEN_CART_COOKIE}=1; Path=/; SameSite=Lax; Max-Age=60`;
-}
-
-// There is no cart PAGE: the drawer is the cart. When the shopper adds an item or clicks the cart
-// icon, the origin bounces them back to where they were and sets a short-lived rt_open_cart cookie;
-// this trigger (shipped with the widget) reads that cookie, waits for the widget's opener to exist,
-// opens the drawer, and clears the cookie. Static markup — safe on edge-cached pages, since it reads
-// the per-shopper cookie at runtime. Inline is allowed by GOKWIK_CSP (script-src 'unsafe-inline').
-const OPEN_TRIGGER =
-  `<script>(function(){try{` +
-  `if(!/(?:^|;\\s*)${OPEN_CART_COOKIE}=1/.test(document.cookie))return;` +
-  `document.cookie=${JSON.stringify(`${OPEN_CART_COOKIE}=; Path=/; Max-Age=0`)};` +
-  `var n=0,t=setInterval(function(){` +
-  `if(window.openGokwikSideCart){clearInterval(t);try{window.openGokwikSideCart()}catch(e){}}` +
-  `else if(++n>50){clearInterval(t)}` +
-  `},100);` +
-  `}catch(e){}})();</script>`;
 
 // The widget reads the cart token from a NON-httpOnly X-Cart-Token cookie (via the localStorage
 // bridge above). rt_cart stays httpOnly for the server; this mirrors the same token for the widget.
