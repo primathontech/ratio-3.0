@@ -33,7 +33,7 @@ import { scaffoldStorefront, ensureDefaultBaseTheme } from '@ratio/builder-core'
 import {
   buildCustomClient,
   commerceUrlsFromEnv,
-  customCommerceResolver,
+  commerceResolverFromEnv,
 } from '@ratio/builder-core';
 import type { TenantCommerce } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
@@ -163,10 +163,12 @@ const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
 // /theme/bundle/preview; identical render shape to apps/origin/src/index.ts.
 setUntrustedRenderer(renderUntrusted);
 function previewResolver(commerce: TenantCommerce | null | undefined) {
-  const urls = commerce?.merchantId ? commerceUrlsFromEnv(process.env) : null;
-  if (urls && commerce?.merchantId) {
+  // Reuse the shared env→resolver helper (urls-configured check + client build) rather than
+  // re-deriving it; null when the platform URLs aren't configured (local/tests) → sample data.
+  const resolver = commerce?.merchantId ? commerceResolverFromEnv(process.env) : null;
+  if (resolver && commerce?.merchantId) {
     return {
-      resolver: customCommerceResolver(urls),
+      resolver,
       commerce: { merchantId: commerce.merchantId, storeId: commerce.storeId } as TenantCommerce,
       sampleData: false,
     };
