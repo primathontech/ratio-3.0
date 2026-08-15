@@ -1,98 +1,163 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Api, Store } from '../../common/api';
-import { Icon, Spinner, useToast } from '../../common/ui';
-import { RowMenu } from '../../common/row-menu';
+import { ApiError, type Api, type Store, type ThemeSummary } from '../../common/api';
+import { Dialog, EmptyState, Field, Icon, Spinner, useToast } from '../../common/ui';
 import { PageHeader } from '../../common/page-header';
 import { storeSlug, storefrontUrl } from '../../common/store-context';
-import { ThemeDrafts } from './theme-drafts';
+import { ThemeCard, type Preview } from './theme-card';
 import './themes-list.css';
 
-// Dummy update + row menu (UI-only — actions fire a toast until the real theme-version API exists).
-const LIVE_UPDATE = {
-  version: '2.5.0',
-  summary: 'accessibility fixes, faster cart drawer',
-  changes: [
-    'Cart drawer opens ~200ms faster on mobile.',
-    'Focus rings and contrast fixes across product forms.',
-    'New section: comparison table.',
-  ],
-};
-const LIVE_MENU = ['Duplicate', 'Rename', 'Download theme file', 'Version history'];
+type Status = 'loading' | 'ready' | 'disabled' | 'error';
 
-type Preview = { status: 'loading' | 'ok' | 'empty'; html: string };
-
-// A framed desktop preview: browser chrome (dots + domain) over the real rendered home page, scaled.
-function DesktopPreview({ preview, domain }: { preview: Preview; domain: string }) {
-  return (
-    <div className="tp-desktop">
-      <div className="tp-chrome">
-        <span className="tp-dot" />
-        <span className="tp-url">{domain}</span>
-      </div>
-      <div className="tp-desktop-body">
-        {preview.status === 'loading' ? (
-          <div className="tp-state">
-            <Spinner />
-          </div>
-        ) : preview.status === 'ok' ? (
-          <iframe
-            className="tp-desktop-frame"
-            title="Desktop preview"
-            sandbox=""
-            srcDoc={preview.html}
-          />
-        ) : (
-          <div className="tp-state muted">No preview</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// A phone-framed preview reusing the same rendered HTML.
-function MobilePreview({ preview }: { preview: Preview }) {
-  return (
-    <div className="tp-mobile">
-      {preview.status === 'ok' ? (
-        <iframe
-          className="tp-mobile-frame"
-          title="Mobile preview"
-          sandbox=""
-          srcDoc={preview.html}
-        />
-      ) : (
-        <div className="tp-state" />
-      )}
-    </div>
-  );
-}
-
-// The Themes landing: the store's live theme as a rich card (two-device preview + details + actions),
-// adapted from the reference themes-library UX. One working theme per store today.
+// The Themes landing (OFCE-615): the store's theme library as a grid, backed by the real multi-theme
+// API. This is the container — it owns the theme list, per-theme preview thumbnails, and the
+// create/rename/duplicate/delete/set-live flows, and composes the presentational <ThemeCard/>.
 export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const navigate = useNavigate();
+  const toast = useToast();
   const slug = storeSlug(store);
   const domain = store.host ?? store.id;
-  const live = storefrontUrl(store, false);
-  const toast = useToast();
-  const [preview, setPreview] = useState<Preview>({ status: 'loading', html: '' });
-  const [showChanges, setShowChanges] = useState(false);
+  const liveUrl = storefrontUrl(store, false);
+  const canManage = store.role === 'owner';
 
-  useEffect(() => {
-    let cancelled = false;
+  const [status, setStatus] = useState<Status>('loading');
+  const [errMsg, setErrMsg] = useState('');
+  const [themes, setThemes] = useState<ThemeSummary[]>([]);
+  const [previews, setPreviews] = useState<Record<string, Preview>>({});
+
+  const [renameTarget, setRenameTarget] = useState<ThemeSummary | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<ThemeSummary | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('New theme');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setStatus('loading');
     api
-      .previewBundle(store.id) // no files → renders the saved theme's home page
-      .then((r) => {
-        if (cancelled) return;
-        const html = r.error ? '' : (r.html ?? '');
-        setPreview({ status: html ? 'ok' : 'empty', html });
+      .listThemes(store.id)
+      .then((list) => {
+        setThemes(list);
+        setStatus('ready');
       })
-      .catch(() => !cancelled && setPreview({ status: 'empty', html: '' }));
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 503) {
+          setStatus('disabled');
+          return;
+        }
+        setErrMsg(e instanceof Error ? e.message : 'Could not load themes');
+        setStatus('error');
+      });
+  }, [api, store.id]);
+  useEffect(load, [load]);
+
+  // Render each theme's saved home page (no files → saved state) into its card thumbnail. Keyed on the
+  // set of theme ids, so it only refetches when a theme is added/removed, not on every render.
+  const themeIds = themes.map((t) => t.id).join(',');
+  useEffect(() => {
+    if (status !== 'ready') return;
+    let cancelled = false;
+    for (const theme of themes) {
+      setPreviews((p) => (p[theme.id] ? p : { ...p, [theme.id]: { status: 'loading', html: '' } }));
+      api
+        .previewBundle(store.id, theme.id)
+        .then((r) => {
+          if (cancelled) return;
+          const html = r.error ? '' : (r.html ?? '');
+          setPreviews((p) => ({ ...p, [theme.id]: { status: html ? 'ok' : 'empty', html } }));
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setPreviews((p) => ({ ...p, [theme.id]: { status: 'empty', html: '' } }));
+        });
+    }
     return () => {
       cancelled = true;
     };
-  }, [api, store.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api, store.id, themeIds, status]);
+
+  function editTheme(theme: ThemeSummary) {
+    navigate(`/stores/${slug}/themes/${theme.id}/editor`, { state: { fromApp: true } });
+  }
+
+  async function setLive(theme: ThemeSummary) {
+    setBusy(true);
+    try {
+      await api.activateTheme(store.id, theme.id);
+      toast(`${theme.name} is now live`, 'ok');
+      load();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function duplicate(theme: ThemeSummary) {
+    setBusy(true);
+    try {
+      await api.createTheme(store.id, { duplicateOf: theme.id });
+      toast(`Duplicated ${theme.name}`, 'ok');
+      load();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitRename(e: FormEvent) {
+    e.preventDefault();
+    if (!renameTarget) return;
+    const name = renameValue.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await api.renameTheme(store.id, renameTarget.id, name);
+      setRenameTarget(null);
+      load();
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setBusy(true);
+    try {
+      await api.deleteTheme(store.id, deleteTarget.id);
+      toast(`Deleted ${deleteTarget.name}`, 'ok');
+      setDeleteTarget(null);
+      load();
+    } catch (e) {
+      // The backend refuses the live theme with a 409 — surface it plainly instead of a raw error.
+      const msg =
+        e instanceof ApiError && e.status === 409
+          ? "You can't delete the live theme. Set another theme live first."
+          : (e as Error).message;
+      toast(msg, 'error');
+      setDeleteTarget(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCreate(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const { id } = await api.createTheme(store.id, { name: newName.trim() || 'New theme' });
+      setCreating(false);
+      navigate(`/stores/${slug}/themes/${id}/editor`, { state: { fromApp: true } });
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="fade-in">
@@ -100,97 +165,165 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
         title="Themes"
         description={
           <>
-            One theme is live on <span className="themes-domain">{domain}</span>. Customize it or
-            edit the code.
+            One theme is live on <span className="themes-domain">{domain}</span>. Customize it, edit
+            the code, or spin up another.
           </>
         }
       >
-        <button
-          className="btn btn-ghost"
-          onClick={() => toast('Import theme — pick a .zip or connect a repository', 'ok')}
-        >
-          Import theme
-        </button>
-        <button className="btn btn-primary" onClick={() => toast('Add theme — coming soon', 'ok')}>
-          <Icon.plus /> Add theme
-        </button>
+        {canManage && (
+          <button
+            className="btn btn-primary"
+            disabled={status !== 'ready'}
+            onClick={() => {
+              setNewName('New theme');
+              setCreating(true);
+            }}
+          >
+            <Icon.plus /> New theme
+          </button>
+        )}
       </PageHeader>
 
-      <section className="theme-live">
-        <div className="theme-live-preview">
-          <DesktopPreview preview={preview} domain={domain} />
-          <MobilePreview preview={preview} />
+      {status === 'loading' && (
+        <div className="center-pad">
+          <Spinner />
         </div>
+      )}
 
-        <div className="theme-live-body">
-          <div className="theme-live-tag">
-            <span className="themes-label">Live theme</span>
-            <span className="theme-pill">Active</span>
-          </div>
+      {status === 'disabled' && (
+        <EmptyState emoji="🔒" title="Themes aren't enabled here">
+          This environment has no theme bundle store configured. Set <code>BUNDLE_S3_BUCKET</code>{' '}
+          (and its S3 credentials) on the admin API to manage themes.
+        </EmptyState>
+      )}
 
-          <div>
-            <h2 className="theme-name">{store.name} theme</h2>
-            <p className="muted theme-live-sub">
-              This is what customers see. Edits go live only when you publish.
-            </p>
-          </div>
+      {status === 'error' && (
+        <EmptyState emoji="⚠️" title="Couldn't load themes">
+          <p className="muted">{errMsg}</p>
+          <button className="btn btn-sm" onClick={load}>
+            Retry
+          </button>
+        </EmptyState>
+      )}
 
-          <div className="theme-update">
-            <div className="theme-update-row">
-              <span className="theme-update-dot" />
-              <span className="muted theme-update-text">
-                Version {LIVE_UPDATE.version} available — {LIVE_UPDATE.summary}
-              </span>
-              <button className="link-btn" onClick={() => setShowChanges((v) => !v)}>
-                {showChanges ? 'Hide changes' : "What's new"}
-              </button>
+      {status === 'ready' && (
+        <div className="themes-grid">
+          {themes.map((theme) => (
+            <ThemeCard
+              key={theme.id}
+              theme={theme}
+              preview={previews[theme.id] ?? { status: 'loading', html: '' }}
+              domain={domain}
+              liveUrl={liveUrl}
+              canManage={canManage}
+              onEdit={() => editTheme(theme)}
+              onCustomize={() => navigate(`/stores/${slug}/themes/${theme.id}`)}
+              onSetLive={() => setLive(theme)}
+              onRename={() => {
+                setRenameValue(theme.name);
+                setRenameTarget(theme);
+              }}
+              onDuplicate={() => duplicate(theme)}
+              onDelete={() => setDeleteTarget(theme)}
+            />
+          ))}
+        </div>
+      )}
+
+      {creating && (
+        <Dialog title="New theme" onClose={() => setCreating(false)}>
+          <form onSubmit={submitCreate}>
+            <div className="body">
+              <Field label="Name">
+                <input
+                  className="input"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  autoFocus
+                />
+              </Field>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Starts from the shared default theme. You'll drop straight into the code editor.
+              </p>
+            </div>
+            <div className="actions">
               <button
-                className="btn btn-ghost btn-sm"
-                onClick={() => toast('Update copied to a draft — review, then publish', 'ok')}
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setCreating(false)}
+                disabled={busy}
               >
-                Update
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busy}>
+                {busy ? <Spinner /> : <Icon.plus />} Create theme
               </button>
             </div>
-            {showChanges && (
-              <ul className="theme-update-changes">
-                {LIVE_UPDATE.changes.map((c) => (
-                  <li key={c}>{c}</li>
-                ))}
-              </ul>
-            )}
-          </div>
+          </form>
+        </Dialog>
+      )}
 
-          <div className="theme-live-actions">
+      {renameTarget && (
+        <Dialog title="Rename theme" onClose={() => setRenameTarget(null)}>
+          <form onSubmit={submitRename}>
+            <div className="body">
+              <Field label="Name">
+                <input
+                  className="input"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  autoFocus
+                />
+              </Field>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setRenameTarget(null)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || !renameValue.trim()}
+              >
+                {busy ? <Spinner /> : null} Save
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {deleteTarget && (
+        <Dialog title={`Delete ${deleteTarget.name}?`} onClose={() => setDeleteTarget(null)}>
+          <div className="body">
+            <p className="muted">
+              This permanently removes the theme and its saved edits. This can't be undone.
+            </p>
+          </div>
+          <div className="actions">
             <button
-              className="btn btn-primary btn-sm"
-              onClick={() => navigate(`/stores/${slug}/themes/${store.id}`)}
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setDeleteTarget(null)}
+              disabled={busy}
             >
-              Customize
+              Cancel
             </button>
             <button
-              className="btn btn-ghost btn-sm"
-              onClick={() =>
-                navigate(`/stores/${slug}/themes/${store.id}/editor`, {
-                  state: { fromApp: true },
-                })
-              }
+              type="button"
+              className="btn btn-danger"
+              onClick={confirmDelete}
+              disabled={busy}
             >
-              Edit code
+              {busy ? <Spinner /> : <Icon.trash />} Delete theme
             </button>
-            {live && (
-              <a className="btn btn-ghost btn-sm" href={live} target="_blank" rel="noreferrer">
-                View live <Icon.external />
-              </a>
-            )}
-            <span style={{ flex: 1 }} />
-            <RowMenu
-              actions={LIVE_MENU.map((item) => ({ label: item, onClick: () => toast(item, 'ok') }))}
-            />
           </div>
-        </div>
-      </section>
-
-      <ThemeDrafts />
+        </Dialog>
+      )}
     </div>
   );
 }

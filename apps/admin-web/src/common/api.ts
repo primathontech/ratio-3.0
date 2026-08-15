@@ -24,6 +24,15 @@ export interface ThemeVersion {
   createdBy: string | null;
   createdAt: string;
 }
+// One bundle theme in a store's library (OFCE-615). Several may exist; exactly one is live.
+export interface ThemeSummary {
+  id: string;
+  name: string;
+  isLive: boolean;
+  liveVersion: number | null;
+  latestVersion: number | null;
+  createdAt: string;
+}
 // A bundle theme's files, keyed by path (e.g. 'index.liquid' → its source). The code editor's model.
 export type ThemeFiles = Record<string, string>;
 // --- Page builder (section/block PageDoc) ---
@@ -253,36 +262,58 @@ export function createApi(
         `/stores/${id}/theme/rollback`,
         { version }
       ),
-    // Bundle-theme code authoring (OFCE-601): the merchant's Liquid/HTML/CSS files, distinct from the
-    // token-based `theme*` methods above. The draft is the store's working theme (base ⊕ overrides).
-    getBundleDraft: (id: string) =>
-      req<{ files: ThemeFiles; revision: string }>('GET', `/stores/${id}/theme/bundle/draft`).then(
-        (d) => ({ files: d.files ?? {}, revision: d.revision ?? '' })
+    // --- Multi-theme library (OFCE-615): a store keeps several bundle themes; exactly one is live.
+    listThemes: (id: string) =>
+      req<Record<string, unknown>>('GET', `/stores/${id}/themes`).then((d) =>
+        pickArray<ThemeSummary>(d, 'themes')
       ),
+    // Create from the shared Default base, or duplicate an existing theme's overrides.
+    createTheme: (id: string, body: { name?: string; duplicateOf?: string } = {}) =>
+      req<{ id: string }>('POST', `/stores/${id}/themes`, body),
+    renameTheme: (id: string, themeId: string, name: string) =>
+      req<{ ok: boolean }>('PATCH', `/stores/${id}/themes/${themeId}`, { name }),
+    deleteTheme: (id: string, themeId: string) =>
+      req<{ ok: boolean }>('DELETE', `/stores/${id}/themes/${themeId}`),
+    // Set a theme live (owner-only). Omit `version` to activate its latest published version.
+    activateTheme: (id: string, themeId: string, version?: number) =>
+      req<{ version: number }>('POST', `/stores/${id}/themes/${themeId}/activate`, { version }),
+    bundleVersions: (id: string, themeId: string) =>
+      req<{ versions: ThemeVersion[]; liveVersion: number | null }>(
+        'GET',
+        `/stores/${id}/themes/${themeId}/versions`
+      ),
+    // Bundle-theme code authoring (OFCE-601): the merchant's Liquid/HTML/CSS files, distinct from the
+    // token-based `theme*` methods above. Theme-scoped: the draft is that theme's working files
+    // (base ⊕ overrides).
+    getBundleDraft: (id: string, themeId: string) =>
+      req<{ files: ThemeFiles; revision: string }>(
+        'GET',
+        `/stores/${id}/themes/${themeId}/draft`
+      ).then((d) => ({ files: d.files ?? {}, revision: d.revision ?? '' })),
     // `revision` is the token last loaded; the server rejects the save (409) if another editor moved
     // the draft since, instead of silently clobbering. `hash` in the reply is the new revision.
-    saveBundleDraft: (id: string, files: ThemeFiles, revision: string) =>
-      req<{ ok: boolean; hash: string }>('PUT', `/stores/${id}/theme/bundle/draft`, {
+    saveBundleDraft: (id: string, themeId: string, files: ThemeFiles, revision: string) =>
+      req<{ ok: boolean; hash: string }>('PUT', `/stores/${id}/themes/${themeId}/draft`, {
         files,
         revision,
       }),
-    scaffoldBundleDraft: (id: string) =>
+    scaffoldBundleDraft: (id: string, themeId: string) =>
       req<{ files: ThemeFiles; seeded: boolean; revision: string }>(
         'POST',
-        `/stores/${id}/theme/bundle/scaffold`,
+        `/stores/${id}/themes/${themeId}/scaffold`,
         {}
       ).then((d) => ({ files: d.files ?? {}, revision: d.revision ?? '' })),
-    publishBundle: (id: string) =>
-      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/publish`, {}),
-    rollbackBundle: (id: string, version: number) =>
-      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/theme/bundle/rollback`, {
+    publishBundle: (id: string, themeId: string) =>
+      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/themes/${themeId}/publish`, {}),
+    rollbackBundle: (id: string, themeId: string, version: number) =>
+      req<{ ok: boolean; version: number }>('POST', `/stores/${id}/themes/${themeId}/rollback`, {
         version,
       }),
     // Render a page of the theme to HTML for the live preview. Pass `files` to render the editor's
     // in-flight (possibly-unsaved) buffer; omit it to render the saved draft (base ⊕ overrides), e.g.
     // for a thumbnail. A template/Liquid error comes back as { error } rather than throwing.
-    previewBundle: (id: string, files?: ThemeFiles, page = 'index') =>
-      req<{ html?: string; error?: string }>('POST', `/stores/${id}/theme/bundle/preview`, {
+    previewBundle: (id: string, themeId: string, files?: ThemeFiles, page = 'index') =>
+      req<{ html?: string; error?: string }>('POST', `/stores/${id}/themes/${themeId}/preview`, {
         files,
         page,
       }),

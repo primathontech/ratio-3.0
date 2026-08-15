@@ -17,7 +17,7 @@ export function FullScreenEditorPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const store = resolveStore(stores, storeId);
-  if (!store) return <Navigate to="/" replace />;
+  if (!store || !themeId) return <Navigate to="/" replace />;
   // Prefer real "go back" (list vs settings, wherever the user came from), but only when we opened
   // the editor from within the app — a deep-linked editor URL falls back to the theme's page.
   const cameFromApp = (location.state as { fromApp?: boolean } | null)?.fromApp;
@@ -33,11 +33,10 @@ export function FullScreenEditorPage() {
         <ThemeCodeEditor
           api={api}
           store={store}
+          themeId={themeId}
           isLocal={!!me?.isLocal}
           onBack={() =>
-            cameFromApp
-              ? navigate(-1)
-              : navigate(`/stores/${storeSlug(store)}/themes/${themeId ?? store.id}`)
+            cameFromApp ? navigate(-1) : navigate(`/stores/${storeSlug(store)}/themes/${themeId}`)
           }
         />
       </Suspense>
