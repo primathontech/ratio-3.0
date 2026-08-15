@@ -30,7 +30,12 @@ import type { ThemeFiles } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { scaffoldStorefront, ensureDefaultBaseTheme } from '@ratio/builder-core';
-import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
+import {
+  buildCustomClient,
+  commerceUrlsFromEnv,
+  customCommerceResolver,
+} from '@ratio/builder-core';
+import type { TenantCommerce } from '@ratio/builder-core';
 import { tenantTag } from '@ratio/builder-core';
 import { FONTS, BASE_SIZE, RADIUS, CONTAINER, type ThemeTokens } from '@ratio/builder-core';
 import {
@@ -151,11 +156,31 @@ const pageBuilder = new PageBuilder(pbStore, pbRegistry, pbPurge);
 
 // Theme code editor live preview (OFCE-601): render a draft bundle theme to HTML the SAME way the
 // origin does — merchant Liquid via the worker-thread isolate, first-party sections via the registry.
-// Sample data (StubResolver) so data-bound sections show placeholder products without a commerce
-// backend. Reused by POST /theme/bundle/preview; identical shape to apps/origin/src/index.ts.
+// Data binding follows the SAME real-vs-stub rule as the origin: when the store has a connected
+// commerce backend (a merchantId) AND the platform service URLs are configured, resolve against the
+// REAL backend so the merchant previews their own products; otherwise fall back to StubResolver
+// sample data (local dev / tests / not-yet-connected), never throwing. Reused by POST
+// /theme/bundle/preview; identical render shape to apps/origin/src/index.ts.
 setUntrustedRenderer(renderUntrusted);
-function renderThemePreview(files: ThemeFiles, page: string, tenantId: string) {
-  return renderThemePage(
+function previewResolver(commerce: TenantCommerce | null | undefined) {
+  const urls = commerce?.merchantId ? commerceUrlsFromEnv(process.env) : null;
+  if (urls && commerce?.merchantId) {
+    return {
+      resolver: customCommerceResolver(urls),
+      commerce: { merchantId: commerce.merchantId, storeId: commerce.storeId } as TenantCommerce,
+      sampleData: false,
+    };
+  }
+  return { resolver: new StubResolver(), commerce: undefined, sampleData: true };
+}
+async function renderThemePreview(
+  files: ThemeFiles,
+  page: string,
+  tenantId: string,
+  commerce?: TenantCommerce | null
+) {
+  const { resolver, commerce: ctxCommerce, sampleData } = previewResolver(commerce);
+  const { html, tags } = await renderThemePage(
     files, // the composed draft (base ⊕ overrides) — no compile needed while compile is identity
     page,
     {
@@ -168,8 +193,9 @@ function renderThemePreview(files: ThemeFiles, page: string, tenantId: string) {
         return renderSection(rec, data);
       },
     },
-    { resolver: new StubResolver(), ctx: { tenantId, routeParams: {}, commerce: undefined } }
+    { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce } }
   );
+  return { html, tags, sampleData };
 }
 
 // Commerce webhook: map a gokwik change event → the surrogate tags the origin stamps on rendered
@@ -870,8 +896,9 @@ export function createApp(
     const files = body.files ?? (await themes.readComposed({ themeId }));
     const page = body.page || 'index';
     try {
-      const { html } = await renderThemePreview(files, page, id);
-      return c.json({ html });
+      const tenant = await forTenant(id).getTenant();
+      const { html, sampleData } = await renderThemePreview(files, page, id, tenant?.commerce);
+      return c.json({ html, sampleData });
     } catch (e) {
       console.error('theme preview render failed:', e);
       return c.json({ error: e instanceof Error ? e.message : 'preview failed' });

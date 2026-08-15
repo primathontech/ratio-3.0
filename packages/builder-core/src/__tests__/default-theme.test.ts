@@ -3,7 +3,23 @@
 // actually exist as sections/<type>.liquid — otherwise a freshly-seeded store fails to render.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { render } from '@ratio/builder-render';
 import { defaultBundleTheme } from '../default-theme';
+import { renderThemePage } from '../theme-render';
+import { StubResolver } from '../resolve';
+import type { SectionRenderer } from '../theme-render';
+
+const theme: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
+const renderPage = (page: string, routeParams: Record<string, string> = {}) =>
+  renderThemePage(
+    defaultBundleTheme(),
+    page,
+    { theme },
+    {
+      resolver: new StubResolver(),
+      ctx: { tenantId: 't1', routeParams },
+    }
+  );
 
 test('default theme: layout holds content_for_layout and templates reference existing sections', () => {
   const files = defaultBundleTheme();
@@ -25,4 +41,24 @@ test('default theme: layout holds content_for_layout and templates reference exi
       );
     }
   }
+});
+
+test('default theme binds + renders the collection products with rupee prices', async () => {
+  const { html } = await renderPage('collection', { handle: 'summer' });
+  assert.match(html, /Sample product 1/, 'a resolved product title renders');
+  assert.match(html, /₹499\.00/, 'the paise price is formatted to rupees via money');
+  assert.match(html, /href="\/products\/sample-1"/, 'each card links to its product page');
+});
+
+test('default theme renders the product detail page', async () => {
+  const { html } = await renderPage('product', { handle: 'air-max-90' });
+  assert.match(html, /Sample: air-max-90/, 'the resolved product title renders');
+  assert.match(html, /₹999\.00/, 'the product price is formatted to rupees');
+});
+
+test('default theme home shows a featured product grid out of the box', async () => {
+  const { html } = await renderPage('index');
+  assert.match(html, /Featured products/, 'the featured section heading renders');
+  assert.match(html, /Sample product 1/, 'featured products render on the home page');
+  assert.match(html, /₹499\.00/, 'featured prices are formatted to rupees');
 });
