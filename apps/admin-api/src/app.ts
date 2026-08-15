@@ -16,6 +16,7 @@ import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { config } from './config';
+import { interpretCollectionsEnvelope } from './commerce-verify';
 import { PageBuilder, type PurgeLike } from '@ratio/builder-core';
 import type { PageDoc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
@@ -621,10 +622,9 @@ export function createApp(
     const client = urls ? buildCustomClient({ merchantId: mid }, urls) : null;
     if (!client) return c.json({ configured: false, verified: false });
     try {
-      const res = await client.getCollections({ first: 100 });
-      const data = res?.data;
-      const collections = Array.isArray(data) ? data : (data?.collections ?? []);
-      return c.json({ configured: true, verified: true, collectionCount: collections.length });
+      // The client resolves { success:false } rather than throwing on a bad id / down backend, so the
+      // envelope decides verified — not the try/catch (which only guards a hard client throw).
+      return c.json(interpretCollectionsEnvelope(await client.getCollections({ first: 100 })));
     } catch {
       return c.json({ configured: true, verified: false });
     }
