@@ -526,12 +526,13 @@ export function createApp(
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
   app.post('/stores', denyNarrowedScope, async (c) => {
-    const { id, name, host, color, merchantId } = (await c.req.json().catch(() => ({}))) as {
+    const { id, name, host, color, merchantId, draft } = (await c.req.json().catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
       merchantId?: string;
+      draft?: boolean;
     };
     if (!name || !host) {
       return c.json({ error: 'name and host are required' }, 400);
@@ -582,16 +583,51 @@ export function createApp(
     // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
     // pages in the editor.
     await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
-    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides) and
-    // publish + activate it, so it renders through the bundle theme immediately and opens in the code
-    // editor tracking base updates instead of a self-contained copy. Best-effort.
-    await publishStoreThemeOnOnboard(tenantId).catch((e) => {
-      console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
-    });
+    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides).
+    // Normally publish + activate it so it renders through the bundle immediately. In DRAFT mode
+    // (the onboarding wizard, OFCE-618) only adopt it — leave live_theme_id NULL so the store isn't
+    // live until the wizard's final launch step publishes it. Best-effort either way.
+    if (draft) {
+      await ensureStoreTheme(tenantId).catch((e) => {
+        console.error('ensureStoreTheme failed for', tenantId, e);
+      });
+    } else {
+      await publishStoreThemeOnOnboard(tenantId).catch((e) => {
+        console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
+      });
+    }
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
-    return c.json({ id: tenantId, url: `https://${lcHost}/` }, 201);
+    return c.json({ id: tenantId, url: `https://${lcHost}/`, draft: !!draft }, 201);
+  });
+
+  // Verify a commerce merchant id BEFORE a store exists (the onboarding wizard's step 1, OFCE-618).
+  // Store-less: build a commerce client from the id alone + the env service URLs and ping the backend
+  // (getCollections). We return a shape the UI can act on rather than a bare bool:
+  //   - configured=false  → the commerce backend isn't wired in this environment (e.g. local dev) →
+  //                          the wizard soft-passes ("can't verify here") instead of blocking.
+  //   - verified=true + collectionCount → the id reached a real backend (count>0 is strong proof;
+  //                          count=0 means reachable-but-empty, which the UI flags as "double-check").
+  //   - verified=false    → the backend errored/rejected the id (unknown or inactive merchant).
+  // No membership gate (there's no store yet); denyNarrowedScope keeps it to full onboarding sessions.
+  app.post('/commerce/verify', denyNarrowedScope, async (c) => {
+    const { merchantId } = (await c.req.json().catch(() => ({}))) as { merchantId?: string };
+    const mid = String(merchantId ?? '').trim();
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(mid)) {
+      return c.json({ error: 'a valid merchantId is required' }, 400);
+    }
+    const urls = commerceUrlsFromEnv(process.env);
+    const client = urls ? buildCustomClient({ merchantId: mid }, urls) : null;
+    if (!client) return c.json({ configured: false, verified: false });
+    try {
+      const res = await client.getCollections({ first: 100 });
+      const data = res?.data;
+      const collections = Array.isArray(data) ? data : (data?.collections ?? []);
+      return c.json({ configured: true, verified: true, collectionCount: collections.length });
+    } catch {
+      return c.json({ configured: true, verified: false });
+    }
   });
 
   // Read a store — caller must have a membership on it.
