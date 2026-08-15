@@ -67,26 +67,38 @@ function bundleStoreFromEnv() {
 
   let ok = 0;
   for (const r of rows) {
-    const overrides = await store.readDraft({ themeId: r.id });
-    const overrideCount = Object.keys(overrides).filter((k) => k !== '_deletes').length;
-    const isLive = r.live_theme_id === r.id;
-    const label = `  ${r.name} (${r.id}): v${r.base_version} → v${latest} · ${overrideCount} override(s) · ${isLive ? 'live' : 'not-live'}`;
-    if (!APPLY) {
-      console.log(label);
-      continue;
-    }
+    // Whole iteration guarded so one store's failure (an S3 read, a publish error) never aborts the
+    // run — including dry-run, where a readDraft error would otherwise kill the loop.
     try {
+      const overrides = await store.readDraft({ themeId: r.id });
+      const overrideCount = Object.keys(overrides).filter((k) => k !== '_deletes').length;
+      const isLive = r.live_theme_id === r.id;
+      const label = `  ${r.name} (${r.id}): v${r.base_version} → v${latest} · ${overrideCount} override(s) · ${isLive ? 'live' : 'not-live'}`;
+      if (!APPLY) {
+        console.log(label);
+        continue;
+      }
+      // Bump the base pin, then republish base@latest ⊕ overrides. If publish fails, put the pin BACK
+      // so a re-run RETRIES this store — otherwise it would read as 'already latest' and be skipped
+      // forever, with no new version ever cut (base_version alone is the idempotency marker).
       await pool.query('UPDATE theme SET base_version = $2 WHERE id = $1', [r.id, latest]);
-      // Only flip the live pointer for a theme that IS the store's live one — never switch a store
-      // that has activated a different theme. The rebase still cuts a version either way.
-      const { version } = await store.publish(
-        { themeId: r.id },
-        { compile: identity, makeLive: isLive }
-      );
-      ok++;
-      console.log(`${label} → v${version} ✓`);
+      try {
+        // Only flip the live pointer for a theme that IS the store's live one — never switch a store
+        // that has activated a different theme. The rebase still cuts a version either way.
+        const { version } = await store.publish(
+          { themeId: r.id },
+          { compile: identity, makeLive: isLive }
+        );
+        ok++;
+        console.log(`${label} → v${version} ✓`);
+      } catch (e) {
+        await pool
+          .query('UPDATE theme SET base_version = $2 WHERE id = $1', [r.id, r.base_version])
+          .catch(() => {});
+        throw e;
+      }
     } catch (e) {
-      console.error(`${label} → FAILED: ${(e as Error).message}`);
+      console.error(`  ${r.name} (${r.id}): FAILED — ${(e as Error).message}`);
     }
   }
   if (APPLY) console.log(`rebased ${ok}/${rows.length}`);
