@@ -69,3 +69,26 @@ export async function ensureDefaultBaseTheme(
     client.release();
   }
 }
+
+// Make a store render through the bundle from day one: adopt the shared Default base into the store's
+// theme (base ⊕ overrides) and PUBLISH + ACTIVATE it, so `tenants.live_theme_id` points at a live
+// version. Onboarding calls this (and a backfill for older stores) so the bundle theme is the single
+// renderer — the page-builder is only an emergency degrade path (OFCE-616, ADR-013 §14.6).
+//
+// The caller owns the "should I publish?" decision: `ensureTheme` is create-only (a no-op that keeps
+// any existing overrides), but `publish` ALWAYS cuts a new version and repoints live — so only call
+// this when a store has no live theme yet (onboarding, or backfill filtering `live_theme_id IS NULL`).
+export async function adoptAndPublishDefaultTheme(
+  store: ThemeStore,
+  tenantId: string,
+  themeId: string,
+  opts: { compile: CompileFn; name?: string; by?: string }
+): Promise<{ version: number }> {
+  const base = await ensureDefaultBaseTheme(store, { compile: opts.compile });
+  await store.ensureTheme(tenantId, themeId, opts.name ?? 'Theme', base);
+  const { version } = await store.publish(
+    { themeId },
+    { compile: opts.compile, makeLive: true, by: opts.by }
+  );
+  return { version };
+}

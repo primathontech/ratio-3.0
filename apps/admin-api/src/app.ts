@@ -29,7 +29,11 @@ import {
 import type { ThemeFiles } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { scaffoldStorefront, ensureDefaultBaseTheme } from '@ratio/builder-core';
+import {
+  scaffoldStorefront,
+  ensureDefaultBaseTheme,
+  adoptAndPublishDefaultTheme,
+} from '@ratio/builder-core';
 import {
   buildCustomClient,
   commerceUrlsFromEnv,
@@ -382,6 +386,20 @@ export function createApp(
     await themes.ensureTheme(tenantId, mainThemeId(tenantId), 'Theme', base);
   }
 
+  // Onboarding variant: create the store's theme AND publish + activate it, so live_theme_id is set
+  // from day one and the store renders through the bundle theme immediately (bundle = the single
+  // renderer; the page-builder is only an emergency degrade-only fallback). OFCE-616 / ADR-013 §14.6.
+  // Kept separate from ensureStoreTheme so the editor's create-only "ensure" guard never publishes as
+  // a side effect. A no-op without a bundle store; best-effort at the call site.
+  async function publishStoreThemeOnOnboard(tenantId: string): Promise<void> {
+    if (!themes) return;
+    const { rows } = await pool.query('SELECT 1 FROM theme WHERE id = $1', [mainThemeId(tenantId)]);
+    if (rows[0]) return;
+    await adoptAndPublishDefaultTheme(themes, tenantId, mainThemeId(tenantId), {
+      compile: identityCompile,
+    });
+  }
+
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
   // single-container admin-api; a multi-instance deploy needs a shared store. /assistant
   // gets a much tighter budget because each call fans out to several Anthropic requests.
@@ -583,10 +601,11 @@ export function createApp(
     // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
     // pages in the editor.
     await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
-    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides), so it
-    // opens in the code editor tracking base updates instead of a self-contained copy. Best-effort.
-    await ensureStoreTheme(tenantId).catch((e) => {
-      console.error('ensureStoreTheme failed for', tenantId, e);
+    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides) and
+    // publish + activate it, so it renders through the bundle theme immediately and opens in the code
+    // editor tracking base updates instead of a self-contained copy. Best-effort.
+    await publishStoreThemeOnOnboard(tenantId).catch((e) => {
+      console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
     });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
