@@ -10,6 +10,7 @@ import { ComingSoon } from '../features/shell/app-shell';
 import { DangerPanel } from '../features/stores/danger-panel';
 import { ThemesList } from '../features/theme/themes-list';
 import { storeSlug, useMerchant, useStoreData } from '../common/store-context';
+import { AllStores } from '../features/all-stores/all-stores';
 
 // Bare "/" (and any unknown path) → the right home for the role.
 export function RoleRedirect() {
@@ -30,6 +31,12 @@ export function SuperAdminPage() {
   const { stores, me, openCreate } = useStoreData();
   return <SuperAdmin stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
 }
+
+export function Stores() {
+  const { stores, me, openCreate } = useStoreData();
+  return <AllStores stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
+}
+
 export function HomePage() {
   const { store } = useMerchant();
   return <DashboardHome storeName={store.name} />;
