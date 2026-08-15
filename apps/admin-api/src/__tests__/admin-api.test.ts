@@ -139,6 +139,21 @@ test('GET /stores/:id/collections is membership-gated; empty when no backend con
   assert.deepStrictEqual(await r.json(), { collections: [] });
 });
 
+test('POST /commerce/verify rejects a malformed merchant id (400)', async () => {
+  const bad = await call('POST', '/commerce/verify', alice, { merchantId: 'has spaces!' });
+  assert.strictEqual(bad.status, 400);
+  const empty = await call('POST', '/commerce/verify', alice, {});
+  assert.strictEqual(empty.status, 400);
+});
+
+test('POST /commerce/verify reports configured:false when the commerce backend is not wired', async () => {
+  // The test env has no COMMERCE_*_API_URL, so the backend can't be pinged — the wizard soft-passes
+  // on this rather than blocking onboarding. (The verified:true path is covered by the Phase D e2e.)
+  const res = await call('POST', '/commerce/verify', alice, { merchantId: '196jdfqy1aot' });
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), { configured: false, verified: false });
+});
+
 test('GET /stores lists only the caller’s own stores', async () => {
   const mine = await (await call('GET', '/stores', alice)).json();
   assert.ok((mine as { stores: { id: string }[] }).stores.some((s) => s.id === ID));

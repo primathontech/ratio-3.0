@@ -118,7 +118,8 @@ export function SuperAdmin({
           </button>
         </div>
 
-        <div className="kpi-grid">
+        {/* This is analytics data we will uncomment this once we have analytics api ready */}
+        {/* <div className="kpi-grid">
           {kpis.map((k) => (
             <div className="kpi-card" key={k.label}>
               <div className="kpi-label">{k.label}</div>
@@ -131,7 +132,7 @@ export function SuperAdmin({
               <Spark values={k.spark} />
             </div>
           ))}
-        </div>
+        </div> */}
 
         <div className="card" style={{ overflow: 'hidden' }}>
           <div
