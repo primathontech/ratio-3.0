@@ -167,7 +167,9 @@ export class ThemeStore {
 
   // Reset the draft to pure base: store an EMPTY overrides bundle, so readComposed returns the
   // untouched base theme again (drops every customization the merchant made). The inverse of
-  // saveOverrides with a full override set.
+  // saveOverrides with a full override set. Intentionally UNCONDITIONAL (no expectedRevision): the
+  // result "overrides = {}" doesn't depend on the prior draft, so there's nothing to conflict with; a
+  // sibling tab that later saves with a stale revision is still caught by saveDraft's own CAS (409).
   async resetDraft(ref: ThemeRef): Promise<{ hash: string }> {
     return this.saveDraft(ref, {});
   }

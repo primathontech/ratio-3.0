@@ -923,9 +923,12 @@ export function createApp(
   // Reset a theme's draft to pure base — drop every override (the merchant's customizations) so the
   // editor is back to the default theme. A member edit (like draft-save), not owner-only. Returns the
   // now-composed files + the fresh revision so the editor swaps its buffer in place.
-  async function resetBundle(c: Context<Vars>, themeId: string) {
+  async function resetBundle(c: Context<Vars>, themeId: string, ensure?: () => Promise<void>) {
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
+    // Ensure the theme row exists first (legacy main-theme mount) so reset can't write an orphan draft
+    // blob for a never-created theme; the multi-theme mount skips this (assertThemeInStore proved it).
+    if (ensure) await ensure();
     await themes.resetDraft({ themeId });
     const [files, revision] = await Promise.all([
       themes.readComposed({ themeId }),
@@ -953,7 +956,7 @@ export function createApp(
   );
   app.post('/stores/:id/theme/bundle/rollback', requireRole('owner'), (c) => rollbackBundle(c));
   app.post('/stores/:id/theme/bundle/reset', requireMembership, (c) =>
-    resetBundle(c, mainThemeId(c.req.param('id')))
+    resetBundle(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
   );
 
   // --- Multi-theme CRUD + selection (OFCE-615 Phase 1). A store may keep several themes; exactly one
