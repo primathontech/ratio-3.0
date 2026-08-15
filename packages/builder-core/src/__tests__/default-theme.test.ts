@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
 import { defaultBundleTheme } from '../default-theme';
+import { storefrontHead } from '../storefront';
 import { renderThemePage } from '../theme-render';
 import { StubResolver } from '../resolve';
 import type { SectionRenderer } from '../theme-render';
@@ -62,6 +63,28 @@ test('starter theme collection sources request the full catalog (available:false
       }
     }
   }
+});
+
+test('starter theme ships an editable CSS file, injected into the head AFTER the base styles', () => {
+  const files = defaultBundleTheme();
+  assert.ok('assets/theme.css' in files, 'the theme ships an editable assets/theme.css');
+  const head = storefrontHead({}, '/*CUSTOM_MARKER*/');
+  assert.match(head, /CUSTOM_MARKER/, 'the custom CSS reaches the head');
+  assert.ok(
+    head.indexOf('/*CUSTOM_MARKER*/') > head.indexOf('.hdr'),
+    'custom CSS comes after the base rules so it overrides them'
+  );
+  assert.ok(
+    head.indexOf('/*CUSTOM_MARKER*/') < head.indexOf('</style>'),
+    'custom CSS is inside the style block'
+  );
+  // Custom CSS must not be able to close its own <style> element and inject markup.
+  const evil = storefrontHead({}, '.x{}</style><script>alert(1)</script>');
+  assert.doesNotMatch(
+    evil,
+    /<\/style><script/i,
+    'a </style> breakout in custom CSS is neutralized'
+  );
 });
 
 test('default theme binds + renders the collection products with rupee prices', async () => {

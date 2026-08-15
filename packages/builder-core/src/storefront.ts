@@ -189,7 +189,13 @@ a{color:inherit;text-decoration:none}
 .order-row span:first-child{color:var(--muted)}
 `;
 
-// The full <style> block to drop into <head>: safe token overrides first, then the base rules.
-export function storefrontHead(tokens: ThemeTokens = {}): string {
-  return `<style>${rootVars(tokens)}${BASE}</style>`;
+// The full <style> block to drop into <head>: safe token overrides first, then the base rules, then
+// the theme's own editable CSS LAST so a merchant's rules win over the defaults. customCss is the
+// merchant's assets/theme.css (untrusted — the store's own CSS, and inline <style> is already allowed
+// by the storefront CSP). Valid CSS never contains a `</style` sequence, so we neutralize it: that's
+// the one way CSS could close its <style> element early and inject markup (the strict CSP already
+// blocks any injected script, this is defense-in-depth).
+export function storefrontHead(tokens: ThemeTokens = {}, customCss = ''): string {
+  const safeCss = customCss.replace(/<\/style/gi, '<\\/style');
+  return `<style>${rootVars(tokens)}${BASE}${safeCss}</style>`;
 }

@@ -29,7 +29,7 @@ import {
 import type { ThemeFiles } from '@ratio/builder-core';
 import { storefrontHead, resolveThemeTokens } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
-import { fetchMainMenu, renderHeader, fetchFooter, renderFooter } from '@ratio/builder-core';
+import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { ensureDefaultBaseTheme, adoptAndPublishDefaultTheme } from '@ratio/builder-core';
@@ -207,12 +207,18 @@ async function renderThemePreview(
     fetchFooter(merchantId, navUrl),
   ]);
   // Mirror EXACTLY what the origin serves (apps/origin/src/index.ts): doctype + <head> with the
-  // design-system CSS + per-theme brand tokens, and the header/footer rendered by the shell
-  // (renderHeader/renderFooter) around the theme body — NOT theme sections. So the preview is a
-  // faithful whole-page view (styled, real header/footer), not just the bare body.
-  const head = storefrontHead(resolveThemeTokens(files, (theme ?? {}) as ThemeTokens));
-  const header = renderHeader({ menu, siteName });
-  const footer = renderFooter({ footer: footerData, siteName });
+  // design-system CSS + per-theme brand tokens + the theme's own assets/theme.css, and the header/
+  // footer rendered from the theme's editable sections (renderChrome) around the body. So the preview
+  // is a faithful whole-page view — a merchant's edited header/footer/CSS shows here as it will live.
+  const head = storefrontHead(
+    resolveThemeTokens(files, (theme ?? {}) as ThemeTokens),
+    files['assets/theme.css'] ?? ''
+  );
+  const { header, footer } = await renderChrome(files, (l, d) => renderUntrusted(l, d), {
+    menu,
+    footer: footerData,
+    siteName,
+  });
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${header}${sections}${footer}</body></html>`;
   return { html, tags, sampleData };
 }

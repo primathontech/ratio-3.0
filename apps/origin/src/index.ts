@@ -6,8 +6,7 @@ import { esc } from '@ratio/builder-core';
 import { PgPageStore } from '@ratio/builder-core';
 import { composePage } from '@ratio/builder-core';
 import { resolvePage } from '@ratio/builder-core';
-import { fetchMainMenu, renderHeader } from '@ratio/builder-core';
-import { fetchFooter, renderFooter } from '@ratio/builder-core';
+import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { storefrontResolver, buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { storefrontHead } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
@@ -176,14 +175,15 @@ type CartTenant = {
 // path. Resolve them from the store's LIVE compiled bundle (config/tokens.json) so those pages match
 // the theme; fall back to the tenant-level theme when there's no live bundle (or on any load hiccup),
 // which keeps these transactional pages rendering even if the theme store is momentarily unavailable.
-async function liveThemeTokens(tenant: CartTenant, tenantId: string): Promise<ThemeTokens> {
-  const seed = (tenant.theme ?? {}) as ThemeTokens;
-  if (!themeStore || !tenant.liveThemeId) return seed;
+// The store's live compiled bundle, or null when it has no bundle theme or the store is momentarily
+// unavailable — so these transactional pages keep rendering. The cart/order pages read it for BOTH
+// the brand tokens and the editable header/footer (renderChrome), loading it once.
+async function liveCompiled(tenant: CartTenant, tenantId: string) {
+  if (!themeStore || !tenant.liveThemeId) return null;
   try {
-    const compiled = await themeStore.loadLiveCompiled(tenantId);
-    return resolveThemeTokens(compiled, seed);
+    return await themeStore.loadLiveCompiled(tenantId);
   } catch {
-    return seed;
+    return null;
   }
 }
 
@@ -201,17 +201,30 @@ async function renderCartResponse(
 ): Promise<Response> {
   const merchantId = tenant.commerce?.merchantId ?? '';
   const ix = composeGokwik(integrationContext(tenant.commerce, 'cart'));
-  const [menu, footer] = await timed(c, 'nav', () =>
-    Promise.all([
-      fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-      fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    ])
+  const [compiled, [menu, footerData]] = await Promise.all([
+    liveCompiled(tenant, tenantId),
+    timed(c, 'nav', () =>
+      Promise.all([
+        fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+        fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+      ])
+    ),
+  ]);
+  const { header, footer } = await timed(c, 'chrome', () =>
+    renderChrome(compiled ?? {}, (l, d) => renderUntrusted(l, d), {
+      menu,
+      footer: footerData,
+      siteName: tenant.name,
+    })
   );
   const html = renderCartPage(cart, {
     siteName: tenant.name,
-    styleHead: storefrontHead(await liveThemeTokens(tenant, tenantId)),
-    header: renderHeader({ menu, siteName: tenant.name }),
-    footer: renderFooter({ footer, siteName: tenant.name }),
+    styleHead: storefrontHead(
+      resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
+      (compiled ?? {})['assets/theme.css'] ?? ''
+    ),
+    header,
+    footer,
     headExtra: ix.head,
     bodyEnd: ix.bodyEnd,
   });
@@ -233,11 +246,21 @@ async function renderOrderResponse(
   const url = new URL(c.req.url);
   const rawTotal = Number(url.searchParams.get('total'));
   const ix = composeGokwik(integrationContext(tenant.commerce, 'order'));
-  const [menu, footer] = await timed(c, 'nav', () =>
-    Promise.all([
-      fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-      fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
-    ])
+  const [compiled, [menu, footerData]] = await Promise.all([
+    liveCompiled(tenant, tenantId),
+    timed(c, 'nav', () =>
+      Promise.all([
+        fetchMainMenu(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+        fetchFooter(merchantId, process.env.COMMERCE_NAV_API_URL ?? ''),
+      ])
+    ),
+  ]);
+  const { header, footer } = await timed(c, 'chrome', () =>
+    renderChrome(compiled ?? {}, (l, d) => renderUntrusted(l, d), {
+      menu,
+      footer: footerData,
+      siteName: tenant.name,
+    })
   );
   const html = renderOrderPage(
     {
@@ -248,9 +271,12 @@ async function renderOrderResponse(
     },
     {
       siteName: tenant.name,
-      styleHead: storefrontHead(await liveThemeTokens(tenant, tenantId)),
-      header: renderHeader({ menu, siteName: tenant.name }),
-      footer: renderFooter({ footer, siteName: tenant.name }),
+      styleHead: storefrontHead(
+        resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
+        (compiled ?? {})['assets/theme.css'] ?? ''
+      ),
+      header,
+      footer,
       headExtra: ix.head,
       bodyEnd: ix.bodyEnd,
     }
@@ -575,10 +601,9 @@ app.all('*', async (c) => {
       if (compiled && compiled[`templates/${page}.json`] != null) {
         // Render the theme body AND fetch the store's real nav (header menu + footer) in parallel —
         // the nav overlaps the slow isolate render, not the S3 load, and isn't fetched at all on a
-        // bundle-miss fall-through. The header/footer are rendered by the ORIGIN shell
-        // (renderHeader/renderFooter) for EVERY page — the same real store name + nav +
-        // search/cart/account the cart/order pages use — so all pages share ONE header instead of
-        // the theme carrying its own placeholder one.
+        // bundle-miss fall-through. The header/footer are then rendered by the ORIGIN shell from the
+        // THEME's editable header/footer sections (renderChrome) for EVERY page — the same real store
+        // name + nav the cart/order pages use — so all pages share ONE header/footer.
         const [{ html: sections, tags: dataTags }, [menu, footerData]] = await Promise.all([
           timed(c, 'compose', () =>
             renderThemePage(
@@ -619,9 +644,14 @@ app.all('*', async (c) => {
             Promise.all([fetchMainMenu(merchantId, navUrl), fetchFooter(merchantId, navUrl)])
           ),
         ]);
-        const header = renderHeader({ menu, siteName: tenant.name });
-        const footerHtml = renderFooter({ footer: footerData, siteName: tenant.name });
-        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens))}</head><body>${header}${sections}${footerHtml}</body></html>`;
+        const { header, footer: footerHtml } = await timed(c, 'chrome', () =>
+          renderChrome(compiled, (l, d) => renderUntrusted(l, d), {
+            menu,
+            footer: footerData,
+            siteName: tenant.name,
+          })
+        );
+        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens), compiled['assets/theme.css'] ?? '')}</head><body>${header}${sections}${footerHtml}</body></html>`;
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));

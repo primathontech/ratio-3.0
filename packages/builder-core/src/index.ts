@@ -2,6 +2,7 @@
 // '@ratio/builder-core'; internal file layout stays private behind this.
 export * from './bundle';
 export * from './cart';
+export * from './chrome';
 export * from './compose';
 export * from './doc';
 export * from './footer';
