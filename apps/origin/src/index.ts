@@ -22,7 +22,6 @@ import {
 import {
   composeGokwik,
   gokwikCartCookies,
-  openCartCookie,
   mergeCsp,
   cspToString,
   type CspDirectives,
@@ -162,8 +161,9 @@ function setStorefrontSecurity(c: Context, csp: string = STRICT_CSP): void {
 }
 
 // Cart. The cart lives on the commerce backend; the origin holds only the token cookie. There is no
-// cart PAGE — the GoKwik side-cart drawer is the cart. Add/update are form POSTs → mutate → 303 back
-// to where the shopper was, flagging the drawer to open (rt_open_cart, read by the widget trigger).
+// cart PAGE — the GoKwik side-cart widget (loaded on every page) is the cart: it intercepts
+// add-to-cart and opens its drawer itself. The server routes below are the no-JS fallback — they
+// mutate the cart and 303 back to where the shopper was.
 type CartTenant = {
   name: string;
   theme?: unknown;
@@ -193,10 +193,10 @@ function cartBackendFor(commerce: CartTenant['commerce']): CartBackend | null {
   return buildCustomClient(commerce, urls) as CartBackend | null;
 }
 
-// There is no cart PAGE — the GoKwik side-cart drawer is the cart (view + checkout). Add-to-cart and
-// the cart-icon link bounce the shopper back to where they were and flag the drawer to open (the
-// side-cart trigger reads the rt_open_cart cookie). We redirect to the referring PATH only (never the
-// raw Referer), so the target is always same-origin — no open-redirect.
+// There is no cart PAGE — the GoKwik side-cart drawer is the cart (view + checkout). The no-JS
+// fallback for add-to-cart / the cart-icon link bounces the shopper back to where they were. We
+// redirect to the referring PATH only (never the raw Referer), so the target is always same-origin —
+// no open-redirect.
 function backToReferer(c: Context<Vars>): string {
   const ref = c.req.header('referer');
   if (ref) {
@@ -334,17 +334,16 @@ async function handleCart(
         logCommerceError(log, path === '/cart/add' ? 'add' : 'update', tenantId, e);
       }
     }
-    // The cart is mutated server-side; the side-cart drawer (not a cart page) shows it. Bounce back to
-    // where the shopper was and flag the drawer to open (rt_open_cart, read by the widget trigger).
-    c.header('set-cookie', openCartCookie(), { append: true });
+    // No-JS fallback path: the cart is mutated server-side. With JS, the GoKwik side-cart widget
+    // (loaded on every page) intercepts add-to-cart and opens the drawer itself — this POST never
+    // fires. Without JS, we just bounce back to where the shopper was (the cart lives on the backend).
     c.header('x-cache', 'no-store');
     c.header('x-handler', 'cart-add');
     return c.redirect(backToReferer(c), 303);
   }
 
-  // GET /cart (the header cart icon still links here): there is no cart page — open the drawer where
-  // the shopper is, the same way add-to-cart does.
-  c.header('set-cookie', openCartCookie(), { append: true });
+  // GET /cart: there is no cart page. The side-cart widget owns the cart icon + drawer; if a shopper
+  // still reaches this (no JS, or a direct hit), send them back where they were rather than 404.
   c.header('x-cache', 'no-store');
   c.header('x-handler', 'cart-open');
   return c.redirect(backToReferer(c), 303);
@@ -619,7 +618,12 @@ app.all('*', async (c) => {
             siteName: tenant.name,
           })
         );
-        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens), compiled['assets/theme.css'] ?? '')}</head><body>${header}${sections}${footerHtml}</body></html>`;
+        // External integrations (GoKwik side-cart + checkout) belong on EVERY storefront page, not
+        // just cart/order — the side-cart drawer is how a shopper views the cart and opens on add,
+        // so its widget must load on home/collection/product too. The fragments are store-level
+        // (merchantInfo + a runtime cookie-token bridge), so the page stays edge-cacheable.
+        const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
+        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens), compiled['assets/theme.css'] ?? '')}${ix.head}</head><body>${header}${sections}${footerHtml}${ix.bodyEnd}</body></html>`;
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
@@ -635,7 +639,7 @@ app.all('*', async (c) => {
         c.header('x-surrogate-keys', tags.join(' '));
         c.header('x-cache', 'long');
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
-        setStorefrontSecurity(c, cspToString(STOREFRONT_BASE_CSP));
+        setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
         return c.html(html);
       }
     } catch (e) {

@@ -61,7 +61,7 @@ test('reserved path -> no-store system handler', async () => {
   assert.strictEqual(res.headers.get('x-cache'), 'no-store');
 });
 
-test('GET /cart: no cart page — bounce back and flag the side-cart drawer to open', async () => {
+test('GET /cart: no cart page — bounce back (the side-cart widget owns the drawer)', async () => {
   const res = await call(
     '/cart',
     edge({ 'x-ratio-tenant': ACME, referer: 'http://origin/collections/all' })
@@ -69,7 +69,6 @@ test('GET /cart: no cart page — bounce back and flag the side-cart drawer to o
   assert.strictEqual(res.status, 303);
   assert.strictEqual(res.headers.get('x-handler'), 'cart-open');
   assert.strictEqual(res.headers.get('location'), '/collections/all'); // back where the shopper was
-  assert.match(res.headers.get('set-cookie') || '', /rt_open_cart=1/); // opens the drawer next page
   assert.strictEqual(res.headers.get('x-cache'), 'no-store');
 });
 
@@ -99,7 +98,6 @@ test('POST /cart/add: mutate then bounce back + flag the drawer (no cart page)',
   assert.strictEqual(res.status, 303);
   assert.strictEqual(res.headers.get('x-handler'), 'cart-add');
   assert.strictEqual(res.headers.get('location'), '/products/x');
-  assert.match(res.headers.get('set-cookie') || '', /rt_open_cart=1/);
 });
 
 test('tenant isolation: acme cannot render betas /about route (404)', async () => {
