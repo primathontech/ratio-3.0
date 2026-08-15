@@ -259,12 +259,13 @@ test(
     assert.ok(res.headers.get('x-theme-version'), 'served a published version');
     const body = await res.text();
     assert.match(body, /^<!doctype html>/);
-    // Sections from the shared library BASE render (the store didn't touch them)...
-    assert.match(body, /class="site-header"/, 'base header section composes in');
-    assert.match(body, /class="site-footer"/, 'base footer section composes in');
+    // Sections from the shared library BASE render (the store didn't touch them) — the default theme's
+    // header/footer use the storefront design-system classes (.hdr/.ftr).
+    assert.match(body, /class="hdr"/, 'base header section composes in');
+    assert.match(body, /class="ftr"/, 'base footer section composes in');
     // ...alongside the merchant's OVERRIDE section, which replaced the base hero and still binds the
-    // base template's data through the sandbox isolate.
-    assert.match(body, /<section class="mine"><h1>MERCHANT Welcome to your store<\/h1><\/section>/);
+    // base template's data (the default home hero heading) through the sandbox isolate.
+    assert.match(body, /<section class="mine"><h1>MERCHANT New season, new look<\/h1><\/section>/);
     assert.doesNotMatch(
       body,
       /class="hero"/,
