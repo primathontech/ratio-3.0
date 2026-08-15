@@ -39,6 +39,9 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
   }
 
   const valid = data.name.trim().length > 0 && /^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(data.host.trim());
+  // Once the store is created (the merchant went forward then back), the name + address are fixed —
+  // lock them so an edit here isn't silently ignored. They're changeable later in store settings.
+  const created = !!data.storeId;
 
   return (
     <div className="ob-card">
@@ -51,6 +54,7 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
           placeholder="Acme"
           value={data.name}
           onChange={(e) => onName(e.target.value)}
+          disabled={created}
           autoFocus
         />
       </Field>
@@ -62,6 +66,7 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
           className="input mono"
           placeholder={`acme.${PLATFORM_DOMAIN}`}
           value={data.host}
+          disabled={created}
           onChange={(e) => {
             setHostTouched(true);
             patch({ host: e.target.value });
@@ -69,6 +74,11 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
         />
       </Field>
 
+      {created && (
+        <div className="note note-ok" role="status">
+          Your store is created. You can change its name and address later in settings.
+        </div>
+      )}
       {error && (
         <div className="note note-error" role="alert">
           {error}
