@@ -101,7 +101,20 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
       patch({ color });
       onNext();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not save your design');
+      // The draft moved since we loaded it (rare in a fresh single-editor wizard) → refresh files +
+      // revision so a retry saves cleanly, keeping the in-progress design selections.
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const d = await api.getBundleDraft(storeId, themeId);
+          setFiles(d.files);
+          setRevision(d.revision);
+        } catch {
+          /* fall through to the message */
+        }
+        setError('This store changed elsewhere — review and continue again.');
+      } else {
+        setError(e instanceof ApiError ? e.message : 'Could not save your design');
+      }
     } finally {
       setBusy(false);
     }
@@ -223,6 +236,13 @@ function CollectionSelect({
   const known = options.some((o) => o.handle === value);
   return (
     <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      {/* Keep the shown selection and React state in sync: a placeholder for an empty value, or the
+          current (non-catalogue) handle, so the browser never highlights an option state doesn't hold. */}
+      {!value && (
+        <option value="" disabled>
+          Choose a collection…
+        </option>
+      )}
       {value && !known && <option value={value}>{value} (not in your catalogue)</option>}
       {options.map((o) => (
         <option key={o.handle} value={o.handle}>
