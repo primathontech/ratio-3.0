@@ -24,6 +24,22 @@ export function defaultBundleTheme(): ThemeFiles {
   ) => JSON.stringify(dataSources ? { dataSources, sections } : { sections }, null, 2);
 
   return {
+    // The theme's own brand tokens (OFCE-616): per-theme, versioned with the bundle, read by the
+    // origin into the storefront <head>. Colour is intentionally omitted so a fresh store keeps the
+    // brand colour it chose at onboarding (tenants.theme) until it edits the theme; the rest define
+    // this starter's look. Every value is a key into a fixed scale (see storefront.ts ThemeTokens).
+    'config/tokens.json': `${JSON.stringify(
+      {
+        bodyFont: 'system',
+        headingFont: 'system',
+        baseSize: 'm',
+        radius: 'soft',
+        container: 'normal',
+      },
+      null,
+      2
+    )}\n`,
+
     // Body chrome only — the origin provides <!doctype html><head>(design-system CSS + brand tokens)</head><body>.
     'layout/theme.liquid': `{{ content_for_layout }}
 `,
