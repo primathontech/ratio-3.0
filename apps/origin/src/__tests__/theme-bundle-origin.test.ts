@@ -6,7 +6,12 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ThemeStore, tenantTag, ensureDefaultBaseTheme } from '@ratio/builder-core';
+import {
+  ThemeStore,
+  tenantTag,
+  ensureDefaultBaseTheme,
+  adoptAndPublishDefaultTheme,
+} from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { app } from '../index';
@@ -36,6 +41,8 @@ const T7 = 'themebundle_o7';
 const THEME7 = 'themebundle_o7_main';
 const T8 = 'themebundle_o8';
 const THEME8 = 'themebundle_o8_main';
+const T9 = 'themebundle_o9';
+const THEME9 = 'themebundle_o9-main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -48,9 +55,9 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8, THEME9])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5, T6, T7, T8])
+  for (const id of [T, T2, T3, T4, T5, T6, T7, T8, T9])
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
@@ -81,6 +88,11 @@ before(async () => {
     "INSERT INTO tenants (id, name, status, theme) VALUES ($1, 'Token Store', 'active', $2)",
     [T8, JSON.stringify({ color: '#ff0000', container: 'wide' })]
   );
+  // A store onboarded the OFCE-616 way: no manual bundle: adoptAndPublishDefaultTheme (below) does the
+  // adopt+publish+activate, so it must render the DEFAULT e-commerce home through the bundle path.
+  await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Onboarded', 'active')", [
+    T9,
+  ]);
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -170,14 +182,17 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME8 }, { compile: (s) => s });
+
+  // The onboarding path itself (OFCE-616): adopt the Default base + publish + activate in one call.
+  await adoptAndPublishDefaultTheme(store, T9, THEME9, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
   // The shared library base (library-default / _library) is left in place — a persistent fixture.
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8, THEME9])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5, T6, T7, T8])
+  for (const id of [T, T2, T3, T4, T5, T6, T7, T8, T9])
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
@@ -307,5 +322,23 @@ test(
       /class="hero"/,
       'the override replaced the base hero, not appended to it'
     );
+  }
+);
+
+test(
+  'OFCE-616 P2: an onboarded store (adopt+publish+activate) renders the default bundle home',
+  { skip },
+  async () => {
+    // No manual saveDraft/publish — adoptAndPublishDefaultTheme (the onboarding call) is all this
+    // store got, yet the origin serves the full default e-commerce home through the bundle path.
+    const res = await call('/', edge({ 'x-ratio-tenant': T9 }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+    const body = await res.text();
+    assert.match(body, /^<!doctype html>/);
+    assert.match(body, /class="hdr"/, 'the default header renders');
+    assert.match(body, /New arrivals/, 'the default New arrivals product row renders');
+    assert.match(body, /Trending now/, 'the default Trending row renders');
+    assert.match(body, /class="ftr"/, 'the default footer renders');
   }
 );

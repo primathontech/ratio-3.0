@@ -49,6 +49,9 @@ const appNoStore = createApp(verify, { bundleThemes: null });
 
 const ID = 't_theme_bundle';
 const MAIN = `${ID}-main`;
+const ONBOARD_ID = 't_theme_onboard';
+const ONBOARD_MAIN = `${ONBOARD_ID}-main`;
+const ONBOARD_HOST = 'tb-onboard.localhost';
 const alice = { authorization: 'Bearer tok-alice' };
 const bob = { authorization: 'Bearer tok-bob' };
 const carol = { authorization: 'Bearer tok-carol' };
@@ -90,6 +93,14 @@ async function cleanup() {
   await pool.query('DELETE FROM theme WHERE id = $1', [MAIN]);
   await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
+  // The onboarding-route test creates a whole store (tenant + host + membership + pages + theme).
+  await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [ONBOARD_MAIN]);
+  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [ONBOARD_ID]);
+  await pool.query('DELETE FROM pages WHERE tenant_id = $1', [ONBOARD_ID]);
+  await pool.query('DELETE FROM domains WHERE tenant_id = $1', [ONBOARD_ID]);
+  await pool.query('DELETE FROM theme WHERE id = $1', [ONBOARD_MAIN]);
+  await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [ONBOARD_ID]);
+  await pool.query('DELETE FROM tenants WHERE id = $1', [ONBOARD_ID]);
   // The shared Default base (library-default / _library) is left in place — a persistent, idempotent
   // fixture that adoption re-freezes on demand; deleting it would race other suites that also adopt it.
 }
@@ -234,6 +245,30 @@ test('owner publishes → 200 with version 1 and the tenant live pointer moves',
   );
   assert.strictEqual(rows[0].live_theme_id, MAIN);
   assert.strictEqual(rows[0].live_theme_version, 1);
+});
+
+test('OFCE-616: onboarding a store publishes + activates its bundle theme (live pointer set)', async () => {
+  const res = await call(app, 'POST', '/stores', alice, {
+    id: ONBOARD_ID,
+    name: 'Onboarded',
+    host: ONBOARD_HOST,
+    color: '#0ea5e9',
+  });
+  assert.strictEqual(res.status, 201);
+
+  // The store renders through the bundle from the moment it exists: live_theme_id points at the
+  // adopted default theme's freshly-published version (not NULL → not the page-builder fallback).
+  const { rows } = await pool.query<{
+    live_theme_id: string | null;
+    live_theme_version: number | null;
+  }>('SELECT live_theme_id, live_theme_version FROM tenants WHERE id = $1', [ONBOARD_ID]);
+  assert.strictEqual(rows[0].live_theme_id, ONBOARD_MAIN);
+  assert.strictEqual(rows[0].live_theme_version, 1);
+  const versions = await pool.query<{ n: number }>(
+    'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
+    [ONBOARD_MAIN]
+  );
+  assert.strictEqual(versions.rows[0].n, 1, 'exactly one published version at onboarding');
 });
 
 test('a non-owner cannot save a draft (403) or publish (403)', async () => {

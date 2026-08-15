@@ -7,7 +7,11 @@ import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/clien
 import { S3ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 import { ThemeStore, type CompileFn } from '../theme-store';
-import { ensureDefaultBaseTheme, DEFAULT_BASE_THEME_ID } from '../base-library';
+import {
+  ensureDefaultBaseTheme,
+  adoptAndPublishDefaultTheme,
+  DEFAULT_BASE_THEME_ID,
+} from '../base-library';
 import { defaultBundleTheme } from '../default-theme';
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
@@ -21,6 +25,8 @@ const skip = endpoint ? false : 'set S3_TEST_ENDPOINT (MinIO) with a migrated DA
 
 const STORE_TENANT = 't_lib_store';
 const STORE_THEME = 't_lib_store_main';
+const ONBOARD_TENANT = 't_lib_onboard';
+const ONBOARD_THEME = 't_lib_onboard-main';
 const identity: CompileFn = (s) => s;
 let store: ThemeStore;
 
@@ -28,9 +34,11 @@ let store: ThemeStore;
 // is a persistent, idempotent fixture — leaving it avoids a cross-file FK-delete race with other
 // suites that also adopt it, and ensureDefaultBaseTheme re-freezes its bytes on demand.
 async function cleanup() {
-  await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [STORE_TENANT]);
-  await pool.query('DELETE FROM theme WHERE id = $1', [STORE_THEME]);
-  await pool.query('DELETE FROM tenants WHERE id = $1', [STORE_TENANT]);
+  for (const t of [STORE_TENANT, ONBOARD_TENANT]) {
+    await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [t]);
+  }
+  await pool.query('DELETE FROM theme WHERE id = ANY($1)', [[STORE_THEME, ONBOARD_THEME]]);
+  await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [[STORE_TENANT, ONBOARD_TENANT]]);
 }
 
 before(async () => {
@@ -97,5 +105,40 @@ test(
     assert.equal(composed?.['sections/promo.liquid'], '<section>PROMO</section>'); // merchant-added
     assert.equal(composed?.['layout/theme.liquid'], base['layout/theme.liquid']); // untouched → base
     assert.equal(composed?.['sections/footer.liquid'], base['sections/footer.liquid']); // untouched base section
+  }
+);
+
+test(
+  'adoptAndPublishDefaultTheme sets the live pointer so a store renders the bundle from onboarding',
+  { skip },
+  async () => {
+    await pool.query(
+      `INSERT INTO tenants (id, name) VALUES ($1, 'Onboarded') ON CONFLICT (id) DO NOTHING`,
+      [ONBOARD_TENANT]
+    );
+    // No live theme before — this is exactly a freshly-onboarded store (OFCE-616).
+    const before = await pool.query<{ live: string | null }>(
+      'SELECT live_theme_id AS live FROM tenants WHERE id = $1',
+      [ONBOARD_TENANT]
+    );
+    assert.equal(before.rows[0].live, null);
+
+    const { version } = await adoptAndPublishDefaultTheme(store, ONBOARD_TENANT, ONBOARD_THEME, {
+      compile: identity,
+    });
+    assert.ok(version >= 1);
+
+    // The tenant now points at this theme's published version — the origin's bundle gate is on.
+    const after = await pool.query<{ live: string | null; v: number | null }>(
+      'SELECT live_theme_id AS live, live_theme_version AS v FROM tenants WHERE id = $1',
+      [ONBOARD_TENANT]
+    );
+    assert.equal(after.rows[0].live, ONBOARD_THEME);
+    assert.equal(after.rows[0].v, version);
+
+    // ...and the live compiled bundle is the full default theme (its home template + per-theme tokens).
+    const composed = await store.loadLiveCompiled(ONBOARD_TENANT);
+    assert.ok(composed?.['templates/index.json'], 'the default home template is live');
+    assert.ok(composed?.['config/tokens.json'], 'the theme carries its own brand tokens');
   }
 );
