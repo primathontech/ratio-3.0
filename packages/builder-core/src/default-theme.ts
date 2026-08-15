@@ -200,6 +200,9 @@ export function defaultBundleTheme(): ThemeFiles {
 `,
 
     // Product page — the flat resolved product (title, price in paise, description, image_url, handle).
+    // variantId stays EMPTY when the shape carries no real variant (the canonical product has none) so
+    // the origin's /cart/add falls back to resolving the variant from `handle`; a product id here would
+    // look like a real variant to the server and skip that fallback.
     'sections/main-product.liquid': `<main class="rt pdp">
   {% assign img = image_url | default: images.first.url %}
   <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ title | escape }}">{% endif %}</div>
@@ -208,7 +211,7 @@ export function defaultBundleTheme(): ThemeFiles {
     <div class="price">{{ price | money }}{% if compare_at_price and compare_at_price > price %} <s class="was">{{ compare_at_price | money }}</s>{% endif %}</div>
     {% if description %}<div class="rte"><p>{{ description | escape }}</p></div>{% endif %}
     <form class="atc" method="post" action="/cart/add">
-      <input type="hidden" name="variantId" value="{{ variant_id | default: id | default: handle | escape }}">
+      <input type="hidden" name="variantId" value="{{ variant_id | default: variants.first.id | escape }}">
       <input type="hidden" name="handle" value="{{ handle | escape }}">
       <button type="submit" class="btn atc-btn">Add to cart</button>
     </form>
