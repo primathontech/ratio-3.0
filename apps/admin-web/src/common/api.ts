@@ -237,31 +237,6 @@ export function createApi(
         `/stores/${id}/commerce`,
         { merchantId }
       ),
-    getTheme: (id: string) =>
-      req<{ theme: StoreTheme }>('GET', `/stores/${id}/theme`).then((d) => d.theme ?? {}),
-    saveTheme: (id: string, theme: StoreTheme) =>
-      req<{ ok: boolean; theme: StoreTheme; edgePurged?: boolean }>(
-        'PUT',
-        `/stores/${id}/theme`,
-        theme
-      ),
-    themeVersions: (id: string) =>
-      req<{ published: number | null; versions: ThemeVersion[] }>(
-        'GET',
-        `/stores/${id}/theme/versions`
-      ),
-    publishTheme: (id: string, note?: string, expectedBase?: number | null) =>
-      req<{ ok: boolean; version: number; edgePurged?: boolean }>(
-        'POST',
-        `/stores/${id}/theme/publish`,
-        { note, expectedBase }
-      ),
-    rollbackTheme: (id: string, version: number) =>
-      req<{ ok: boolean; version: number; edgePurged?: boolean }>(
-        'POST',
-        `/stores/${id}/theme/rollback`,
-        { version }
-      ),
     // --- Multi-theme library (OFCE-615): a store keeps several bundle themes; exactly one is live.
     listThemes: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/themes`).then((d) =>

@@ -1,18 +1,16 @@
-import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeSettingsPanel } from '../features/theme/theme-settings';
-import { ThemeVersionsPanel } from '../features/theme/theme-versions-panel';
 import { PageHeader } from '../common/page-header';
 import { storeSlug, useMerchant } from '../common/store-context';
 
-// Theme customize = brand settings + version history, as tabs (Versions is owner-only). Reached from
-// the Themes list; "Edit code" launches the full-screen code editor (its own chrome-less route).
+// Theme customize = brand settings (brand colour, typography, layout) for one theme, edited in that
+// theme's draft and published via the bundle. Version history + code editing live behind "Edit code".
+// Reached from the Themes list.
 export function ThemePage() {
   const { api, store } = useMerchant();
   const navigate = useNavigate();
   const { themeId } = useParams();
-  const owner = store.role === 'owner';
-  const [tab, setTab] = useState<'settings' | 'versions'>('settings');
+  if (!themeId) return null;
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader
@@ -59,31 +57,7 @@ export function ThemePage() {
           </button>
         </div>
       </PageHeader>
-      {/* Only owners have a second view (Versions), so the tab strip is owner-only — a member would
-          otherwise see a lone, pointless "Settings" tab. */}
-      {owner && (
-        <div className="seg" style={{ alignSelf: 'flex-start' }}>
-          <button
-            className={tab === 'settings' ? 'on' : ''}
-            aria-pressed={tab === 'settings'}
-            onClick={() => setTab('settings')}
-          >
-            Settings
-          </button>
-          <button
-            className={tab === 'versions' ? 'on' : ''}
-            aria-pressed={tab === 'versions'}
-            onClick={() => setTab('versions')}
-          >
-            Versions
-          </button>
-        </div>
-      )}
-      {tab === 'versions' && owner ? (
-        <ThemeVersionsPanel api={api} store={store} />
-      ) : (
-        <ThemeSettingsPanel api={api} store={store} />
-      )}
+      <ThemeSettingsPanel api={api} store={store} themeId={themeId} />
     </div>
   );
 }

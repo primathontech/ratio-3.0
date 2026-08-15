@@ -223,51 +223,6 @@ describe('admin api client', () => {
     expect(res).toEqual({ ok: true, revision: 3 });
   });
 
-  test('themeVersions unwraps the published pointer + versions', async () => {
-    const api = createApi(
-      'http://api',
-      async () => 't',
-      fakeFetch(200, { published: 2, versions: [{ version: 2 }, { version: 1 }] })
-    );
-    expect(await api.themeVersions('s1')).toEqual({
-      published: 2,
-      versions: [{ version: 2 }, { version: 1 }],
-    });
-  });
-
-  test('publishTheme POSTs to the publish endpoint with note + expectedBase', async () => {
-    let seen: Request | undefined;
-    const api = createApi(
-      'http://api',
-      async () => 't',
-      fakeFetch(200, { ok: true, version: 3 }, (r) => (seen = r))
-    );
-    await api.publishTheme('s1', 'launch', 2);
-    expect(seen?.method).toBe('POST');
-    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/publish');
-    expect(await seen!.json()).toEqual({ note: 'launch', expectedBase: 2 });
-  });
-
-  test('rollbackTheme POSTs the target version', async () => {
-    let seen: Request | undefined;
-    const api = createApi(
-      'http://api',
-      async () => 't',
-      fakeFetch(200, { ok: true, version: 1 }, (r) => (seen = r))
-    );
-    await api.rollbackTheme('s1', 1);
-    expect(new URL(seen!.url).pathname).toBe('/stores/s1/theme/rollback');
-    expect(await seen!.json()).toEqual({ version: 1 });
-  });
-
-  test('publishTheme surfaces a 409 (stale base) as ApiError', async () => {
-    const api = createApi('http://api', async () => 't', fakeFetch(409, { error: 'conflict' }));
-    await expect(api.publishTheme('s1', undefined, 0)).rejects.toMatchObject({
-      name: 'ApiError',
-      status: 409,
-    });
-  });
-
   test('listThemes unwraps the themes array', async () => {
     let seen: Request | undefined;
     const themes = [
