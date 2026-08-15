@@ -131,6 +131,46 @@
   color: var(--text);
 }
 
+/* design step — controls + live preview */
+.ob-card-wide {
+  max-width: 900px;
+}
+.ob-design {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.ob-design-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ob-design-preview {
+  position: sticky;
+  top: 0;
+}
+.ob-preview-frame {
+  width: 100%;
+  height: 460px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+}
+iframe.ob-preview-frame {
+  display: block;
+}
+@media (max-width: 720px) {
+  .ob-design {
+    grid-template-columns: 1fr;
+  }
+  .ob-design-preview {
+    position: static;
+  }
+}
+
 /* review + success */
 .ob-review {
   display: flex;
