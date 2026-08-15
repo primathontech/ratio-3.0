@@ -124,9 +124,9 @@ async function purgeStoreUrls(id: string, paths: string[]): Promise<boolean | nu
 // origin stamps on a page-builder response, so it invalidates precisely that page.
 const pbStore = new PgPageStore();
 
-// Bundle-theme authoring (OFCE-601): the S3 ThemeStore (base ⊕ overrides), distinct from the legacy
-// PgThemeStore above. Gated on BUNDLE_S3_BUCKET — null disables the /theme/bundle/* endpoints so
-// admin-api still boots without an object store configured. One working theme per store, id below.
+// Bundle-theme authoring (OFCE-601): the S3 ThemeStore (base ⊕ overrides) — the single theme system.
+// Gated on BUNDLE_S3_BUCKET — null disables the theme endpoints so admin-api still boots without an
+// object store configured. One working theme per store by default (id below); multi-theme adds more.
 const bundleThemes = config.bundleStore
   ? new BundleThemeStore(new S3ObjectStore(config.bundleStore))
   : null;
