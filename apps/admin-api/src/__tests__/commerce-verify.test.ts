@@ -15,6 +15,17 @@ test('a successful envelope with collections verifies with the count', () => {
   });
 });
 
+test('prefers the backend total over the returned page length (a capped fetch undercounts)', () => {
+  // getCollections is fetched with first:100, so a 135-collection catalogue returns a 100-item page;
+  // the true count comes from meta.pagination.total.
+  const res = { success: true, data: { collections: [{}] }, meta: { pagination: { total: 135 } } };
+  assert.deepEqual(interpretCollectionsEnvelope(res), {
+    configured: true,
+    verified: true,
+    collectionCount: 135,
+  });
+});
+
 test('a successful-but-empty envelope verifies with count 0 (reachable, no collections)', () => {
   assert.deepEqual(interpretCollectionsEnvelope({ success: true, data: { collections: [] } }), {
     configured: true,

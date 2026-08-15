@@ -13,12 +13,19 @@ export interface MerchantVerifyResult {
 // an invalid id (data:null → []) falsely verify with count 0. On success, the collections live either
 // as a bare array or under `data.collections`.
 export function interpretCollectionsEnvelope(
-  res: { success?: boolean; data?: unknown } | null | undefined
+  res:
+    | { success?: boolean; data?: unknown; meta?: { pagination?: { total?: number } } }
+    | null
+    | undefined
 ): MerchantVerifyResult {
   if (!res?.success) return { configured: true, verified: false };
   const data = res.data;
   const collections = Array.isArray(data)
     ? data
     : ((data as { collections?: unknown[] } | null)?.collections ?? []);
-  return { configured: true, verified: true, collectionCount: collections.length };
+  // Prefer the backend's reported TOTAL: the fetch is capped at `first`, so the returned page
+  // undercounts a large catalogue (135 collections would show as 100). Fall back to the page length.
+  const total = res.meta?.pagination?.total;
+  const collectionCount = typeof total === 'number' ? total : collections.length;
+  return { configured: true, verified: true, collectionCount };
 }
