@@ -43,6 +43,27 @@ test('default theme: layout holds content_for_layout and templates reference exi
   }
 });
 
+test('starter theme collection sources request the full catalog (available:false), not available-only', () => {
+  // The commerce backend filters to available-only by default, which is EMPTY for a store that
+  // doesn't flag product availability — the row then renders blank though the collection has
+  // products. The requirement lives in the theme config (what to fetch), not in the resolver.
+  const files = defaultBundleTheme();
+  for (const t of ['templates/index.json', 'templates/collection.json']) {
+    const doc = JSON.parse(files[t]) as {
+      dataSources?: Record<string, { type: string; params?: { filters?: unknown } }>;
+    };
+    for (const [key, ds] of Object.entries(doc.dataSources ?? {})) {
+      if (ds.type === 'COLLECTION_BY_HANDLES') {
+        assert.deepStrictEqual(
+          ds.params?.filters,
+          [{ available: false }],
+          `${t} data source ${key} must request the full catalog`
+        );
+      }
+    }
+  }
+});
+
 test('default theme binds + renders the collection products with rupee prices', async () => {
   const { html } = await renderPage('collection', { handle: 'summer' });
   assert.match(html, /Sample product 1/, 'a resolved product title renders');
