@@ -1,5 +1,5 @@
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { bodyLimit } from 'hono/body-limit';
 import {
@@ -125,6 +125,24 @@ const bundleThemes = config.bundleStore
   ? new BundleThemeStore(new S3ObjectStore(config.bundleStore))
   : null;
 const mainThemeId = (tenantId: string) => `${tenantId}-main`;
+
+// Tenant isolation for the multi-theme routes: a theme id is a global, guessable string, so every
+// theme-scoped route must prove the theme actually belongs to the store in the path — otherwise a
+// member of store A could edit/activate/delete store B's theme by passing its id. Throws a
+// 404-mapped error (onError) so a cross-store id is indistinguishable from a missing one.
+class ThemeNotInStore extends Error {
+  constructor(themeId: string, storeId: string) {
+    super(`theme '${themeId}' not found in store '${storeId}'`);
+    this.name = 'ThemeNotInStore';
+  }
+}
+async function assertThemeInStore(themeId: string, storeId: string): Promise<void> {
+  const { rowCount } = await pool.query('SELECT 1 FROM theme WHERE id = $1 AND tenant_id = $2', [
+    themeId,
+    storeId,
+  ]);
+  if (!rowCount) throw new ThemeNotInStore(themeId, storeId);
+}
 // No real theme compiler yet (every caller uses identity); the seam stays injected for a later slice.
 const identityCompile = (s: ThemeFiles) => s;
 const pbRegistry = defaultRegistry();
@@ -408,6 +426,9 @@ export function createApp(
   app.onError((e, c) => {
     if (e instanceof ConflictError || e instanceof IdempotencyInProgressError) {
       return c.json({ error: e.message }, 409);
+    }
+    if (e instanceof ThemeNotInStore) {
+      return c.json({ error: 'not found' }, 404);
     }
     // Log the real error server-side (method + path + stack) so prod 500s are diagnosable in the
     // container logs. The client still gets only the generic message in production.
@@ -770,30 +791,35 @@ export function createApp(
     });
   });
 
-  // --- Bundle-theme authoring (OFCE-601, base ⊕ overrides). Distinct from the legacy Pg theme routes
-  // above: merchant Liquid theme files stored as S3 bundles, one working theme per store
-  // (id `${tenantId}-main`). All gated on BUNDLE_S3_BUCKET — 503 when the object store isn't wired.
+  // --- Bundle-theme authoring (OFCE-601 / OFCE-615, base ⊕ overrides). Distinct from the legacy Pg
+  // theme routes above: merchant Liquid theme files stored as S3 bundles. A store may keep several
+  // themes (OFCE-615); the legacy `/theme/bundle/*` paths edit the store's default theme (`${id}-main`),
+  // the new `/themes/:themeId/*` paths edit a named theme. All gated on BUNDLE_S3_BUCKET — 503 when the
+  // object store isn't wired.
 
-  // Save the store's draft overrides (only the files it changed). Creates the working theme on first
-  // save; `base` (a library base @version) is attached at creation only.
-  app.put('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+  // The six editing handlers, parameterized by an explicit themeId so they mount at BOTH the legacy
+  // one-theme-per-store paths (themeId = `${id}-main`) and the multi-theme `/themes/:themeId/*` paths.
+  const bundle503 = (c: Context<Vars>) => c.json({ error: 'bundle store not configured' }, 503);
+
+  // Save a theme's draft overrides (only the files it changed). `ensure` provisions the store's
+  // default theme on first save (legacy path); the multi-theme path passes none — the theme already
+  // exists (assertThemeInStore ran).
+  async function draftPut(c: Context<Vars>, themeId: string, ensure?: () => Promise<void>) {
+    if (!themes) return bundle503(c);
     const id = c.req.param('id');
     const body = (await c.req.json().catch(() => ({}))) as {
       files?: ThemeFiles;
       revision?: string;
     };
     // The editor always sends the revision it loaded; require it so a malformed/omitted body fails
-    // loud (400) instead of silently falling through to a blind last-write-wins save. GET /draft (or
-    // scaffold) supplies the current revision.
+    // loud (400) instead of a blind last-write-wins save.
     if (typeof body.revision !== 'string')
       return c.json({ error: 'revision is required to save a draft' }, 400);
-    await ensureStoreTheme(id);
-    // The editor sends the full composed tree (base ⊕ overrides) plus the revision it loaded; store
-    // only the delta from the base (untouched files keep tracking base updates) and reject the save if
-    // another editor moved the draft first (409), rather than silently clobbering it.
+    if (ensure) await ensure();
+    // Store only the delta from the base (untouched files keep tracking base updates); reject the save
+    // if another editor moved the draft first (409) instead of silently clobbering it.
     try {
-      const { hash } = await themes.saveOverrides({ themeId: mainThemeId(id) }, body.files ?? {}, {
+      const { hash } = await themes.saveOverrides({ themeId }, body.files ?? {}, {
         expectedRevision: body.revision,
       });
       c.set('auditTenant', id);
@@ -803,29 +829,22 @@ export function createApp(
         return c.json({ error: 'conflict', currentRevision: e.actual }, 409);
       throw e;
     }
-  });
+  }
 
-  // Preview the working theme: the base composed with the current draft overrides, plus the revision
-  // token the editor round-trips on save (optimistic concurrency).
-  app.get('/stores/:id/theme/bundle/draft', requireMembership, async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
-    const themeId = mainThemeId(c.req.param('id'));
+  // Read a theme's composed draft (base ⊕ overrides) + the revision token the editor round-trips.
+  async function draftGet(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
     const [files, revision] = await Promise.all([
       themes.readComposed({ themeId }),
       themes.draftRevision({ themeId }),
     ]);
     return c.json({ files, revision });
-  });
+  }
 
-  // Ensure the working theme exists so the code editor opens populated instead of empty. Adopts the
-  // shared Default base (base ⊕ overrides) — the base supplies the default files via composition, so
-  // there's no per-store copy. Member-writable; a no-op (returns the existing theme) once it exists.
-  app.post('/stores/:id/theme/bundle/scaffold', requireMembership, async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
+  // Ensure the theme opens populated instead of empty. A no-op (seeded:false) once it has content.
+  async function scaffold(c: Context<Vars>, themeId: string, ensure: () => Promise<void>) {
+    if (!themes) return bundle503(c);
     const id = c.req.param('id');
-    // Gate on the COMPOSED theme (base ⊕ overrides), matching GET /draft — so an already-adopted
-    // theme (base + zero overrides) is not re-created.
-    const themeId = mainThemeId(id);
     const existing = await themes.readComposed({ themeId });
     if (Object.keys(existing).length > 0)
       return c.json({
@@ -833,48 +852,41 @@ export function createApp(
         seeded: false,
         revision: await themes.draftRevision({ themeId }),
       });
-    await ensureStoreTheme(id);
+    await ensure();
     const [files, revision] = await Promise.all([
       themes.readComposed({ themeId }),
       themes.draftRevision({ themeId }),
     ]);
     c.set('auditTenant', id);
     return c.json({ files, seeded: true, revision });
-  });
+  }
 
-  // Live preview: render a page of the theme to HTML (the editor shows it in an iframe). Renders the
-  // POSTed files (the editor's in-flight, possibly-unsaved buffer) when given, else the saved draft —
-  // so a merchant previews edits before saving. A Liquid/template error is the merchant's own code,
-  // so it comes back as { error } (200) to show in the preview pane, not a 500.
-  app.post('/stores/:id/theme/bundle/preview', requireMembership, async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
-    const id = c.req.param('id');
+  // Live preview: render a page to HTML. Renders the POSTed in-flight buffer when given, else the saved
+  // draft. A Liquid/template error is the merchant's own code → { error } (200), not a 500.
+  async function preview(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles; page?: string };
-    const files = body.files ?? (await themes.readComposed({ themeId: mainThemeId(id) }));
+    const files = body.files ?? (await themes.readComposed({ themeId }));
     const page = body.page || 'index';
     try {
       const { html } = await renderThemePreview(files, page, id);
       return c.json({ html });
     } catch (e) {
-      // A Liquid/template error is the merchant's own code (shown in the preview), but a worker
-      // crash / RenderTimeout / missing isolate looks identical here — log server-side so infra
-      // failures are diagnosable (ADR-0002), while still returning { error } to the client.
       console.error('theme preview render failed:', e);
       return c.json({ error: e instanceof Error ? e.message : 'preview failed' });
     }
-  });
+  }
 
   // Publish: freeze compile(base ⊕ overrides), cut an immutable version, flip the live pointer.
-  // Owner-only. Purges the store's cached pages — the live theme changed.
-  app.post('/stores/:id/theme/bundle/publish', requireRole('owner'), async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
-    const id = c.req.param('id');
-    // Publish does NOT create the theme — draft-save is the create point. Publishing a store that
-    // never saved a draft is a client error, not a reason to make an empty theme live.
+  async function publishBundle(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
+    // Publish does NOT create the theme — draft-save is the create point.
     let version: number;
     try {
       ({ version } = await themes.publish(
-        { themeId: mainThemeId(id) },
+        { themeId },
         { compile: identityCompile, by: c.get('userId') }
       ));
     } catch (e) {
@@ -882,31 +894,185 @@ export function createApp(
         return c.json({ error: 'no draft to publish — save a draft first' }, 400);
       throw e; // infra faults (S3/DB) bubble to onError → 500 + logged, not a misleading 400
     }
-    // publish() enqueued a durable tenant-tag purge in its transaction (page_purge_outbox +
-    // drainPurges) — that's the invalidation. purgeEdgeTags hits the local dev edge-sim by tag.
-    // Prod by-URL purge scoped to the bundle theme's own routes is a follow-up.
+    // publish() enqueued a durable tenant-tag purge in its txn; purgeEdgeTags hits the local edge-sim.
     await purgeEdgeTags([tenantTag(id)]);
     c.set('auditTenant', id);
     return c.json({ ok: true, version });
-  });
+  }
 
-  // Roll the live pointer back to an earlier published version (the bundles are all still in S3).
-  // Owner-only.
-  app.post('/stores/:id/theme/bundle/rollback', requireRole('owner'), async (c) => {
-    if (!themes) return c.json({ error: 'bundle store not configured' }, 503);
-    const id = c.req.param('id');
+  // Roll the live pointer back to an earlier published version of the store's live theme (the bundles
+  // are all still in S3). Operates on the tenant's live pointer, so it takes no themeId.
+  async function rollbackBundle(c: Context<Vars>) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
     if (typeof body.version !== 'number')
       return c.json({ error: 'version (number) is required' }, 400);
     try {
       await themes.rollback(id, body.version);
     } catch (e) {
-      // Only the "not found" cases are a 404; anything else (DB/S3) bubbles to onError → 500.
       if (e instanceof Error && /unknown version|no published theme|unknown tenant/.test(e.message))
         return c.json({ error: e.message }, 404);
       throw e;
     }
-    await purgeEdgeTags([tenantTag(id)]); // see publish: durable purge is the outbox tenant tag
+    await purgeEdgeTags([tenantTag(id)]);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, version: body.version });
+  }
+
+  // Legacy one-theme-per-store mounts (back-compat: the current editor + its tests). themeId = default.
+  app.put('/stores/:id/theme/bundle/draft', requireMembership, (c) =>
+    draftPut(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
+  );
+  app.get('/stores/:id/theme/bundle/draft', requireMembership, (c) =>
+    draftGet(c, mainThemeId(c.req.param('id')))
+  );
+  app.post('/stores/:id/theme/bundle/scaffold', requireMembership, (c) =>
+    scaffold(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
+  );
+  app.post('/stores/:id/theme/bundle/preview', requireMembership, (c) =>
+    preview(c, mainThemeId(c.req.param('id')))
+  );
+  app.post('/stores/:id/theme/bundle/publish', requireRole('owner'), (c) =>
+    publishBundle(c, mainThemeId(c.req.param('id')))
+  );
+  app.post('/stores/:id/theme/bundle/rollback', requireRole('owner'), (c) => rollbackBundle(c));
+
+  // --- Multi-theme CRUD + selection (OFCE-615 Phase 1). A store may keep several themes; exactly one
+  // is live. Every theme-scoped route calls assertThemeInStore after the auth guard, so a member of
+  // store A can never touch store B's theme by passing its id (404, indistinguishable from missing).
+
+  // List the store's themes (which is live, each theme's latest published version).
+  app.get('/stores/:id/themes', requireMembership, async (c) => {
+    if (!themes) return bundle503(c);
+    return c.json({ themes: await themes.listThemes(c.req.param('id')) });
+  });
+
+  // Create a theme — a fresh one adopting the shared Default base, or a duplicate of an existing theme.
+  app.post('/stores/:id/themes', requireMembership, async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const body = (await c.req.json().catch(() => ({}))) as { name?: string; duplicateOf?: string };
+    const themeId = `${id}-${randomUUID().replace(/-/g, '').slice(0, 10)}`;
+    const name = body.name ?? 'New theme';
+    if (body.duplicateOf) {
+      await assertThemeInStore(body.duplicateOf, id);
+      await themes.createTheme(id, themeId, name, { duplicateOf: body.duplicateOf });
+    } else {
+      const base = await ensureDefaultBaseTheme(themes, { compile: identityCompile });
+      await themes.createTheme(id, themeId, name, { base });
+    }
+    c.set('auditTenant', id);
+    return c.json({ id: themeId });
+  });
+
+  // Rename a theme.
+  app.patch('/stores/:id/themes/:themeId', requireMembership, async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const themeId = c.req.param('themeId');
+    await assertThemeInStore(themeId, id);
+    const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+    if (typeof body.name !== 'string' || !body.name.trim())
+      return c.json({ error: 'name is required' }, 400);
+    await themes.renameTheme(id, themeId, body.name);
+    c.set('auditTenant', id);
+    return c.json({ ok: true });
+  });
+
+  // Delete a theme (owner). Refuses the live theme (409).
+  app.delete('/stores/:id/themes/:themeId', requireRole('owner'), async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const themeId = c.req.param('themeId');
+    await assertThemeInStore(themeId, id);
+    try {
+      await themes.deleteTheme(id, themeId);
+    } catch (e) {
+      if (e instanceof Error && /cannot delete the live theme/.test(e.message))
+        return c.json({ error: e.message }, 409);
+      throw e;
+    }
+    c.set('auditTenant', id);
+    return c.json({ ok: true });
+  });
+
+  // Activate a theme at a given (or its latest published) version — the general switch/rollback primitive.
+  app.post('/stores/:id/themes/:themeId/activate', requireRole('owner'), async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const themeId = c.req.param('themeId');
+    await assertThemeInStore(themeId, id);
+    const body = (await c.req.json().catch(() => ({}))) as { version?: number };
+    let version: number;
+    try {
+      ({ version } = await themes.setLive(id, themeId, body.version));
+    } catch (e) {
+      if (e instanceof Error && /no published version/.test(e.message))
+        return c.json({ error: e.message }, 400);
+      if (e instanceof Error && /unknown version/.test(e.message))
+        return c.json({ error: e.message }, 404);
+      throw e;
+    }
+    await purgeEdgeTags([tenantTag(id)]);
+    c.set('auditTenant', id);
+    return c.json({ version });
+  });
+
+  // A theme's published version history + which one is live.
+  app.get('/stores/:id/themes/:themeId/versions', requireMembership, async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const themeId = c.req.param('themeId');
+    await assertThemeInStore(themeId, id);
+    const versions = await themes.listVersions(themeId);
+    const { rows } = await pool.query<{ live_theme_version: number }>(
+      'SELECT live_theme_version FROM tenants WHERE id = $1 AND live_theme_id = $2',
+      [id, themeId]
+    );
+    const liveVersion = rows[0]?.live_theme_version ?? null;
+    return c.json({ versions, liveVersion });
+  });
+
+  // Theme-scoped editing mounts (multi-theme). assertThemeInStore enforces ownership on each.
+  app.put('/stores/:id/themes/:themeId/draft', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return draftPut(c, c.req.param('themeId'));
+  });
+  app.get('/stores/:id/themes/:themeId/draft', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return draftGet(c, c.req.param('themeId'));
+  });
+  app.post('/stores/:id/themes/:themeId/scaffold', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return scaffold(c, c.req.param('themeId'), async () => {});
+  });
+  app.post('/stores/:id/themes/:themeId/preview', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return preview(c, c.req.param('themeId'));
+  });
+  app.post('/stores/:id/themes/:themeId/publish', requireRole('owner'), async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return publishBundle(c, c.req.param('themeId'));
+  });
+  // Theme-scoped rollback = repoint the live pointer to (this theme, an earlier version). Unlike the
+  // legacy /theme/bundle/rollback (which rolls whatever is live), this is themeId-aware: rolling a
+  // theme back to vN makes THAT theme live at vN. Same primitive as activate.
+  app.post('/stores/:id/themes/:themeId/rollback', requireRole('owner'), async (c) => {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id');
+    const themeId = c.req.param('themeId');
+    await assertThemeInStore(themeId, id);
+    const body = (await c.req.json().catch(() => ({}))) as { version?: number };
+    if (typeof body.version !== 'number') return c.json({ error: 'version required' }, 400);
+    try {
+      await themes.setLive(id, themeId, body.version);
+    } catch (e) {
+      if (e instanceof Error && /unknown version|no published version/.test(e.message))
+        return c.json({ error: e.message }, 404);
+      throw e;
+    }
+    await purgeEdgeTags([tenantTag(id)]);
     c.set('auditTenant', id);
     return c.json({ ok: true, version: body.version });
   });

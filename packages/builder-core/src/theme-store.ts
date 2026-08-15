@@ -13,6 +13,17 @@ export interface ThemeRef {
   themeId: string;
 }
 
+// A store's theme as the multi-theme picker sees it: its identity, whether it's the tenant's live
+// theme (and at which version), and the highest version it has ever published.
+export interface ThemeSummary {
+  id: string;
+  name: string;
+  isLive: boolean;
+  liveVersion: number | null; // the tenant's live version IF this theme is live, else null
+  latestVersion: number | null; // MAX(theme_bundle_version.version) for this theme, or null
+  createdAt: string;
+}
+
 // Raised when a draft save's expected revision no longer matches the stored draft — a concurrent
 // editor saved first (BC1 optimistic concurrency). Callers map it to HTTP 409. Revisions are content
 // hashes of the stored overrides bundle.
@@ -223,6 +234,166 @@ export class ThemeStore {
        ON CONFLICT (id) DO NOTHING`,
       [themeId, tenantId, name, base?.themeId ?? null, base?.version ?? null]
     );
+  }
+
+  // Every theme a tenant owns (the multi-theme picker's list). The `_library` base theme is owned by
+  // the system library tenant, so filtering on tenant_id naturally excludes it.
+  async listThemes(tenantId: string): Promise<ThemeSummary[]> {
+    const { rows } = await pool.query<{
+      id: string;
+      name: string;
+      is_live: boolean;
+      live_version: number | null;
+      latest_version: number | null;
+      created_at: Date;
+    }>(
+      `SELECT th.id, th.name,
+              COALESCE(t.live_theme_id = th.id, false) AS is_live,
+              CASE WHEN t.live_theme_id = th.id THEN t.live_theme_version END AS live_version,
+              lv.max_version AS latest_version,
+              th.created_at
+         FROM theme th
+         JOIN tenants t ON t.id = th.tenant_id
+         LEFT JOIN LATERAL (
+           SELECT MAX(version) AS max_version FROM theme_bundle_version WHERE theme_id = th.id
+         ) lv ON true
+        WHERE th.tenant_id = $1
+        ORDER BY th.created_at ASC`,
+      [tenantId]
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      isLive: r.is_live,
+      liveVersion: r.live_version == null ? null : Number(r.live_version),
+      latestVersion: r.latest_version == null ? null : Number(r.latest_version),
+      createdAt: r.created_at.toISOString(),
+    }));
+  }
+
+  // Create a new theme for a tenant. Default: a fresh theme adopting a library `base` @version (or a
+  // root theme if omitted). With `duplicateOf`: copy an existing theme of the SAME tenant — its base
+  // ref and its current draft overrides — into a new theme (a "duplicate"), so the merchant can branch
+  // off a working theme without touching it. `duplicateOf` is verified to belong to `tenantId` first.
+  async createTheme(
+    tenantId: string,
+    themeId: string,
+    name: string,
+    opts: { base?: { themeId: string; version: number }; duplicateOf?: string } = {}
+  ): Promise<void> {
+    assertThemeId(themeId);
+    if (opts.duplicateOf) {
+      const src = await pool.query<{ base_theme_id: string | null; base_version: number | null }>(
+        'SELECT base_theme_id, base_version FROM theme WHERE id = $1 AND tenant_id = $2',
+        [opts.duplicateOf, tenantId]
+      );
+      if (src.rowCount === 0)
+        throw new Error(`unknown theme '${opts.duplicateOf}' in tenant '${tenantId}'`);
+      const row = src.rows[0];
+      const srcBase =
+        row.base_theme_id && row.base_version != null
+          ? { themeId: row.base_theme_id, version: row.base_version }
+          : undefined;
+      const srcOverrides = await this.readDraft({ themeId: opts.duplicateOf });
+      await this.ensureTheme(tenantId, themeId, name, srcBase);
+      if (Object.keys(srcOverrides).length > 0) await this.saveDraft({ themeId }, srcOverrides);
+      return;
+    }
+    await this.ensureTheme(tenantId, themeId, name, opts.base);
+  }
+
+  // Rename a tenant's theme. Tenant-scoped so a member of store A can't rename store B's theme.
+  async renameTheme(tenantId: string, themeId: string, name: string): Promise<void> {
+    const r = await pool.query('UPDATE theme SET name = $3 WHERE id = $1 AND tenant_id = $2', [
+      themeId,
+      tenantId,
+      name,
+    ]);
+    if (r.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+  }
+
+  // Delete a tenant's theme (its versions + file index cascade). Refuses the live theme — deleting it
+  // would strand the tenant's live pointer at a row that no longer exists. Best-effort draft cleanup.
+  async deleteTheme(tenantId: string, themeId: string): Promise<void> {
+    const live = await pool.query('SELECT 1 FROM tenants WHERE id = $1 AND live_theme_id = $2', [
+      tenantId,
+      themeId,
+    ]);
+    if (live.rowCount && live.rowCount > 0) throw new Error('cannot delete the live theme');
+    const r = await pool.query('DELETE FROM theme WHERE id = $1 AND tenant_id = $2', [
+      themeId,
+      tenantId,
+    ]);
+    if (r.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+    await this.objects.delete(draftKey(themeId)).catch(() => {});
+  }
+
+  // Make one of the tenant's themes live at a given (or its latest) published version — the general
+  // activate / switch / rollback primitive. In a txn: verify the theme is the tenant's, resolve the
+  // version, repoint tenants.live_theme_*, and enqueue the tenant-tag purge (like publish/rollback) so
+  // the edge drops every cached page of this store.
+  async setLive(tenantId: string, themeId: string, version?: number): Promise<{ version: number }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const t = await client.query('SELECT 1 FROM theme WHERE id = $1 AND tenant_id = $2', [
+        themeId,
+        tenantId,
+      ]);
+      if (t.rowCount === 0) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+      let v: number;
+      if (version != null) {
+        const exists = await client.query(
+          'SELECT 1 FROM theme_bundle_version WHERE theme_id = $1 AND version = $2',
+          [themeId, version]
+        );
+        if (exists.rowCount === 0)
+          throw new Error(`unknown version ${version} for theme '${themeId}'`);
+        v = version;
+      } else {
+        const max = await client.query<{ v: number | null }>(
+          'SELECT MAX(version) AS v FROM theme_bundle_version WHERE theme_id = $1',
+          [themeId]
+        );
+        if (max.rows[0].v == null) throw new Error(`theme '${themeId}' has no published version`);
+        v = Number(max.rows[0].v);
+      }
+      await client.query(
+        'UPDATE tenants SET live_theme_id = $2, live_theme_version = $3 WHERE id = $1',
+        [tenantId, themeId, v]
+      );
+      // What the store serves changed → durable tenant-tag purge in the same txn (D2).
+      await client.query('INSERT INTO page_purge_outbox (tenant_id, tags) VALUES ($1, $2)', [
+        tenantId,
+        [tenantTag(tenantId)],
+      ]);
+      await client.query('COMMIT');
+      return { version: v };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  // A theme's published versions, newest first (the version history panel).
+  async listVersions(
+    themeId: string
+  ): Promise<{ version: number; createdBy: string | null; createdAt: string }[]> {
+    const { rows } = await pool.query<{
+      version: number;
+      created_by: string | null;
+      created_at: Date;
+    }>(
+      'SELECT version, created_by, created_at FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC',
+      [themeId]
+    );
+    return rows.map((r) => ({
+      version: Number(r.version),
+      createdBy: r.created_by,
+      createdAt: r.created_at.toISOString(),
+    }));
   }
 
   // Publish: freeze the bundles, then (atomically) record a new immutable version and — unless
