@@ -368,6 +368,66 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Version history drawer: pinned to the right of the workbench body, like the Explorer on the left. */
+.wb-versions {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 40vh;
+  background: var(--surface-2);
+  border-top: 1px solid var(--line);
+  overflow: hidden;
+}
+.wb-versions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 8px 8px 14px;
+}
+.wb-versions-body {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.wb-versions-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 8px 8px;
+}
+.wb-version {
+  padding: 8px 6px;
+  border-bottom: 1px solid var(--line);
+}
+.wb-version.live {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.wb-version-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wb-version-num {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+.wb-version-meta {
+  margin-top: 4px;
+  font-size: 11px;
+}
+.wb-versions-foot {
+  flex-shrink: 0;
+  padding: 10px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+.wb-versions-foot .muted {
+  margin: 8px 0 0;
+  font-size: 11px;
+}
+.wb-live-dot {
+  color: var(--accent);
+  font-size: 9px;
+}
 .wb-statusbar {
   flex-shrink: 0;
   display: flex;
@@ -427,5 +487,11 @@
     border-left: 1px solid var(--line);
     border-top: 0;
     min-height: 0;
+  }
+  .wb-versions {
+    width: 300px;
+    max-height: none;
+    border-left: 1px solid var(--line);
+    border-top: 0;
   }
 }

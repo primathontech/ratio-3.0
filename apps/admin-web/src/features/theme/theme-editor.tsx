@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, type Api, type Store, type ThemeFiles } from '../../common/api';
-import { EmptyState, Icon, Spinner, useToast } from '../../common/ui';
+import {
+  ApiError,
+  type Api,
+  type Store,
+  type ThemeFiles,
+  type ThemeVersion,
+} from '../../common/api';
+import { Dialog, EmptyState, Icon, Spinner, useToast } from '../../common/ui';
 import { storefrontUrl } from '../../common/store-context';
 import { CodeEditor } from './code-editor';
 import { groupByFolder, languageLabel, THEME_FOLDERS } from './editor-helpers';
@@ -8,6 +14,7 @@ import { EditorTitleBar } from './editor-titlebar';
 import { EditorExplorer } from './editor-explorer';
 import { EditorTabs } from './editor-tabs';
 import { EditorPreview } from './editor-preview';
+import { EditorVersions } from './editor-versions';
 import './theme-editor.css';
 
 type Status = 'loading' | 'ready' | 'disabled' | 'error';
@@ -57,6 +64,12 @@ export function ThemeCodeEditor({
   // Activity bar: one view active at a time, or none — which collapses the sidebar (VS Code-style).
   const [activeView, setActiveView] = useState<'explorer' | 'search' | null>('explorer');
   const [showPreview, setShowPreview] = useState(false);
+  // Published version history + which version is live (the title-bar indicator + the versions drawer).
+  const [versions, setVersions] = useState<ThemeVersion[]>([]);
+  const [liveVersion, setLiveVersion] = useState<number | null>(null);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewErr, setPreviewErr] = useState('');
   const [previewing, setPreviewing] = useState(false);
@@ -162,6 +175,24 @@ export function ThemeCodeEditor({
       });
   }, [api, store.id, themeId, runPreview]);
   useEffect(load, [load]);
+
+  // Published version history + the live pointer. Non-fatal: a failed fetch just leaves the drawer
+  // empty and the indicator at "Not published yet" — the editor itself still works.
+  const loadVersions = useCallback(async () => {
+    setVersionsLoading(true);
+    try {
+      const v = await api.bundleVersions(store.id, themeId);
+      setVersions(v.versions);
+      setLiveVersion(v.liveVersion);
+    } catch {
+      // ignore — the history panel is optional; editing/saving don't depend on it
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, [api, store.id, themeId]);
+  useEffect(() => {
+    void loadVersions();
+  }, [loadVersions]);
 
   // Leaving the Search view drops the filter, so the Explorer never shows a filtered tree with no
   // visible search box.
@@ -272,6 +303,49 @@ export function ThemeCodeEditor({
     try {
       const res = await api.publishBundle(store.id, themeId);
       toast(`Published theme v${res.version}`, 'ok');
+      await loadVersions(); // the live indicator + history now include the new version
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Drop unsaved edits: reload the saved draft (base ⊕ overrides) via the normal load path. Only the
+  // in-memory buffer is discarded — nothing on the server changes.
+  function discard() {
+    setDirty(false);
+    load();
+  }
+
+  // Roll the live pointer back to an earlier published version (owner-only). The immutable bundles are
+  // all still in S3, so this is an instant pointer move; refetch so the Live badge follows it.
+  async function rollback(version: number) {
+    setBusy(true);
+    try {
+      await api.rollbackBundle(store.id, themeId, version);
+      toast(`Rolled back to v${version}`, 'ok');
+      await loadVersions();
+      void runPreview(files, previewPage);
+    } catch (e) {
+      toast((e as Error).message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Reset the draft to pure base — drop ALL saved overrides (destructive). The reply carries the
+  // now-composed default files + fresh revision, so we swap the buffer in place (no reload flash).
+  async function resetToBase() {
+    setConfirmReset(false);
+    setBusy(true);
+    try {
+      const d = await api.resetBundleDraft(store.id, themeId);
+      setFiles(d.files);
+      revisionRef.current = d.revision;
+      setDirty(false);
+      toast('Theme reset to the default', 'ok');
+      void runPreview(d.files, previewPage);
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
@@ -309,10 +383,14 @@ export function ThemeCodeEditor({
         ready={ready}
         busy={busy}
         showPreview={showPreview}
+        showVersions={showVersions}
+        liveVersion={liveVersion}
         liveUrl={url}
         canPublish={canPublish}
         onBack={onBack}
         onTogglePreview={() => setShowPreview((v) => !v)}
+        onToggleVersions={() => setShowVersions((v) => !v)}
+        onDiscard={discard}
         onSaveDraft={saveDraft}
         onPublish={publish}
       />
@@ -473,6 +551,19 @@ export function ThemeCodeEditor({
                 />
               )}
             </div>
+
+            {showVersions && (
+              <EditorVersions
+                versions={versions}
+                liveVersion={liveVersion}
+                loading={versionsLoading}
+                canRollback={canPublish}
+                busy={busy}
+                onRollback={rollback}
+                onResetToBase={() => setConfirmReset(true)}
+                onClose={() => setShowVersions(false)}
+              />
+            )}
           </div>
 
           {/* Status bar */}
@@ -482,6 +573,22 @@ export function ThemeCodeEditor({
             {selected && <span className="wb-status-item">{languageLabel(selected)}</span>}
           </div>
         </>
+      )}
+
+      {confirmReset && (
+        <Dialog title="Reset to the default theme?" onClose={() => setConfirmReset(false)}>
+          <p className="muted" style={{ margin: '0 0 16px' }}>
+            This removes all your customizations and restores the default theme. It can't be undone.
+          </p>
+          <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-sm" onClick={() => setConfirmReset(false)} disabled={busy}>
+              Cancel
+            </button>
+            <button className="btn btn-sm btn-danger" onClick={resetToBase} disabled={busy}>
+              Reset to default
+            </button>
+          </div>
+        </Dialog>
       )}
     </div>
   );

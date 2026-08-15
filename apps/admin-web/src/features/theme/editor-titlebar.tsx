@@ -9,10 +9,14 @@ export function EditorTitleBar({
   ready,
   busy,
   showPreview,
+  showVersions,
+  liveVersion,
   liveUrl,
   canPublish,
   onBack,
   onTogglePreview,
+  onToggleVersions,
+  onDiscard,
   onSaveDraft,
   onPublish,
 }: {
@@ -21,10 +25,14 @@ export function EditorTitleBar({
   ready: boolean;
   busy: boolean;
   showPreview: boolean;
+  showVersions: boolean;
+  liveVersion: number | null;
   liveUrl: string | null;
   canPublish: boolean;
   onBack?: () => void;
   onTogglePreview: () => void;
+  onToggleVersions: () => void;
+  onDiscard: () => void;
   onSaveDraft: () => void;
   onPublish: () => void;
 }) {
@@ -42,6 +50,23 @@ export function EditorTitleBar({
       </div>
       <div className="row" style={{ gap: 8 }}>
         <ThemeToggle className="btn btn-ghost btn-sm" />
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={onToggleVersions}
+          disabled={!ready}
+          aria-pressed={showVersions}
+          title="Version history"
+        >
+          <span className="wb-live-dot" aria-hidden="true">
+            ●
+          </span>{' '}
+          {liveVersion != null ? `Live v${liveVersion}` : 'Not published yet'}
+        </button>
+        {dirty && (
+          <button className="btn btn-ghost btn-sm" onClick={onDiscard} disabled={busy || !ready}>
+            Discard changes
+          </button>
+        )}
         <button className="btn btn-ghost btn-sm" onClick={onTogglePreview} disabled={!ready}>
           {showPreview ? 'Hide preview' : 'Show preview'}
         </button>

@@ -309,6 +309,14 @@ export function createApi(
       req<{ ok: boolean; version: number }>('POST', `/stores/${id}/themes/${themeId}/rollback`, {
         version,
       }),
+    // Reset the draft to pure base — drop every override (the merchant's customizations). Returns the
+    // now-composed default files + fresh revision, unwrapped like getBundleDraft.
+    resetBundleDraft: (id: string, themeId: string) =>
+      req<{ ok: boolean; files: ThemeFiles; revision: string }>(
+        'POST',
+        `/stores/${id}/themes/${themeId}/reset`,
+        {}
+      ).then((d) => ({ files: d.files ?? {}, revision: d.revision ?? '' })),
     // Render a page of the theme to HTML for the live preview. Pass `files` to render the editor's
     // in-flight (possibly-unsaved) buffer; omit it to render the saved draft (base ⊕ overrides), e.g.
     // for a thumbnail. A template/Liquid error comes back as { error } rather than throwing.
