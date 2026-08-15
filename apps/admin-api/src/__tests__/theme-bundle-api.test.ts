@@ -414,6 +414,27 @@ test('preview renders a page to HTML through the theme render path (layout + sec
   assert.ok(body.html?.includes('<body>'), 'wraps the content in the layout');
 });
 
+test('preview wraps sections in the storefront head with the theme brand tokens (OFCE-618)', async () => {
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
+    files: {
+      'config/tokens.json': JSON.stringify({ color: '#ff0000', radius: 'rounded' }),
+      'templates/index.json': JSON.stringify({
+        sections: [{ type: 'hero', data: { heading: 'Hi' } }],
+      }),
+      'sections/hero.liquid': '<h1>{{ heading }}</h1>',
+    },
+    page: 'index',
+  });
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as { html?: string };
+  // The preview must be a full, STYLED document that mirrors what the origin serves — otherwise the
+  // wizard/editor preview is bare body HTML and never reflects the merchant's brand colour/font.
+  assert.ok(body.html?.startsWith('<!doctype html>'), 'a full document, not bare body HTML');
+  assert.ok(body.html?.includes('--accent:#ff0000'), 'the theme brand colour reaches the head');
+  assert.ok(body.html?.includes('--radius:18px'), 'the theme radius token reaches the head');
+  assert.ok(body.html?.includes('<h1>Hi</h1>'), 'the section still renders in the body');
+});
+
 test('preview surfaces a render error as { error } (200, not a 500)', async () => {
   const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
     files: { 'layout/theme.liquid': '<html></html>' }, // no templates/index.json → render throws

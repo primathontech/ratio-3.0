@@ -27,6 +27,8 @@ import {
   DraftConflict,
 } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
+import { storefrontHead, resolveThemeTokens } from '@ratio/builder-core';
+import type { ThemeTokens } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
 import {
@@ -181,10 +183,11 @@ async function renderThemePreview(
   files: ThemeFiles,
   page: string,
   tenantId: string,
-  commerce?: TenantCommerce | null
+  commerce?: TenantCommerce | null,
+  theme?: unknown
 ) {
   const { resolver, commerce: ctxCommerce, sampleData } = previewResolver(commerce);
-  const { html, tags } = await renderThemePage(
+  const { html: sections, tags } = await renderThemePage(
     files, // the composed draft (base ⊕ overrides) — no compile needed while compile is identity
     page,
     {
@@ -199,6 +202,12 @@ async function renderThemePreview(
     },
     { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce } }
   );
+  // Wrap the composed sections in the SAME document shell the origin serves (apps/origin/src/index.ts):
+  // doctype + <head> with the storefront design-system CSS and the theme's per-theme brand tokens
+  // (config/tokens.json in the draft, tenant.theme as the seed fallback). Without this the preview is
+  // bare, unstyled body HTML and wouldn't reflect brand colour/font — so it must mirror the origin.
+  const head = storefrontHead(resolveThemeTokens(files, (theme ?? {}) as ThemeTokens));
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${sections}</body></html>`;
   return { html, tags, sampleData };
 }
 
@@ -836,7 +845,13 @@ export function createApp(
     const page = body.page || 'index';
     try {
       const tenant = await forTenant(id).getTenant();
-      const { html, sampleData } = await renderThemePreview(files, page, id, tenant?.commerce);
+      const { html, sampleData } = await renderThemePreview(
+        files,
+        page,
+        id,
+        tenant?.commerce,
+        tenant?.theme
+      );
       return c.json({ html, sampleData });
     } catch (e) {
       console.error('theme preview render failed:', e);
