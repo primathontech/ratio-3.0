@@ -391,10 +391,18 @@ export function createApp(
   // renderer; the page-builder is only an emergency degrade-only fallback). OFCE-616 / ADR-013 §14.6.
   // Kept separate from ensureStoreTheme so the editor's create-only "ensure" guard never publishes as
   // a side effect. A no-op without a bundle store; best-effort at the call site.
+  //
+  // Guard on live_theme_id, NOT theme-row existence: if a prior attempt created the theme row but
+  // failed before publish (or the editor's ensureStoreTheme created it), the row exists yet the store
+  // is still on the page-builder — re-running must finish the job, not no-op forever. Once live, it's
+  // a no-op (adopt/publish is only for a store with no live theme).
   async function publishStoreThemeOnOnboard(tenantId: string): Promise<void> {
     if (!themes) return;
-    const { rows } = await pool.query('SELECT 1 FROM theme WHERE id = $1', [mainThemeId(tenantId)]);
-    if (rows[0]) return;
+    const { rows } = await pool.query<{ live_theme_id: string | null }>(
+      'SELECT live_theme_id FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+    if (rows[0]?.live_theme_id) return;
     await adoptAndPublishDefaultTheme(themes, tenantId, mainThemeId(tenantId), {
       compile: identityCompile,
     });
