@@ -10,9 +10,10 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react';
-import type { Api, Store, StoreTheme } from '../../common/api';
+import type { Api, Store, StoreTheme, ThemeFiles } from '../../common/api';
 import { ApiError } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
+import { tokensFromFiles, filesWithTokens } from './tokens-file';
 import './theme-settings.css';
 
 // CSS values per token value — mirror packages/builder-core/src/storefront.ts so the preview matches
@@ -316,10 +317,24 @@ function StorefrontPreview({ t, mobile }: { t: Required<StoreTheme>; mobile: boo
 
 /* ── panel ─────────────────────────────────────────────────────────────────── */
 
-export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
+export function ThemeSettingsPanel({
+  api,
+  store,
+  themeId,
+}: {
+  api: Api;
+  store: Store;
+  themeId: string;
+}) {
   const toast = useToast();
+  const owner = store.role === 'owner';
   const [theme, setTheme] = useState<StoreTheme | null>(null);
   const [saved, setSaved] = useState<StoreTheme | null>(null);
+  // The theme's whole draft (base ⊕ overrides) + its revision. Brand tokens live INSIDE it as
+  // config/tokens.json, so a save round-trips the current files (preserving the merchant's Liquid)
+  // with only the tokens file rewritten, under optimistic concurrency (revision).
+  const [files, setFiles] = useState<ThemeFiles | null>(null);
+  const [revision, setRevision] = useState('');
   const [busy, setBusy] = useState(false);
   const [mobile, setMobile] = useState(false);
 
@@ -328,15 +343,22 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
     [toast]
   );
 
+  const load = useCallback(async () => {
+    try {
+      const d = await api.getBundleDraft(store.id, themeId);
+      setFiles(d.files);
+      setRevision(d.revision);
+      const t = tokensFromFiles(d.files);
+      setTheme(t);
+      setSaved(t);
+    } catch (e) {
+      err(e, 'Failed to load theme');
+    }
+  }, [api, store.id, themeId, err]);
+
   useEffect(() => {
-    api
-      .getTheme(store.id)
-      .then((t) => {
-        setTheme(t);
-        setSaved(t);
-      })
-      .catch((e) => err(e, 'Failed to load theme'));
-  }, [api, store.id, err]);
+    void load();
+  }, [load]);
 
   function set<K extends keyof StoreTheme>(key: K, value: StoreTheme[K]) {
     setTheme((t) => ({ ...(t ?? {}), [key]: value }));
@@ -359,18 +381,39 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
   }, [theme, saved]);
   const dirty = changes.length > 0;
 
+  // Save the tokens into the theme's draft. Owners then publish so the change is live immediately (the
+  // brand-settings expectation); a member can only save to the draft for an owner to publish. Both
+  // write the SAME draft the code editor uses — one theme, one draft, one publish.
   async function save() {
-    if (!theme) return;
+    if (!theme || !files) return;
     setBusy(true);
     try {
-      const res = await api.saveTheme(store.id, theme);
-      setTheme(res.theme);
-      setSaved(res.theme);
-      toast('Theme saved', 'ok');
-      if (res.edgePurged === false)
-        toast('Saved, but the edge cache purge failed — it may serve stale briefly', 'error');
+      const next = filesWithTokens(files, theme);
+      const res = await api.saveBundleDraft(store.id, themeId, next, revision);
+      setFiles(next);
+      setRevision(res.hash);
+      setSaved(theme);
+      if (owner) {
+        await api.publishBundle(store.id, themeId);
+        toast('Theme published — live now', 'ok');
+      } else {
+        toast('Saved to draft — an owner can publish it', 'ok');
+      }
     } catch (e) {
-      err(e, 'Save failed');
+      // The draft moved since we loaded it (another editor, or a code edit) → 409. Refresh files +
+      // revision but KEEP the in-progress token edits so a retry re-applies them cleanly.
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const d = await api.getBundleDraft(store.id, themeId);
+          setFiles(d.files);
+          setRevision(d.revision);
+        } catch {
+          /* fall through to the toast */
+        }
+        toast('This theme changed elsewhere — review and save again', 'error');
+      } else {
+        err(e, 'Save failed');
+      }
     } finally {
       setBusy(false);
     }
@@ -502,7 +545,9 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
           </div>
           <StorefrontPreview t={r} mobile={mobile} />
           <p className="muted ts-preview-note">
-            Preview only — nothing changes on the storefront until you save.
+            {owner
+              ? 'Preview only — nothing changes on the storefront until you save & publish.'
+              : 'Preview only — your changes go live when an owner publishes the theme.'}
           </p>
         </div>
       </div>
@@ -518,7 +563,7 @@ export function ThemeSettingsPanel({ api, store }: { api: Api; store: Store }) {
             Discard
           </button>
           <button className="btn btn-primary btn-sm" onClick={save} disabled={busy}>
-            Save theme
+            {owner ? 'Save & publish' : 'Save changes'}
           </button>
         </div>
       )}
