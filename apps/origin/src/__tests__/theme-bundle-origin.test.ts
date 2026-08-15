@@ -337,18 +337,33 @@ test(
     const body = await res.text();
     assert.match(body, /^<!doctype html>/);
     assert.match(body, /New arrivals/, 'the default New arrivals product row renders');
-    assert.match(body, /Trending now/, 'the default Trending row renders');
-    // OFCE-618: the header + footer are rendered by the ORIGIN shell (renderHeader/renderFooter) with
-    // the store's real name — the SAME header cart/order use — not a theme placeholder. So the brand
-    // is the store name, and the theme's old "My store" placeholder header is gone.
+    assert.match(body, /New launches/, 'the default New launches row renders');
+    // The header + footer are rendered by the ORIGIN shell from the theme's editable header/footer
+    // sections (renderChrome) with the store's real name — the SAME header cart/order use. So the
+    // brand is the store name, and there is exactly one header/footer.
     assert.match(
       body,
       /<header class="hdr">[\s\S]*hdr-brand[^>]*>Onboarded</,
       'the shell header shows the real store name'
     );
     assert.match(body, /<footer class="ftr">/, 'the shell footer renders');
-    // Exactly one header/footer — the shell's — with no theme placeholder header duplicating it.
     assert.equal((body.match(/<header class="hdr">/g) ?? []).length, 1, 'one header (the shell)');
     assert.doesNotMatch(body, /hdr-brand[^>]*>My store/, 'no theme placeholder header brand');
+
+    // The SAME theme header renders on the cart page (renderChrome), so the storefront is consistent
+    // across the bundle pages AND the transactional cart/order pages — one header everywhere.
+    const cart = await call('/cart', edge({ 'x-ratio-tenant': T9 }));
+    assert.equal(cart.headers.get('x-handler'), 'cart');
+    const cartBody = await cart.text();
+    assert.match(
+      cartBody,
+      /<header class="hdr">[\s\S]*hdr-brand[^>]*>Onboarded</,
+      'the cart page renders the same theme header with the real store name'
+    );
+    assert.equal(
+      (cartBody.match(/<header class="hdr">/g) ?? []).length,
+      1,
+      'one header on the cart page too'
+    );
   }
 );
