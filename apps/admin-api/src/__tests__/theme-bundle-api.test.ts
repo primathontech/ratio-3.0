@@ -402,6 +402,19 @@ test('preview wraps sections in the storefront head with the theme brand tokens 
   assert.ok(body.html?.includes('--accent:#ff0000'), 'the theme brand colour reaches the head');
   assert.ok(body.html?.includes('--radius:18px'), 'the theme radius token reaches the head');
   assert.ok(body.html?.includes('<h1>Hi</h1>'), 'the section still renders in the body');
+  // Preview parity: the preview wraps the body in the SAME origin shell header/footer (the store's
+  // real name), so the editor/wizard preview matches what the storefront serves — not a bare body.
+  assert.match(
+    body.html ?? '',
+    /<header class="hdr">[\s\S]*hdr-brand[^>]*>ThemeBundle</,
+    'the shell header shows the real store name (matches the origin)'
+  );
+  assert.match(body.html ?? '', /<footer class="ftr">/, 'the shell footer renders');
+  assert.strictEqual(
+    (body.html?.match(/<header class="hdr">/g) ?? []).length,
+    1,
+    'exactly one header (the shell), no theme placeholder'
+  );
 });
 
 test('preview surfaces a render error as { error } (200, not a 500)', async () => {
