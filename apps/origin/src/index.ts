@@ -10,6 +10,8 @@ import { fetchMainMenu, renderHeader } from '@ratio/builder-core';
 import { fetchFooter, renderFooter } from '@ratio/builder-core';
 import { storefrontResolver, buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
 import { storefrontHead } from '@ratio/builder-core';
+import type { ThemeTokens } from '@ratio/builder-core';
+import { resolveThemeTokens } from '@ratio/builder-core';
 import {
   CartService,
   readCartToken,
@@ -165,8 +167,24 @@ function setStorefrontSecurity(c: Context, csp: string = STRICT_CSP): void {
 type CartTenant = {
   name: string;
   theme?: unknown;
+  liveThemeId?: string | null;
   commerce?: { merchantId?: string; storeId?: string } | null;
 };
+
+// Brand tokens for the storefront <head> on the cart/order pages, which render outside the bundle
+// path. Resolve them from the store's LIVE compiled bundle (config/tokens.json) so those pages match
+// the theme; fall back to the tenant-level theme when there's no live bundle (or on any load hiccup),
+// which keeps these transactional pages rendering even if the theme store is momentarily unavailable.
+async function liveThemeTokens(tenant: CartTenant, tenantId: string): Promise<ThemeTokens> {
+  const seed = (tenant.theme ?? {}) as ThemeTokens;
+  if (!themeStore || !tenant.liveThemeId) return seed;
+  try {
+    const compiled = await themeStore.loadLiveCompiled(tenantId);
+    return resolveThemeTokens(compiled, seed);
+  } catch {
+    return seed;
+  }
+}
 
 function cartBackendFor(commerce: CartTenant['commerce']): CartBackend | null {
   const urls = commerceUrlsFromEnv(process.env);
@@ -190,7 +208,7 @@ async function renderCartResponse(
   );
   const html = renderCartPage(cart, {
     siteName: tenant.name,
-    styleHead: storefrontHead((tenant.theme ?? {}) as never),
+    styleHead: storefrontHead(await liveThemeTokens(tenant, tenantId)),
     header: renderHeader({ menu, siteName: tenant.name }),
     footer: renderFooter({ footer, siteName: tenant.name }),
     headExtra: ix.head,
@@ -229,7 +247,7 @@ async function renderOrderResponse(
     },
     {
       siteName: tenant.name,
-      styleHead: storefrontHead((tenant.theme ?? {}) as never),
+      styleHead: storefrontHead(await liveThemeTokens(tenant, tenantId)),
       header: renderHeader({ menu, siteName: tenant.name }),
       footer: renderFooter({ footer, siteName: tenant.name }),
       headExtra: ix.head,
@@ -587,7 +605,7 @@ app.all('*', async (c) => {
             }
           )
         );
-        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead((tenant.theme ?? {}) as never)}</head><body>${sections}</body></html>`;
+        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens))}</head><body>${sections}</body></html>`;
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));

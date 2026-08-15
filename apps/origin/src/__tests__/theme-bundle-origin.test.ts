@@ -34,6 +34,8 @@ const T6 = 'themebundle_o6';
 const THEME6 = 'themebundle_o6_main';
 const T7 = 'themebundle_o7';
 const THEME7 = 'themebundle_o7_main';
+const T8 = 'themebundle_o8';
+const THEME8 = 'themebundle_o8_main';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -46,9 +48,9 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5, T6, T7])
+  for (const id of [T, T2, T3, T4, T5, T6, T7, T8])
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Bundle Store', 'active')", [
     T,
@@ -73,6 +75,12 @@ before(async () => {
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Base Adopt', 'active')", [
     T7,
   ]);
+  // A store whose theme sets its OWN brand tokens (config/tokens.json) while its tenant-level theme
+  // carries a brand colour + container the theme leaves unset — proves theme-wins + tenant-fallback.
+  await pool.query(
+    "INSERT INTO tenants (id, name, status, theme) VALUES ($1, 'Token Store', 'active', $2)",
+    [T8, JSON.stringify({ color: '#ff0000', container: 'wide' })]
+  );
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
@@ -149,14 +157,27 @@ before(async () => {
     { 'sections/hero.liquid': '<section class="mine"><h1>MERCHANT {{ heading }}</h1></section>' }
   );
   await store.publish({ themeId: THEME7 }, { compile: (s) => s });
+
+  await store.ensureTheme(T8, THEME8);
+  await store.saveDraft(
+    { themeId: THEME8 },
+    {
+      'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
+      'sections/hero.liquid': '<section class="hero"><h1>{{ heading }}</h1></section>',
+      'templates/index.json': JSON.stringify({
+        sections: [{ type: 'hero', data: { heading: 'Tokens' } }],
+      }),
+    }
+  );
+  await store.publish({ themeId: THEME8 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
   // The shared library base (library-default / _library) is left in place — a persistent fixture.
-  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7])
+  for (const id of [THEME, THEME3, THEME4, THEME5, THEME6, THEME7, THEME8])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [T, T2, T3, T4, T5, T6, T7])
+  for (const id of [T, T2, T3, T4, T5, T6, T7, T8])
     await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
@@ -238,6 +259,21 @@ test(
     // This bundle has no index.json → GET / has no matching template → falls through to legacy.
     const home = await call('/', edge({ 'x-ratio-tenant': T5 }));
     assert.notEqual(home.headers.get('x-handler'), 'theme-bundle');
+  }
+);
+
+test(
+  'per-theme tokens: the theme config/tokens.json drives the head, tenant theme fills the gaps',
+  { skip },
+  async () => {
+    const res = await call('/', edge({ 'x-ratio-tenant': T8 }));
+    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+    const body = await res.text();
+    // The theme set radius:rounded → --radius:18px (the theme owns its look)...
+    assert.match(body, /--radius:18px/, 'the theme radius token drives the head');
+    // ...and the tenant-level theme fills the keys the theme left unset (its brand colour + container).
+    assert.match(body, /--accent:#ff0000/, 'the tenant brand colour fills via fallback');
+    assert.match(body, /--maxw:1200px/, 'the tenant container:wide fills via fallback');
   }
 );
 

@@ -1,0 +1,49 @@
+// Per-theme brand tokens (OFCE-616). A theme carries its own brand tokens as a file inside its
+// bundle (`config/tokens.json`) so they ride base⊕overrides, version atomically with publish/rollback,
+// and travel with a duplicated/switched theme. The origin resolves the tokens for the storefront head
+// from the LIVE compiled bundle, falling back to the tenant-level `tenants.theme` for any key the
+// theme omits (the seed a store starts from). Untrusted input: the values are still sanitized where
+// they touch CSS by `storefrontHead`/`rootVars`, so this layer only shapes and never trusts.
+import type { ThemeFiles } from './bundle';
+import type { ThemeTokens } from './storefront';
+
+export const TOKENS_PATH = 'config/tokens.json';
+
+const TOKEN_KEYS = [
+  'color',
+  'bodyFont',
+  'headingFont',
+  'baseSize',
+  'radius',
+  'container',
+] as const satisfies readonly (keyof ThemeTokens)[];
+
+// Parse a theme's tokens file into a plain, string-valued token subset. Absent, malformed, non-object,
+// or wrong-typed input yields {} (never throws mid-render); only the known token keys with string
+// values survive, so an arbitrary JSON blob in the bundle can't inject unexpected shapes downstream.
+export function parseThemeTokens(raw: string | undefined | null): Partial<ThemeTokens> {
+  if (raw == null) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const obj = parsed as Record<string, unknown>;
+  const out: Partial<ThemeTokens> = {};
+  for (const k of TOKEN_KEYS) {
+    if (typeof obj[k] === 'string') out[k] = obj[k] as string;
+  }
+  return out;
+}
+
+// The brand tokens for the storefront head: the live theme's own tokens win, the tenant-level theme
+// fills any key the theme leaves unset. So a theme fully owns its look once it sets every token, and a
+// store keeps its onboarding brand colour until a theme overrides it.
+export function resolveThemeTokens(
+  compiled: ThemeFiles | null | undefined,
+  tenantTheme: ThemeTokens | undefined
+): ThemeTokens {
+  return { ...(tenantTheme ?? {}), ...parseThemeTokens(compiled?.[TOKENS_PATH]) };
+}
