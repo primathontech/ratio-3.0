@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ApiError,
+  canManageStore,
   type Api,
   type Store,
   type ThemeFiles,
@@ -77,7 +78,7 @@ export function ThemeCodeEditor({
   // Set when the new-file input is cancelled (Escape), so the unmount-triggered blur doesn't re-create
   // the file the user just cancelled.
   const addCancelled = useRef(false);
-  const canPublish = store.role === 'owner';
+  const canPublish = canManageStore(store);
   // Where a new file lands: the selected folder, or the open file's folder, else null (root — the
   // input then takes a full path). Lets "New file" drop the input right inside that folder.
   const targetFolder =

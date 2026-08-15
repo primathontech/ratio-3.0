@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Api, Store, StoreTheme, ThemeFiles } from '../../common/api';
-import { ApiError } from '../../common/api';
+import { ApiError, canManageStore } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
 import { tokensFromFiles, filesWithTokens } from './tokens-file';
 import './theme-settings.css';
@@ -327,7 +327,7 @@ export function ThemeSettingsPanel({
   themeId: string;
 }) {
   const toast = useToast();
-  const owner = store.role === 'owner';
+  const owner = canManageStore(store);
   const [theme, setTheme] = useState<StoreTheme | null>(null);
   const [saved, setSaved] = useState<StoreTheme | null>(null);
   // The theme's whole draft (base ⊕ overrides) + its revision. Brand tokens live INSIDE it as

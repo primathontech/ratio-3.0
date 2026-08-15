@@ -7,6 +7,7 @@ import { NAV, type NavItem } from '../dashboard/dashboard-data';
 import { AskRatio } from '../assistant/ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
 import { resolveStore, storeSlug, storefrontUrl, useStoreData } from '../../common/store-context';
+import { canManageStore } from '../../common/api';
 
 // The merchant shell for a single store (/stores/:storeId/*): sidebar + top bar + Ask rail, with
 // the route content in <Outlet>. The current store lives in the URL.
@@ -58,7 +59,7 @@ export function MerchantLayout() {
 
   const store = resolveStore(stores, storeId);
   if (!store) return <Navigate to="/" replace />;
-  const owner = store.role === 'owner';
+  const owner = canManageStore(store);
   const slug = storeSlug(store);
   const liveUrl = storefrontUrl(store, !!me?.isLocal);
 
@@ -111,7 +112,9 @@ export function MerchantLayout() {
           <img className="brand-logo" src="/logo.svg" alt="Ratio" />
           <span className="brand-meta">
             <span className="brand-name">{store.name}</span>
-            <span className="brand-sub">{owner ? 'Owner' : 'Member'}</span>
+            <span className="brand-sub">
+              {store.role === 'admin' ? 'Admin' : owner ? 'Owner' : 'Member'}
+            </span>
           </span>
           {multiStore && <Icon.selector size={18} />}
         </button>

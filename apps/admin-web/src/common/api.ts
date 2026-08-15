@@ -10,6 +10,12 @@ export interface Store {
   host: string | null;
   hosts: string[];
 }
+
+// Owner-level store powers (publish, set-live, rename, delete, danger). Platform admins get the
+// synthetic role 'admin' from the API and hold these powers on every store — the backend's
+// requireRole('owner') bypasses for them, so the UI must not hide the actions from them either.
+export const canManageStore = (store: { role?: string }): boolean =>
+  store.role === 'owner' || store.role === 'admin';
 export interface StoreTheme {
   color?: string;
   bodyFont?: string;
