@@ -1,12 +1,15 @@
 // Map the merchant's real collections into the default theme's two featured home rows (New arrivals /
-// Trending) during onboarding, by patching the collection handles the rows bind to in
+// Trending) during onboarding, by patching the collection handles those rows bind to in
 // templates/index.json. This is what stops a fresh store launching with empty featured rows when the
-// merchant's catalogue doesn't happen to use the default 'new-arrivals' / 'trending' handles.
+// merchant's catalogue doesn't happen to use the theme's default handles.
+//
+// The two rows are found by POSITION — the first and second `collection-row` sections, in order — not
+// by hard-coded dataSource key names. The default theme is free to name its dataSource keys anything
+// (and does change them); keying off the section order keeps onboarding working regardless.
 import type { ThemeFiles } from '../../common/api';
 
 const INDEX = 'templates/index.json';
-// The dataSource keys the default theme's home template gives its two collection-row sections.
-const KEYS = { newArrivals: 'new_arrivals', trending: 'trending' } as const;
+const COLLECTION_ROW = 'collection-row';
 
 export interface Featured {
   newArrivals: string;
@@ -15,6 +18,7 @@ export interface Featured {
 
 interface IndexDoc {
   dataSources?: Record<string, { params?: { handles?: string[] } }>;
+  sections?: { type?: string; dataSourceKey?: string }[];
 }
 
 function parse(raw: string | undefined): IndexDoc | null {
@@ -27,17 +31,25 @@ function parse(raw: string | undefined): IndexDoc | null {
   }
 }
 
-function firstHandle(doc: IndexDoc | null, key: string): string {
-  const h = doc?.dataSources?.[key]?.params?.handles;
+// The dataSource keys the featured collection-row sections bind to, in render order.
+function featuredKeys(doc: IndexDoc | null): string[] {
+  return (doc?.sections ?? [])
+    .filter((s) => s?.type === COLLECTION_ROW && typeof s.dataSourceKey === 'string')
+    .map((s) => s.dataSourceKey as string);
+}
+
+function firstHandle(doc: IndexDoc | null, key: string | undefined): string {
+  const h = key ? doc?.dataSources?.[key]?.params?.handles : undefined;
   return Array.isArray(h) && typeof h[0] === 'string' ? h[0] : '';
 }
 
 // The collection handles the home's two featured rows currently bind to (from the theme draft).
 export function readFeatured(files: ThemeFiles): Featured {
   const doc = parse(files[INDEX]);
+  const [newArrivalsKey, trendingKey] = featuredKeys(doc);
   return {
-    newArrivals: firstHandle(doc, KEYS.newArrivals),
-    trending: firstHandle(doc, KEYS.trending),
+    newArrivals: firstHandle(doc, newArrivalsKey),
+    trending: firstHandle(doc, trendingKey),
   };
 }
 
@@ -47,12 +59,13 @@ export function readFeatured(files: ThemeFiles): Featured {
 export function mapFeaturedCollections(files: ThemeFiles, sel: Partial<Featured>): ThemeFiles {
   const doc = parse(files[INDEX]);
   if (!doc?.dataSources) return files;
+  const [newArrivalsKey, trendingKey] = featuredKeys(doc);
   let changed = false;
   for (const [key, handle] of [
-    [KEYS.newArrivals, sel.newArrivals],
-    [KEYS.trending, sel.trending],
+    [newArrivalsKey, sel.newArrivals],
+    [trendingKey, sel.trending],
   ] as const) {
-    const params = doc.dataSources[key]?.params;
+    const params = key ? doc.dataSources[key]?.params : undefined;
     if (handle && params) {
       params.handles = [handle];
       changed = true;
