@@ -19,11 +19,13 @@ type Status = 'loading' | 'ready' | 'disabled' | 'error';
 export function ThemeCodeEditor({
   api,
   store,
+  themeId,
   isLocal,
   onBack,
 }: {
   api: Api;
   store: Store;
+  themeId: string;
   isLocal: boolean;
   onBack?: () => void;
 }) {
@@ -121,7 +123,7 @@ export function ThemeCodeEditor({
     async (f: ThemeFiles, page: string) => {
       setPreviewing(true);
       try {
-        const res = await api.previewBundle(store.id, f, page);
+        const res = await api.previewBundle(store.id, themeId, f, page);
         setPreviewErr(res.error ?? '');
         setPreviewHtml(res.error ? '' : (res.html ?? ''));
       } catch (e) {
@@ -131,16 +133,18 @@ export function ThemeCodeEditor({
         setPreviewing(false);
       }
     },
-    [api, store.id]
+    [api, store.id, themeId]
   );
 
   const load = useCallback(() => {
     setStatus('loading');
     api
-      .getBundleDraft(store.id)
+      .getBundleDraft(store.id, themeId)
       // A brand-new store has no theme files yet — seed a default starter so the editor opens with a
       // working folder structure instead of empty. The seed is persisted server-side (not a dirty edit).
-      .then((d) => (Object.keys(d.files).length === 0 ? api.scaffoldBundleDraft(store.id) : d))
+      .then((d) =>
+        Object.keys(d.files).length === 0 ? api.scaffoldBundleDraft(store.id, themeId) : d
+      )
       .then((d) => {
         // Start with no file open — the editor shows the welcome panel until the user picks a file.
         setFiles(d.files);
@@ -156,7 +160,7 @@ export function ThemeCodeEditor({
         setErrMsg(e instanceof Error ? e.message : 'Could not load the theme');
         setStatus('error');
       });
-  }, [api, store.id, runPreview]);
+  }, [api, store.id, themeId, runPreview]);
   useEffect(load, [load]);
 
   // Leaving the Search view drops the filter, so the Explorer never shows a filtered tree with no
@@ -230,7 +234,7 @@ export function ThemeCodeEditor({
   async function save(): Promise<boolean> {
     setBusy(true);
     try {
-      const res = await api.saveBundleDraft(store.id, files, revisionRef.current);
+      const res = await api.saveBundleDraft(store.id, themeId, files, revisionRef.current);
       revisionRef.current = res.hash;
       setDirty(false);
       return true;
@@ -266,7 +270,7 @@ export function ThemeCodeEditor({
     if (dirty && !(await save())) return;
     setBusy(true);
     try {
-      const res = await api.publishBundle(store.id);
+      const res = await api.publishBundle(store.id, themeId);
       toast(`Published theme v${res.version}`, 'ok');
     } catch (e) {
       toast((e as Error).message, 'error');

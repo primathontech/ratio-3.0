@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeSettingsPanel } from '../features/theme/theme-settings';
 import { ThemeVersionsPanel } from '../features/theme/theme-versions-panel';
 import { PageHeader } from '../common/page-header';
@@ -10,6 +10,7 @@ import { storeSlug, useMerchant } from '../common/store-context';
 export function ThemePage() {
   const { api, store } = useMerchant();
   const navigate = useNavigate();
+  const { themeId } = useParams();
   const owner = store.role === 'owner';
   const [tab, setTab] = useState<'settings' | 'versions'>('settings');
   return (
@@ -49,7 +50,7 @@ export function ThemePage() {
           <button
             className="btn btn-ghost btn-sm"
             onClick={() =>
-              navigate(`/stores/${storeSlug(store)}/themes/${store.id}/editor`, {
+              navigate(`/stores/${storeSlug(store)}/themes/${themeId}/editor`, {
                 state: { fromApp: true },
               })
             }
