@@ -22,12 +22,14 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
     setBusy(true);
     setError(null);
     try {
+      // Publish on create: the store goes LIVE on the default bundle theme immediately (what you see
+      // in the editor), never a page-builder scaffold. The Design + Launch steps then edit and
+      // republish it. OFCE-618.
       const res = await api.createStore({
         name: data.name.trim(),
         host: data.host.trim().toLowerCase(),
         merchantId:
           data.skipCommerce || !data.merchantId.trim() ? undefined : data.merchantId.trim(),
-        draft: true,
       });
       patch({ storeId: res.id, storeUrl: res.url, themeId: `${res.id}-main` });
       onNext();

@@ -2,15 +2,8 @@
 // usage: tsx scripts/onboard.ts <tenantId> <Name> <host> [hexColor]
 import { onboardStore } from '@ratio/data-provisioning';
 import { pool } from '@ratio/data-db';
-import {
-  PageBuilder,
-  PgPageStore,
-  scaffoldStorefront,
-  ThemeStore,
-  adoptAndPublishDefaultTheme,
-} from '@ratio/builder-core';
+import { ThemeStore, adoptAndPublishDefaultTheme } from '@ratio/builder-core';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { defaultRegistry } from '@ratio/builder-registry';
 import { configureDbFromEnv } from './db';
 
 configureDbFromEnv();
@@ -24,15 +17,9 @@ if (!id || !name || !host) {
 
 (async () => {
   await onboardStore({ id, name, host, color, local: process.env.RATIO_LOCAL === 'true' });
-  // The page builder is the sole renderer — scaffold the default home + templates so the store
-  // renders immediately (mirrors the admin-api onboarding flow).
-  const pb = new PageBuilder(new PgPageStore(), defaultRegistry(), {
-    invalidateByTags: () => Promise.resolve(),
-  });
-  await scaffoldStorefront(pb, id, { name });
-  // Publish + activate the bundle theme so the store renders through the bundle (the single renderer;
-  // the page-builder scaffold above is the emergency degrade fallback). Needs BUNDLE_S3_* — skipped
-  // with a note in a dev setup that hasn't configured object storage. OFCE-616.
+  // Publish + activate the bundle theme so the store renders through the bundle — the single renderer
+  // (mirrors the admin-api onboarding flow). Needs BUNDLE_S3_* — skipped with a note in a dev setup
+  // that hasn't configured object storage. OFCE-616/618.
   const bucket = process.env.BUNDLE_S3_BUCKET;
   if (bucket) {
     const accessKeyId = process.env.BUNDLE_S3_KEY;
@@ -47,7 +34,7 @@ if (!id || !name || !host) {
     );
     await adoptAndPublishDefaultTheme(store, id, `${id}-main`, { compile: (s) => s });
   } else {
-    console.log('(no BUNDLE_S3_BUCKET — skipped bundle publish; store renders via page-builder)');
+    console.log('(no BUNDLE_S3_BUCKET — skipped bundle publish; the store has no live theme yet)');
   }
   console.log(`onboarded "${name}" (${id}) → http://${host}:8080/`);
   console.log('(no restart needed; the edge host-cache TTL is ~5s, so give it a moment)');

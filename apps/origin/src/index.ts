@@ -76,9 +76,10 @@ const RESERVED = ['/checkout', '/account'];
 
 let renders = 0;
 
-// Page builder — the sole storefront renderer. A published PageDoc for the URL is served; a URL
-// with no PageDoc (exact or template) is a 404. Every store is scaffolded with a home + product +
-// collection page at onboarding (scaffoldStorefront), so a fresh store renders out of the box.
+// Page builder — the emergency DEGRADE renderer (OFCE-616/618). The bundle theme is the single
+// primary renderer (published at onboarding); this path serves a published PageDoc only when a store
+// has no live bundle theme or its bundle render throws. Onboarding no longer scaffolds page-builder
+// pages, so for a bundle store this path has none and a URL with no PageDoc is a 404.
 const pageStore = new PgPageStore();
 const pbRegistry = defaultRegistry();
 // The origin runs on Node, so it can render untrusted merchant/app sections via the worker-thread

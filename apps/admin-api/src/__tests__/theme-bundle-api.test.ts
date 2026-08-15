@@ -52,9 +52,6 @@ const MAIN = `${ID}-main`;
 const ONBOARD_ID = 't_theme_onboard';
 const ONBOARD_MAIN = `${ONBOARD_ID}-main`;
 const ONBOARD_HOST = 'tb-onboard.localhost';
-const DRAFT_ID = 't_theme_draft';
-const DRAFT_MAIN = `${DRAFT_ID}-main`;
-const DRAFT_HOST = 'tb-draft.localhost';
 const alice = { authorization: 'Bearer tok-alice' };
 const bob = { authorization: 'Bearer tok-bob' };
 const carol = { authorization: 'Bearer tok-carol' };
@@ -96,11 +93,10 @@ async function cleanup() {
   await pool.query('DELETE FROM theme WHERE id = $1', [MAIN]);
   await pool.query('DELETE FROM memberships WHERE tenant_id = $1', [ID]);
   await pool.query('DELETE FROM tenants WHERE id = $1', [ID]);
-  // The onboarding-route tests create whole stores (tenant + host + membership + pages + theme).
-  for (const [tid, main] of [
-    [ONBOARD_ID, ONBOARD_MAIN],
-    [DRAFT_ID, DRAFT_MAIN],
-  ] as const) {
+  // The onboarding-route test creates a whole store (tenant + host + membership + pages + theme).
+  {
+    const tid = ONBOARD_ID;
+    const main = ONBOARD_MAIN;
     await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [main]);
     await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [tid]);
     await pool.query('DELETE FROM pages WHERE tenant_id = $1', [tid]);
@@ -277,33 +273,6 @@ test('OFCE-616: onboarding a store publishes + activates its bundle theme (live 
     [ONBOARD_MAIN]
   );
   assert.strictEqual(versions.rows[0].n, 1, 'exactly one published version at onboarding');
-});
-
-test('OFCE-618: onboarding with draft:true adopts the theme but does NOT publish it (not live)', async () => {
-  const res = await call(app, 'POST', '/stores', alice, {
-    id: DRAFT_ID,
-    name: 'Draft Store',
-    host: DRAFT_HOST,
-    color: '#0ea5e9',
-    draft: true,
-  });
-  assert.strictEqual(res.status, 201);
-  assert.strictEqual(((await res.json()) as { draft: boolean }).draft, true);
-
-  // The theme row is adopted (so the wizard's design step can edit its draft)...
-  const theme = await pool.query('SELECT 1 FROM theme WHERE id = $1', [DRAFT_MAIN]);
-  assert.strictEqual(theme.rowCount, 1, 'the theme is adopted');
-  // ...but NOT published: no live pointer, no published version. The wizard publishes at launch.
-  const { rows } = await pool.query<{ live_theme_id: string | null }>(
-    'SELECT live_theme_id FROM tenants WHERE id = $1',
-    [DRAFT_ID]
-  );
-  assert.strictEqual(rows[0].live_theme_id, null, 'a draft store is not live');
-  const versions = await pool.query<{ n: number }>(
-    'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
-    [DRAFT_MAIN]
-  );
-  assert.strictEqual(versions.rows[0].n, 0, 'no published version for a draft store');
 });
 
 test('a non-owner cannot save a draft (403) or publish (403)', async () => {

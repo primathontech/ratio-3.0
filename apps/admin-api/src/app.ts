@@ -31,11 +31,7 @@ import { storefrontHead, resolveThemeTokens } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
-import {
-  scaffoldStorefront,
-  ensureDefaultBaseTheme,
-  adoptAndPublishDefaultTheme,
-} from '@ratio/builder-core';
+import { ensureDefaultBaseTheme, adoptAndPublishDefaultTheme } from '@ratio/builder-core';
 import {
   buildCustomClient,
   commerceUrlsFromEnv,
@@ -536,13 +532,12 @@ export function createApp(
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
   app.post('/stores', denyNarrowedScope, async (c) => {
-    const { id, name, host, color, merchantId, draft } = (await c.req.json().catch(() => ({}))) as {
+    const { id, name, host, color, merchantId } = (await c.req.json().catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
       merchantId?: string;
-      draft?: boolean;
     };
     if (!name || !host) {
       return c.json({ error: 'name and host are required' }, 400);
@@ -588,28 +583,19 @@ export function createApp(
       local: config.local,
     });
     c.set('auditTenant', tenantId); // onboarding: the store id isn't in the path, so set it here
-    // Scaffold the default home + product + collection pages so the store renders out of the box
-    // (the page builder is the sole renderer, so these URLs 404 until the pages exist). Best-effort
-    // — a scaffold hiccup must not fail an otherwise-successful onboarding; the merchant can re-add
-    // pages in the editor.
-    await scaffoldStorefront(pageBuilder, tenantId, { name }).catch(() => {});
-    // Give the new store a bundle theme that adopts the shared Default base (base ⊕ overrides).
-    // Normally publish + activate it so it renders through the bundle immediately. In DRAFT mode
-    // (the onboarding wizard, OFCE-618) only adopt it — leave live_theme_id NULL so the store isn't
-    // live until the wizard's final launch step publishes it. Best-effort either way.
-    if (draft) {
-      await ensureStoreTheme(tenantId).catch((e) => {
-        console.error('ensureStoreTheme failed for', tenantId, e);
-      });
-    } else {
-      await publishStoreThemeOnOnboard(tenantId).catch((e) => {
-        console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
-      });
-    }
+    // Adopt the shared Default base bundle theme AND publish + activate it, so the store is LIVE on
+    // the bundle theme from the moment it exists — the same rich storefront the merchant sees in the
+    // editor/wizard, never a separate page-builder scaffold (OFCE-616/618). Best-effort; a hiccup here
+    // must not fail an otherwise-successful onboarding. No page-builder scaffold: the bundle theme is
+    // the single renderer, so scaffolding page-builder pages only produced a confusing, never-shown
+    // (or degrade-only) parallel storefront.
+    await publishStoreThemeOnOnboard(tenantId).catch((e) => {
+      console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
+    });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     const cfg = cfConfig();
     if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
-    return c.json({ id: tenantId, url: `https://${lcHost}/`, draft: !!draft }, 201);
+    return c.json({ id: tenantId, url: `https://${lcHost}/` }, 201);
   });
 
   // Verify a commerce merchant id BEFORE a store exists (the onboarding wizard's step 1, OFCE-618).
