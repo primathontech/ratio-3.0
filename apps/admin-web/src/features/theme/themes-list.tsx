@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ApiError, type Api, type Store, type ThemeSummary } from '../../common/api';
+import {
+  ApiError,
+  canManageStore,
+  type Api,
+  type Store,
+  type ThemeSummary,
+} from '../../common/api';
 import { Dialog, EmptyState, Field, Icon, Spinner, useToast } from '../../common/ui';
 import { PageHeader } from '../../common/page-header';
 import { storeSlug, storefrontUrl } from '../../common/store-context';
@@ -18,7 +24,7 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const slug = storeSlug(store);
   const domain = store.host ?? store.id;
   const liveUrl = storefrontUrl(store, false);
-  const canManage = store.role === 'owner';
+  const canManage = canManageStore(store);
 
   const [status, setStatus] = useState<Status>('loading');
   const [errMsg, setErrMsg] = useState('');
