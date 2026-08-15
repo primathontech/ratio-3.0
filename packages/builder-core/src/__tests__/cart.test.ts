@@ -8,11 +8,8 @@ import {
   readCartToken,
   cartCookie,
   expireCartCookie,
-  renderCartPage,
   renderOrderPage,
-  emptyCart,
   type CartBackend,
-  type Cart,
 } from '../cart';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -228,43 +225,6 @@ test('renderOrderPage: omits rows that are absent (only id → no total/payment 
   assert.doesNotMatch(html, /Payment<\/span>/);
 });
 
-test('renderCartPage: empty state', () => {
-  const html = renderCartPage(emptyCart(), { siteName: 'Acme', styleHead: '<style></style>' });
-  assert.match(html, /Your cart is empty/);
-  assert.match(html, /<title>Cart · Acme<\/title>/);
-});
-
-test('renderCartPage: lines, subtotal, GoKwik checkout handoff, chrome, escaping', () => {
-  const cart: Cart = {
-    id: 'c1',
-    count: 2,
-    subtotal: 558,
-    checkoutUrl: 'https://gk/checkout/c1',
-    items: [{ id: 'v1', title: '<b>Shampoo</b>', quantity: 2, price: 279 }],
-  };
-  const html = renderCartPage(cart, {
-    siteName: 'Acme',
-    styleHead: '',
-    header: '<header>H</header>',
-    footer: '<footer>F</footer>',
-  });
-  assert.match(html, /&lt;b&gt;Shampoo&lt;\/b&gt;/); // title escaped
-  assert.match(html, /action="\/cart\/update"[\s\S]*name="variantId" value="v1"/); // qty stepper form
-  assert.match(html, /cart-qty-n">2</); // current quantity shown
-  assert.match(html, /₹558\.00/); // line sum 279×2 (and subtotal)
-  assert.match(html, /href="https:\/\/gk\/checkout\/c1"[^>]*>Checkout</); // checkout → GoKwik
-  assert.match(html, /<header>H<\/header>/);
-  assert.match(html, /<footer>F<\/footer>/);
-});
-
-test('renderCartPage: no checkoutUrl → checkout is disabled, not broken', () => {
-  const cart: Cart = {
-    id: 'c1',
-    count: 1,
-    subtotal: 279,
-    items: [{ id: 'l1', title: 'X', quantity: 1, price: 279 }],
-  };
-  const html = renderCartPage(cart, { siteName: 'Acme', styleHead: '' });
-  assert.doesNotMatch(html, /cart-checkout/);
-  assert.match(html, /Checkout isn't available yet/);
-});
+// The cart PAGE was removed (OFCE): the GoKwik side-cart drawer is the cart. The origin now bounces
+// add-to-cart / the cart-icon back to the shopper and opens the drawer (see the origin handler +
+// gokwik openCartCookie/OPEN_TRIGGER); there is no renderCartPage to test here.

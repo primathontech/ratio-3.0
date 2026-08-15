@@ -55,10 +55,51 @@ test('renders a tenant home with tenant + cache + surrogate headers', async () =
 });
 
 test('reserved path -> no-store system handler', async () => {
-  // /cart is now server-rendered (its own handler); /checkout + /account stay app-owned stubs.
+  // /cart redirects to open the side-cart drawer (below); /checkout + /account stay app-owned stubs.
   const res = await call('/checkout', edge({ 'x-ratio-tenant': 't_acme' }));
   assert.strictEqual(res.headers.get('x-handler'), 'reserved');
   assert.strictEqual(res.headers.get('x-cache'), 'no-store');
+});
+
+test('GET /cart: no cart page — bounce back and flag the side-cart drawer to open', async () => {
+  const res = await call(
+    '/cart',
+    edge({ 'x-ratio-tenant': ACME, referer: 'http://origin/collections/all' })
+  );
+  assert.strictEqual(res.status, 303);
+  assert.strictEqual(res.headers.get('x-handler'), 'cart-open');
+  assert.strictEqual(res.headers.get('location'), '/collections/all'); // back where the shopper was
+  assert.match(res.headers.get('set-cookie') || '', /rt_open_cart=1/); // opens the drawer next page
+  assert.strictEqual(res.headers.get('x-cache'), 'no-store');
+});
+
+test('GET /cart with no referer bounces to home', async () => {
+  const res = await call('/cart', edge({ 'x-ratio-tenant': ACME }));
+  assert.strictEqual(res.status, 303);
+  assert.strictEqual(res.headers.get('location'), '/');
+});
+
+test('GET /cart referred from a cart route bounces to home, not into a redirect loop', async () => {
+  const res = await call('/cart', edge({ 'x-ratio-tenant': ACME, referer: 'http://origin/cart' }));
+  assert.strictEqual(res.status, 303);
+  assert.strictEqual(res.headers.get('location'), '/'); // not '/cart' → no loop
+});
+
+test('POST /cart/add: mutate then bounce back + flag the drawer (no cart page)', async () => {
+  const res = await app.fetch(
+    new Request('http://origin/cart/add', {
+      method: 'POST',
+      headers: {
+        ...edge({ 'x-ratio-tenant': ACME, referer: 'http://origin/products/x' }),
+        'content-type': 'application/x-www-form-urlencoded',
+      },
+      body: 'handle=some-handle',
+    })
+  );
+  assert.strictEqual(res.status, 303);
+  assert.strictEqual(res.headers.get('x-handler'), 'cart-add');
+  assert.strictEqual(res.headers.get('location'), '/products/x');
+  assert.match(res.headers.get('set-cookie') || '', /rt_open_cart=1/);
 });
 
 test('tenant isolation: acme cannot render betas /about route (404)', async () => {

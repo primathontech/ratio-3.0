@@ -349,21 +349,5 @@ test(
     assert.match(body, /<footer class="ftr">/, 'the shell footer renders');
     assert.equal((body.match(/<header class="hdr">/g) ?? []).length, 1, 'one header (the shell)');
     assert.doesNotMatch(body, /hdr-brand[^>]*>My store/, 'no theme placeholder header brand');
-
-    // The SAME theme header renders on the cart page (renderChrome), so the storefront is consistent
-    // across the bundle pages AND the transactional cart/order pages — one header everywhere.
-    const cart = await call('/cart', edge({ 'x-ratio-tenant': T9 }));
-    assert.equal(cart.headers.get('x-handler'), 'cart');
-    const cartBody = await cart.text();
-    assert.match(
-      cartBody,
-      /<header class="hdr">[\s\S]*hdr-brand[^>]*>Onboarded</,
-      'the cart page renders the same theme header with the real store name'
-    );
-    assert.equal(
-      (cartBody.match(/<header class="hdr">/g) ?? []).length,
-      1,
-      'one header on the cart page too'
-    );
   }
 );

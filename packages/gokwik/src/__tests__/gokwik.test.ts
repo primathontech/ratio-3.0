@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sideCartTag, readableCartCookie } from '../side-cart/side-cart';
+import { sideCartTag, readableCartCookie, openCartCookie } from '../side-cart/side-cart';
 import { sideCartIntegration } from '../side-cart';
 import { checkoutTag } from '../checkout/checkout';
 import { checkoutIntegration } from '../checkout';
@@ -50,6 +50,19 @@ test('sideCartTag: a `</script>` in the mid cannot break out of the inline scrip
   const html = sideCartTag({ ...fullCfg, mid: '</script><b>' });
   assert.doesNotMatch(html.split('<script src=')[0], /<\/script><b>/);
   assert.match(html, /\\u003c\/script>/);
+});
+
+test('sideCartTag ships the open-on-add trigger (reads rt_open_cart, opens the drawer)', () => {
+  const html = sideCartTag(fullCfg);
+  assert.match(html, /rt_open_cart=1/, 'the trigger checks the open-cart cookie');
+  assert.match(html, /window\.openGokwikSideCart/, 'and opens the widget drawer');
+});
+
+test('openCartCookie: short-lived, JS-readable rt_open_cart (the client trigger reads it)', () => {
+  const c = openCartCookie();
+  assert.match(c, /^rt_open_cart=1;/);
+  assert.doesNotMatch(c, /HttpOnly/i);
+  assert.match(c, /Max-Age=\d+/);
 });
 
 test('readableCartCookie is NOT httpOnly (the browser widget reads it)', () => {
