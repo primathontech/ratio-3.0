@@ -42,12 +42,6 @@ export function forTenant(tenantId: string) {
       );
       return rows[0] || null;
     },
-    async setTheme(theme: TenantTheme): Promise<void> {
-      await pool.query('UPDATE tenants SET theme = $2 WHERE id = $1', [
-        tenantId,
-        JSON.stringify(theme),
-      ]);
-    },
     // Connect (or disconnect, with null) the store's commerce backend. `commerce` carries the
     // GoKwik merchant id that powers products/collections/cart/checkout.
     async setCommerce(commerce: TenantCommerce | null): Promise<void> {
