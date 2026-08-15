@@ -14,11 +14,7 @@ export function ThemePage() {
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader
-        title={
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-            {store.name} theme <span className="theme-pill">Live</span>
-          </span>
-        }
+        title={`${store.name} theme`}
         description={
           store.host ? (
             <>
