@@ -177,7 +177,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
                   onChange={setNewArrivals}
                 />
               </Field>
-              <Field label="Trending row">
+              <Field label="New launches row">
                 <CollectionSelect value={trending} options={collections} onChange={setTrending} />
               </Field>
             </>
