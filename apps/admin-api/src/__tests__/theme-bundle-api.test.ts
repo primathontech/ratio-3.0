@@ -359,6 +359,47 @@ test('publish with no saved draft → 400 (publish does not create the theme)', 
   assert.strictEqual(pub.status, 400);
 });
 
+test('reset drops all overrides → the draft composes to pure base again', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const composed = (
+    (await (await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)).json()) as {
+      files: Record<string, string>;
+    }
+  ).files;
+
+  // Customize one section, then confirm the override is stored.
+  await putDraft({ ...composed, 'sections/hero.liquid': '<section>MINE</section>' });
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {
+    'sections/hero.liquid': '<section>MINE</section>',
+  });
+
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {});
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as { files: Record<string, string>; revision: string };
+
+  // The override is gone — the stored draft is empty, so the composed theme is the pure base: the
+  // customized section reverts to the base's own version (not the merchant's edit).
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {});
+  assert.ok(body.files['layout/theme.liquid'], 'the reply composes the base layout back in');
+  assert.notStrictEqual(
+    body.files['sections/hero.liquid'],
+    '<section>MINE</section>',
+    'the customization is dropped'
+  );
+  assert.strictEqual(
+    body.files['sections/hero.liquid'],
+    composed['sections/hero.liquid'],
+    'the section reverts to the base version'
+  );
+});
+
+test('a member (non-owner) can reset a draft to base', async () => {
+  await putDraft({ 'a.liquid': 'by-editor' }, carol);
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, carol, {});
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {});
+});
+
 test('every bundle endpoint is 503 when no object store is configured', async () => {
   const put = await call(appNoStore, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
     files: {},
@@ -368,8 +409,10 @@ test('every bundle endpoint is 503 when no object store is configured', async ()
   const rb = await call(appNoStore, 'POST', `/stores/${ID}/theme/bundle/rollback`, alice, {
     version: 1,
   });
+  const reset = await call(appNoStore, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {});
   assert.strictEqual(put.status, 503);
   assert.strictEqual(get.status, 503);
   assert.strictEqual(pub.status, 503);
   assert.strictEqual(rb.status, 503);
+  assert.strictEqual(reset.status, 503);
 });

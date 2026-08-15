@@ -920,6 +920,21 @@ export function createApp(
     return c.json({ ok: true, version: body.version });
   }
 
+  // Reset a theme's draft to pure base — drop every override (the merchant's customizations) so the
+  // editor is back to the default theme. A member edit (like draft-save), not owner-only. Returns the
+  // now-composed files + the fresh revision so the editor swaps its buffer in place.
+  async function resetBundle(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
+    await themes.resetDraft({ themeId });
+    const [files, revision] = await Promise.all([
+      themes.readComposed({ themeId }),
+      themes.draftRevision({ themeId }),
+    ]);
+    c.set('auditTenant', id);
+    return c.json({ ok: true, files, revision });
+  }
+
   // Legacy one-theme-per-store mounts (back-compat: the current editor + its tests). themeId = default.
   app.put('/stores/:id/theme/bundle/draft', requireMembership, (c) =>
     draftPut(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
@@ -937,6 +952,9 @@ export function createApp(
     publishBundle(c, mainThemeId(c.req.param('id')))
   );
   app.post('/stores/:id/theme/bundle/rollback', requireRole('owner'), (c) => rollbackBundle(c));
+  app.post('/stores/:id/theme/bundle/reset', requireMembership, (c) =>
+    resetBundle(c, mainThemeId(c.req.param('id')))
+  );
 
   // --- Multi-theme CRUD + selection (OFCE-615 Phase 1). A store may keep several themes; exactly one
   // is live. Every theme-scoped route calls assertThemeInStore after the auth guard, so a member of
@@ -1050,6 +1068,10 @@ export function createApp(
   app.post('/stores/:id/themes/:themeId/preview', requireMembership, async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
     return preview(c, c.req.param('themeId'));
+  });
+  app.post('/stores/:id/themes/:themeId/reset', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return resetBundle(c, c.req.param('themeId'));
   });
   app.post('/stores/:id/themes/:themeId/publish', requireRole('owner'), async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));

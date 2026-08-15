@@ -165,6 +165,13 @@ export class ThemeStore {
     return this.saveDraft(ref, diffFromBase(base, full), opts);
   }
 
+  // Reset the draft to pure base: store an EMPTY overrides bundle, so readComposed returns the
+  // untouched base theme again (drops every customization the merchant made). The inverse of
+  // saveOverrides with a full override set.
+  async resetDraft(ref: ThemeRef): Promise<{ hash: string }> {
+    return this.saveDraft(ref, {});
+  }
+
   // Freeze the current draft into immutable, content-addressed source + compiled bundles. The draft
   // is the theme's OVERRIDES (its changed files): the SOURCE bundle is those overrides (small, for
   // merges), and the COMPILED bundle is compile(base ⊕ overrides) — the full render-ready theme the

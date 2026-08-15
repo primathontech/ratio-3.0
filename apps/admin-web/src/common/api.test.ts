@@ -468,4 +468,17 @@ describe('admin api client', () => {
     expect(new URL(seen!.url).pathname).toBe('/stores/s1/themes/s1-main/rollback');
     expect(await seen!.json()).toEqual({ version: 2 });
   });
+
+  test('resetBundleDraft POSTs to the theme reset endpoint and unwraps files + revision', async () => {
+    let seen: Request | undefined;
+    const files = { 'layout/theme.liquid': '<html></html>' };
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, files, revision: 'r9' }, (r) => (seen = r))
+    );
+    expect(await api.resetBundleDraft('s1', 's1-main')).toEqual({ files, revision: 'r9' });
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/stores/s1/themes/s1-main/reset');
+  });
 });
