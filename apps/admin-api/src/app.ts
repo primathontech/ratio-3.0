@@ -29,6 +29,7 @@ import {
 import type { ThemeFiles } from '@ratio/builder-core';
 import { storefrontHead, resolveThemeTokens } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
+import { fetchMainMenu, renderHeader, fetchFooter, renderFooter } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { ensureDefaultBaseTheme, adoptAndPublishDefaultTheme } from '@ratio/builder-core';
@@ -180,30 +181,39 @@ async function renderThemePreview(
   page: string,
   tenantId: string,
   commerce?: TenantCommerce | null,
-  theme?: unknown
+  theme?: unknown,
+  siteName = 'Store'
 ) {
   const { resolver, commerce: ctxCommerce, sampleData } = previewResolver(commerce);
-  const { html: sections, tags } = await renderThemePage(
-    files, // the composed draft (base ⊕ overrides) — no compile needed while compile is identity
-    page,
-    {
-      theme: (liquid, data) => renderUntrusted(liquid, data),
-      platform: (type, data) => {
-        const rec = pbRegistry.get(type);
-        if (!rec) throw new Error(`unknown platform section '${type}'`);
-        if (rec.island)
-          return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
-        return renderSection(rec, data);
+  const navUrl = process.env.COMMERCE_NAV_API_URL ?? '';
+  const merchantId = commerce?.merchantId ?? '';
+  const [{ html: sections, tags }, menu, footerData] = await Promise.all([
+    renderThemePage(
+      files, // the composed draft (base ⊕ overrides) — no compile needed while compile is identity
+      page,
+      {
+        theme: (liquid, data) => renderUntrusted(liquid, data),
+        platform: (type, data) => {
+          const rec = pbRegistry.get(type);
+          if (!rec) throw new Error(`unknown platform section '${type}'`);
+          if (rec.island)
+            return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
+          return renderSection(rec, data);
+        },
       },
-    },
-    { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce } }
-  );
-  // Wrap the composed sections in the SAME document shell the origin serves (apps/origin/src/index.ts):
-  // doctype + <head> with the storefront design-system CSS and the theme's per-theme brand tokens
-  // (config/tokens.json in the draft, tenant.theme as the seed fallback). Without this the preview is
-  // bare, unstyled body HTML and wouldn't reflect brand colour/font — so it must mirror the origin.
+      { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce } }
+    ),
+    fetchMainMenu(merchantId, navUrl),
+    fetchFooter(merchantId, navUrl),
+  ]);
+  // Mirror EXACTLY what the origin serves (apps/origin/src/index.ts): doctype + <head> with the
+  // design-system CSS + per-theme brand tokens, and the header/footer rendered by the shell
+  // (renderHeader/renderFooter) around the theme body — NOT theme sections. So the preview is a
+  // faithful whole-page view (styled, real header/footer), not just the bare body.
   const head = storefrontHead(resolveThemeTokens(files, (theme ?? {}) as ThemeTokens));
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${sections}</body></html>`;
+  const header = renderHeader({ menu, siteName });
+  const footer = renderFooter({ footer: footerData, siteName });
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${header}${sections}${footer}</body></html>`;
   return { html, tags, sampleData };
 }
 
@@ -857,7 +867,8 @@ export function createApp(
         page,
         id,
         tenant?.commerce,
-        tenant?.theme
+        tenant?.theme,
+        tenant?.name
       );
       return c.json({ html, sampleData });
     } catch (e) {

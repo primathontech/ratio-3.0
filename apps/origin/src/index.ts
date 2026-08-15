@@ -566,47 +566,62 @@ app.all('*', async (c) => {
     const canon = canonicalPath(path);
     const matched = matchRoute(canon);
     const page = bundlePageName(canon, matched);
+    const merchantId = tenant.commerce?.merchantId ?? '';
+    const navUrl = process.env.COMMERCE_NAV_API_URL ?? '';
     try {
       const compiled = await timed(c, 'bundle', () =>
         themeStore.loadLiveCompiled(tenantId as string)
       );
       if (compiled && compiled[`templates/${page}.json`] != null) {
-        const { html: sections, tags: dataTags } = await timed(c, 'compose', () =>
-          renderThemePage(
-            compiled,
-            page,
-            {
-              // Theme sections: the bundle's Liquid, sandboxed in the isolate. Platform sections:
-              // no Liquid in the bundle — resolve the type to the first-party record and render it
-              // in-process (trusted code), so a page can mix both flavors. Platform sections resolve
-              // to the LATEST registered version (unpinned) by design — "platform = centrally
-              // updated" — unlike the legacy PageDoc path which pins the version it was built with.
-              theme: (liquid, data) => renderUntrusted(liquid, data),
-              platform: (type, data) => {
-                const rec = pbRegistry.get(type);
-                if (!rec) throw new Error(`unknown platform section '${type}'`);
-                // An island (per-user) section must NEVER render its personalized HTML into this
-                // shared, s-maxage'd response — emit the inert placeholder instead (hydrated
-                // client-side via /api/island), exactly as composePage does. (Instance = type for
-                // now — one island per type; full per-instance ids + island CSP on the bundle path
-                // are a later slice. Today no first-party section declares an island, so this is a
-                // fail-closed guard, not yet a live code path.)
-                if (rec.island)
-                  return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
-                return renderSection(rec, data);
+        // Render the theme body AND fetch the store's real nav (header menu + footer) in parallel —
+        // the nav overlaps the slow isolate render, not the S3 load, and isn't fetched at all on a
+        // bundle-miss fall-through. The header/footer are rendered by the ORIGIN shell
+        // (renderHeader/renderFooter) for EVERY page — the same real store name + nav +
+        // search/cart/account the cart/order pages use — so all pages share ONE header instead of
+        // the theme carrying its own placeholder one.
+        const [{ html: sections, tags: dataTags }, [menu, footerData]] = await Promise.all([
+          timed(c, 'compose', () =>
+            renderThemePage(
+              compiled,
+              page,
+              {
+                // Theme sections: the bundle's Liquid, sandboxed in the isolate. Platform sections:
+                // no Liquid in the bundle — resolve the type to the first-party record and render it
+                // in-process (trusted code), so a page can mix both flavors. Platform sections resolve
+                // to the LATEST registered version (unpinned) by design — "platform = centrally
+                // updated" — unlike the legacy PageDoc path which pins the version it was built with.
+                theme: (liquid, data) => renderUntrusted(liquid, data),
+                platform: (type, data) => {
+                  const rec = pbRegistry.get(type);
+                  if (!rec) throw new Error(`unknown platform section '${type}'`);
+                  // An island (per-user) section must NEVER render its personalized HTML into this
+                  // shared, s-maxage'd response — emit the inert placeholder instead (hydrated
+                  // client-side via /api/island), exactly as composePage does. (Instance = type for
+                  // now — one island per type; full per-instance ids + island CSP on the bundle path
+                  // are a later slice. Today no first-party section declares an island, so this is a
+                  // fail-closed guard, not yet a live code path.)
+                  if (rec.island)
+                    return Promise.resolve(islandPlaceholder(rec.island.name, { instance: type }));
+                  return renderSection(rec, data);
+                },
               },
-            },
-            {
-              resolver,
-              ctx: {
-                tenantId: tenantId as string,
-                routeParams: matched?.params,
-                commerce: tenant.commerce,
-              },
-            }
-          )
-        );
-        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens))}</head><body>${sections}</body></html>`;
+              {
+                resolver,
+                ctx: {
+                  tenantId: tenantId as string,
+                  routeParams: matched?.params,
+                  commerce: tenant.commerce,
+                },
+              }
+            )
+          ),
+          timed(c, 'nav', () =>
+            Promise.all([fetchMainMenu(merchantId, navUrl), fetchFooter(merchantId, navUrl)])
+          ),
+        ]);
+        const header = renderHeader({ menu, siteName: tenant.name });
+        const footerHtml = renderFooter({ footer: footerData, siteName: tenant.name });
+        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens))}</head><body>${header}${sections}${footerHtml}</body></html>`;
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));

@@ -2,8 +2,9 @@ import type { ThemeFiles } from './bundle';
 import type { DataSource } from './doc';
 
 // The starter theme a brand-new store adopts (base ⊕ overrides). A real, editable e-commerce home —
-// header + nav, hero, promo posters, two product rows bound to collections (New Arrivals / Trending),
-// a brand story, and a rich footer — plus collection + product pages. Every merchant edits THIS.
+// hero, promo posters, two product rows bound to collections (New Arrivals / Trending), and a brand
+// story — plus collection + product pages. Every merchant edits THIS. The header + footer are NOT
+// here: the ORIGIN shell renders them for every page (see the sections comment below).
 //
 // Render contract (theme-render.ts): `layout/theme.liquid` wraps the composed sections at
 // {{ content_for_layout }}; each `templates/<page>.json` lists section instances; a section `type`
@@ -47,7 +48,6 @@ export function defaultBundleTheme(): ThemeFiles {
     // ── Home ────────────────────────────────────────────────────────────────
     'templates/index.json': template(
       [
-        { type: 'header' },
         {
           type: 'hero',
           data: {
@@ -69,7 +69,6 @@ export function defaultBundleTheme(): ThemeFiles {
           data: { heading: 'Trending now', cta_href: '/collections/trending' },
         },
         { type: 'brand-story' },
-        { type: 'footer' },
       ],
       {
         new_arrivals: {
@@ -84,38 +83,22 @@ export function defaultBundleTheme(): ThemeFiles {
     ),
 
     // ── Collection page ─────────────────────────────────────────────────────
-    'templates/collection.json': template(
-      [{ type: 'header' }, { type: 'main-collection', dataSourceKey: 'main' }, { type: 'footer' }],
-      {
-        main: {
-          type: 'COLLECTION_BY_HANDLES',
-          params: { handles: ['{{params.handle}}'], productLimit: 12 },
-        },
-      }
-    ),
+    'templates/collection.json': template([{ type: 'main-collection', dataSourceKey: 'main' }], {
+      main: {
+        type: 'COLLECTION_BY_HANDLES',
+        params: { handles: ['{{params.handle}}'], productLimit: 12 },
+      },
+    }),
 
     // ── Product page ────────────────────────────────────────────────────────
-    'templates/product.json': template(
-      [{ type: 'header' }, { type: 'main-product', dataSourceKey: 'main' }, { type: 'footer' }],
-      { main: { type: 'PRODUCT', params: { handle: '{{params.handle}}' } } }
-    ),
+    'templates/product.json': template([{ type: 'main-product', dataSourceKey: 'main' }], {
+      main: { type: 'PRODUCT', params: { handle: '{{params.handle}}' } },
+    }),
 
-    // ── Sections (each brings its own container; full-width bars use .hdr/.ftr, content sits in .rt) ──
-    'sections/header.liquid': `<header class="hdr">
-  <div class="rt hdr-in">
-    <a class="hdr-brand" href="/">My store</a>
-    <nav class="hdr-nav">
-      <span class="hdr-item"><a class="hdr-link" href="/collections/new-arrivals">New arrivals</a></span>
-      <span class="hdr-item"><a class="hdr-link" href="/collections/trending">Trending</a></span>
-      <span class="hdr-item"><a class="hdr-link" href="/collections/all">Shop all</a></span>
-    </nav>
-    <div class="hdr-actions">
-      <a class="hdr-action" href="/cart">Cart</a>
-    </div>
-  </div>
-</header>
-`,
-
+    // ── Sections (each brings its own container; full-width bars use .hdr/.ftr, content sits in .rt).
+    // The header + footer are NOT theme sections: the ORIGIN renders them (renderHeader/renderFooter)
+    // in the page shell for EVERY page — home, collection, product, cart, order — from the store's real
+    // name + nav, so the whole storefront shares one header. Theme templates carry the body only. ──
     'sections/hero.liquid': `<section class="hero">
   <h1>{{ heading | escape }}</h1>
   {% if subheading %}<p>{{ subheading | escape }}</p>{% endif %}
@@ -162,37 +145,6 @@ export function defaultBundleTheme(): ThemeFiles {
     <p>We design considered, everyday pieces made to last — thoughtfully sourced and fairly made. Tell your brand's story here so shoppers know who they're buying from.</p>
   </div>
 </section>
-`,
-
-    'sections/footer.liquid': `<footer class="ftr">
-  <div class="rt ftr-in">
-    <div class="ftr-cols">
-      <div class="ftr-col">
-        <span class="ftr-col-h">Shop</span>
-        <ul>
-          <li><a href="/collections/new-arrivals">New arrivals</a></li>
-          <li><a href="/collections/trending">Trending</a></li>
-          <li><a href="/collections/all">Shop all</a></li>
-        </ul>
-      </div>
-      <div class="ftr-col">
-        <span class="ftr-col-h">About</span>
-        <ul>
-          <li><a href="/pages/about">Our story</a></li>
-          <li><a href="/pages/contact">Contact</a></li>
-        </ul>
-      </div>
-      <div class="ftr-col">
-        <span class="ftr-col-h">Help</span>
-        <ul>
-          <li><a href="/pages/shipping">Shipping &amp; returns</a></li>
-          <li><a href="/pages/faq">FAQ</a></li>
-        </ul>
-      </div>
-    </div>
-    <div class="ftr-legal">&copy; My store. All rights reserved.</div>
-  </div>
-</footer>
 `,
 
     // Collection page — the full product grid for the collection in the URL (/collections/:handle).

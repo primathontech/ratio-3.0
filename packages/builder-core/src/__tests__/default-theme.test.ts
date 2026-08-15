@@ -76,6 +76,16 @@ test('default theme home shows product rows (New arrivals + Trending) out of the
   assert.match(html, /₹499\.00/, 'home prices are formatted to rupees');
   // Uses the platform design-system classes so it's styled by the origin's storefront stylesheet.
   assert.match(html, /class="grid"/, 'product rows use the .grid card layout');
-  assert.match(html, /class="hdr"/, 'the header renders');
-  assert.match(html, /class="ftr"/, 'the footer renders');
+  // The header/footer are NOT theme sections — the origin renders them in the page shell (OFCE-618),
+  // so the theme body itself carries neither.
+  assert.doesNotMatch(
+    html,
+    /class="hdr"/,
+    'the theme body has no header (the origin shell adds it)'
+  );
+  assert.doesNotMatch(
+    html,
+    /class="ftr"/,
+    'the theme body has no footer (the origin shell adds it)'
+  );
 });
