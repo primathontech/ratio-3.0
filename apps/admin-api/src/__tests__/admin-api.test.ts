@@ -109,13 +109,16 @@ test('POST /stores with no id generates one server-side and still makes the call
   assert.match(id, /^t_auto_[0-9a-f]{8}$/, 'server-generated t_<slug>_<hex> id');
   assert.strictEqual((await getMembership(ALICE, id))!.role, 'owner');
   assert.deepStrictEqual((await forTenant(id).getTenant())!.commerce, { merchantId: 'gk_auto' });
-  // the default product + collection templates are scaffolded so the store navigates out of the box
+  // Onboarding no longer scaffolds page-builder pages — the bundle theme is the single renderer
+  // (OFCE-618), so a fresh store has no page-builder pages.
   const { pages } = (await (
     await call('GET', `/stores/${id}/page-builder/pages`, alice)
   ).json()) as { pages: { path: string; published: boolean }[] };
-  const scaffolded = pages.filter((p) => p.published).map((p) => p.path);
-  assert.ok(scaffolded.includes('/products/:handle'), 'product template published');
-  assert.ok(scaffolded.includes('/collections/:handle'), 'collection template published');
+  assert.strictEqual(
+    pages.length,
+    0,
+    'no page-builder scaffold; the bundle theme renders the store'
+  );
   // clean up this generated store (the file's fixed-id cleanup won't know its id)
   for (const q of ['memberships', 'domains', 'pages', 'page_purge_outbox']) {
     await pool.query(`DELETE FROM ${q} WHERE tenant_id=$1`, [id]);
