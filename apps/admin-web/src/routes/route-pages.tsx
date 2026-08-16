@@ -11,13 +11,16 @@ import { ComingSoon } from '../features/shell/app-shell';
 import { DangerPanel } from '../features/stores/danger-panel';
 import { ThemesList } from '../features/theme/themes-list';
 import { storeSlug, useMerchant, useStoreData } from '../common/store-context';
-import { AllStores } from '../features/all-stores/all-stores';
 
-// Bare "/" (and any unknown path) → the right home for the role.
+// Bare "/" (and any unknown path) → the right home for the role. A multi-store merchant lands on the
+// store launchpad to pick one; a single-store merchant goes straight into their store's dashboard.
 export function RoleRedirect() {
   const { stores, me } = useStoreData();
   if (me?.isPlatformAdmin) return <Navigate to="/admin" replace />;
-  return <Navigate to={`/stores/${storeSlug(stores[0])}`} replace />;
+  if (stores.length === 1) {
+    return <Navigate to={`/stores/${storeSlug(stores[0])}/dashboard`} replace />;
+  }
+  return <Navigate to="/stores" replace />;
 }
 
 export function RequireAdmin({ children }: { children: ReactNode }) {
@@ -36,11 +39,6 @@ export function SuperAdminPage() {
 export function SuperAdminUsersPage() {
   const { api, openCreate } = useStoreData();
   return <SuperAdminUsers api={api} onCreate={openCreate} />;
-}
-
-export function Stores() {
-  const { stores, me, openCreate } = useStoreData();
-  return <AllStores stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
 }
 
 export function HomePage() {

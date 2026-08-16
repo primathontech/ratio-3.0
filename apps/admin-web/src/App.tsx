@@ -23,8 +23,8 @@ import {
   SuperAdminPage,
   SuperAdminUsersPage,
   ThemesListPage,
-  Stores,
 } from './routes/route-pages';
+import { StoresLauncher } from './features/stores/stores-launcher';
 
 const API_URL = import.meta.env.VITE_ADMIN_API_URL || 'http://localhost:8787';
 
@@ -160,6 +160,9 @@ function AuthedRoutes() {
           />
         ) : (
           <>
+            {/* The store launchpad — chrome-less, its OWN route (no current store, so no store
+                sidebar). A multi-store merchant picks a store here. */}
+            <Route path="/stores" element={<StoresLauncher />} />
             {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search /
                 Ask Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
             <Route
@@ -167,7 +170,8 @@ function AuthedRoutes() {
               element={<FullScreenEditorPage />}
             />
             <Route path="/stores/:storeId" element={<MerchantLayout />}>
-              <Route index element={<Stores />} />
+              {/* A store URL always means THAT store — its dashboard, never the all-stores list. */}
+              <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<HomePage />} />
               <Route path="themes" element={<ThemesListPage />} />
               <Route path="themes/:themeId" element={<ThemePage />} />
