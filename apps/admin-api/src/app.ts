@@ -64,6 +64,7 @@ import {
   requireRole,
   listStoresForUser,
   listAllStores,
+  listAllUsers,
   isPlatformAdmin,
   clerkVerifier,
   insecureDevClerkVerifier,
@@ -543,6 +544,13 @@ export function createApp(
       ? await listAllStores()
       : await listStoresForUser(userId);
     return c.json({ stores });
+  });
+
+  // Every registered user + their stores (platform-admin console). The one cross-tenant read of
+  // users, so it's platform-admin only — a normal member has no business enumerating the platform.
+  app.get('/admin/users', async (c) => {
+    if (!isPlatformAdmin(c.get('userId'))) return c.json({ error: 'forbidden' }, 403);
+    return c.json({ users: await listAllUsers() });
   });
 
   // Create a store. The authenticated caller becomes its owner — the membership is

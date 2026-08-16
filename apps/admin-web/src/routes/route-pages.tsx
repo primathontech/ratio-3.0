@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AgentAccessPanel } from '../features/access/agent-access-panel';
 import { SuperAdmin } from '../features/admin/superadmin';
+import { SuperAdminUsers } from '../features/admin/superadmin-users';
 import { AuditPanel } from '../features/audit/audit-panel';
 import { CommercePanel } from '../features/commerce/commerce-panel';
 import { DashboardHome } from '../features/dashboard/dashboard';
@@ -30,6 +31,11 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 export function SuperAdminPage() {
   const { stores, me, openCreate } = useStoreData();
   return <SuperAdmin stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
+}
+
+export function SuperAdminUsersPage() {
+  const { api } = useStoreData();
+  return <SuperAdminUsers api={api} />;
 }
 
 export function Stores() {

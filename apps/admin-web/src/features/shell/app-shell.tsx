@@ -303,6 +303,14 @@ export function PlatformLayout() {
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>
+        <nav className="sa-subnav" aria-label="Platform sections">
+          <NavLink to="/admin" end className={({ isActive }) => (isActive ? 'on' : '')}>
+            Users
+          </NavLink>
+          <NavLink to="/admin/stores" className={({ isActive }) => (isActive ? 'on' : '')}>
+            Stores
+          </NavLink>
+        </nav>
         <div className="shell-body">
           <main className="container" style={{ overflow: 'auto' }}>
             <Outlet />

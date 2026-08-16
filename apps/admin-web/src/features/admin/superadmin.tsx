@@ -179,6 +179,7 @@ export function SuperAdmin({
               <thead>
                 <tr>
                   <th>Merchant</th>
+                  <th>Owner</th>
                   <th>Plan</th>
                   <th className="num">GMV · 30d</th>
                   <th className="num">Orders</th>
@@ -190,7 +191,7 @@ export function SuperAdmin({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="table-empty">
+                    <td colSpan={8} className="table-empty">
                       <span className="table-empty-emoji" aria-hidden>
                         🏪
                       </span>
@@ -258,6 +259,20 @@ export function SuperAdmin({
                               </span>
                             </span>
                           </span>
+                        </td>
+                        <td
+                          className="mono"
+                          style={{
+                            fontSize: 12,
+                            color: 'var(--text-3)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: 160,
+                          }}
+                          title={m.store.ownerId ?? undefined}
+                        >
+                          {m.store.ownerId ?? '—'}
                         </td>
                         <td style={{ color: 'var(--muted)' }}>{m.plan}</td>
                         <td className="num" style={{ fontWeight: 600 }}>
