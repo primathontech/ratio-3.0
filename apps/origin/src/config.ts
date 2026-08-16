@@ -28,4 +28,8 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   insecureTls: process.env.DB_INSECURE_TLS === 'true',
   bundleStore: bundleStore(),
+  // Optional CloudFront (or any CDN) base URL over the bundle bucket. When set, the origin reads
+  // immutable compiled bundles through the CDN and falls back to the S3 API on a miss. Writes always
+  // go direct to S3, so this is a pure read accelerator.
+  bundleCdnUrl: process.env.BUNDLE_CDN_URL || null,
 };

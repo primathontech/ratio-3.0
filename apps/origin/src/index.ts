@@ -36,7 +36,7 @@ import {
 } from '@ratio/builder-registry';
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
-import { S3ObjectStore } from '@ratio/data-objects';
+import { S3ObjectStore, CdnReadObjectStore } from '@ratio/data-objects';
 import { ThemeStore, renderThemePage } from '@ratio/builder-core';
 import { config } from './config';
 import { canonicalPath } from '@ratio/builder-core';
@@ -123,9 +123,12 @@ const resolver = storefrontResolver(process.env);
 // Bundle theme store (BC1), only when configured (BUNDLE_S3_BUCKET). When present, a store that has
 // published a bundle theme renders from its compiled bundle; otherwise the origin uses only the
 // legacy page store. Fetches the compiled bundle once per version into an in-memory LRU.
-const themeStore = config.bundleStore
-  ? new ThemeStore(new S3ObjectStore(config.bundleStore))
+const bundleObjects = config.bundleStore
+  ? config.bundleCdnUrl
+    ? new CdnReadObjectStore(new S3ObjectStore(config.bundleStore), config.bundleCdnUrl)
+    : new S3ObjectStore(config.bundleStore)
   : null;
+const themeStore = bundleObjects ? new ThemeStore(bundleObjects) : null;
 
 // The compiled-bundle template key for a URL: shared templates by page type (Shopify-shaped —
 // index / collection / product for home, /collections/:handle, /products/:handle), a custom page
