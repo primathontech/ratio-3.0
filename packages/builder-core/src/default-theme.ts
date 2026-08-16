@@ -65,9 +65,10 @@ export function defaultBundleTheme(): ThemeFiles {
         {
           type: 'hero',
           data: {
-            heading: 'New season, new look',
-            subheading: 'Discover the pieces everyone is talking about — curated for you.',
-            cta_label: 'Shop new arrivals',
+            heading: 'Everything you love, in one place',
+            subheading:
+              'Discover our full range of curated products — quality picks, honest prices, delivered to your door.',
+            cta_label: 'Browse all collections',
             cta_href: '/collections/all',
           },
         },
@@ -75,7 +76,7 @@ export function defaultBundleTheme(): ThemeFiles {
         {
           type: 'collection-row',
           dataSourceKey: 'all',
-          data: { heading: 'New arrivals', cta_href: '/collections/all' },
+          data: { heading: 'Feature Products', cta_href: '/collections/all' },
         },
         {
           type: 'collection-row',

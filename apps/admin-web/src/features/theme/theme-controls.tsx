@@ -251,7 +251,6 @@ export function ThemeControls({
 
       <section>
         <div className="ts-label">Brand</div>
-        <p className="muted ts-desc">Sets buttons, links and accents across the storefront.</p>
         <div className="ts-field-label">Brand colour</div>
         <div className="ts-brand">
           {BRAND_SWATCHES.map((c) => (
@@ -286,11 +285,10 @@ export function ThemeControls({
 
       <section>
         <div className="ts-label">Typography</div>
-        <p className="muted ts-desc">Each option previews in its own typeface.</p>
-        <div className="ts-field-label">Font</div>
+        <div className="ts-field-label">Font Family</div>
         <FontPicker value={r.bodyFont} onChange={setFont} />
         <FieldHead
-          label="Base text size"
+          label="Font Size"
           value={`${SIZE_PX[r.baseSize]}px`}
           canReset={r.baseSize !== DEFAULTS.baseSize}
           onReset={() => set('baseSize', DEFAULTS.baseSize)}
@@ -306,7 +304,7 @@ export function ThemeControls({
       <section>
         <div className="ts-label">Layout</div>
         <FieldHead
-          label="Corner roundness"
+          label="Radius"
           value={`${RADIUS_PX[r.radius]}px`}
           canReset={r.radius !== DEFAULTS.radius}
           onReset={() => set('radius', DEFAULTS.radius)}
