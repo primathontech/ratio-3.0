@@ -70,7 +70,7 @@ export function ThemeSettingsPanel({
   // path the origin serves (previewBundle → renderThemePreview), debounced so dragging the colour
   // picker doesn't hammer it. A transient failure keeps the last good frame rather than blocking.
   const [previewHtml, setPreviewHtml] = useState('');
-  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (!files || !theme) return;
     const draft = filesWithTokens(files, resolve(theme));

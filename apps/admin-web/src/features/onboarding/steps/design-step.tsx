@@ -52,7 +52,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
   }, [files, tokens, newArrivals, trending]);
 
   // Live preview, debounced so dragging the colour picker doesn't hammer the render.
-  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (!draft || !storeId || !themeId) return;
     clearTimeout(previewTimer.current);
