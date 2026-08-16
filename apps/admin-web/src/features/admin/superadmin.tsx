@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { Store } from '../../common/api';
 import { Icon, useToast } from '../../common/ui';
 import { storefrontUrl, storeSlug } from '../../common/store-context';
@@ -260,19 +261,30 @@ export function SuperAdmin({
                             </span>
                           </span>
                         </td>
-                        <td
-                          className="mono"
-                          style={{
-                            fontSize: 12,
-                            color: 'var(--text-3)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            maxWidth: 160,
-                          }}
-                          title={m.store.ownerId ?? undefined}
-                        >
-                          {m.store.ownerId ?? '—'}
+                        <td style={{ maxWidth: 160 }}>
+                          {m.store.ownerId ? (
+                            <Link
+                              className="mono"
+                              to={`/admin?user=${encodeURIComponent(m.store.ownerId)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              title={`View ${m.store.ownerId} in Users`}
+                              style={{
+                                display: 'inline-block',
+                                maxWidth: 160,
+                                fontSize: 12,
+                                color: 'var(--accent)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                verticalAlign: 'bottom',
+                              }}
+                            >
+                              {m.store.ownerId}
+                            </Link>
+                          ) : (
+                            <span style={{ color: 'var(--text-3)' }}>—</span>
+                          )}
                         </td>
                         <td style={{ color: 'var(--muted)' }}>{m.plan}</td>
                         <td className="num" style={{ fontWeight: 600 }}>
