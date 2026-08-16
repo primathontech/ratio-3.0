@@ -85,15 +85,23 @@ export function MerchantLayout() {
     }))
   );
 
-  // Switch store via a searchable picker — cycling one-by-one doesn't scale to many stores.
+  // Switch store via a searchable picker — cycling one-by-one doesn't scale to many stores. Switching
+  // keeps you on the SAME section (themes → themes, etc.); a deep id route (e.g. the theme editor)
+  // falls back to that section's list, since the id won't exist on the other store.
+  // The section after the store id (undefined on the store's dashboard/index), so switching keeps you
+  // on the same section — or on the dashboard when there isn't one.
+  const section = location.pathname.split('/')[3];
   const storeCommands: Command[] = useMemo(
-    () =>
-      stores.map((s) => ({
+    () => [
+      ...stores.map((s) => ({
         label: s.name,
         group: s.host ?? '',
-        run: () => navigate(`/stores/${storeSlug(s)}`),
+        run: () =>
+          navigate(section ? `/stores/${storeSlug(s)}/${section}` : `/stores/${storeSlug(s)}`),
       })),
-    [stores, navigate]
+      { label: 'View all stores', group: '', run: () => navigate('/stores') },
+    ],
+    [stores, navigate, section]
   );
   const multiStore = stores.length > 1;
 
@@ -243,10 +251,9 @@ export function MerchantLayout() {
 
 // The platform (super-admin) view (/admin): no store sidebar, its own top bar, Merchants in Outlet.
 export function PlatformLayout() {
-  const { stores } = useStoreData();
+  const { openCreate } = useStoreData();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const first = stores[0];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -259,15 +266,11 @@ export function PlatformLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const commands: Command[] = first
-    ? [
-        {
-          label: 'Stores',
-          group: 'Navigate',
-          run: () => navigate(`/stores/${storeSlug(first)}`),
-        },
-      ]
-    : [];
+  const commands: Command[] = [
+    { label: 'Users', group: 'Navigate', run: () => navigate('/admin') },
+    { label: 'Stores', group: 'Navigate', run: () => navigate('/admin/stores') },
+    { label: 'New store', group: 'Actions', run: openCreate },
+  ];
 
   return (
     <div className="app-shell no-sidebar">
@@ -289,17 +292,6 @@ export function PlatformLayout() {
               <span className="kbd">⌘K</span>
             </button>
             <ThemeToggle />
-            {first && (
-              <a
-                className="btn btn-ghost"
-                href={`/stores/${storeSlug(first)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open the store dashboard in a new tab"
-              >
-                Stores <Icon.external />
-              </a>
-            )}
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>

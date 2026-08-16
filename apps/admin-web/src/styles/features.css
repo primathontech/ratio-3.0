@@ -193,6 +193,21 @@
   flex-direction: column;
   gap: 20px;
 }
+/* Red announcement bar: the dashboard is placeholder data until analytics is wired. */
+.dash-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.dash-notice strong {
+  font-weight: 700;
+}
 /* Roomier 3-across KPI cards on the dashboard (the shared .kpi-grid stays 5-across for the
    super-admin console). */
 .dash .kpi-grid {
@@ -528,6 +543,65 @@
 }
 
 /* Super-admin merchants dashboard ---------------------------------------- */
+/* Merchant store launchpad (/stores) — a responsive grid of store cards. */
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.store-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s;
+}
+.store-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.store-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.store-card-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+.store-card-host {
+  font-size: 12px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.store-card-link {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+}
+.store-card-new {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  border-style: dashed;
+  font-weight: 500;
+}
+.store-card-new:hover {
+  color: var(--text);
+}
+
 /* Platform console section tabs (Users | Stores) under the appbar. */
 .sa-subnav {
   display: flex;

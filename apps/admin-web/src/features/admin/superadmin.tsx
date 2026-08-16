@@ -1,23 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Store } from '../../common/api';
+import type { Api, Store } from '../../common/api';
 import { Icon, useToast } from '../../common/ui';
 import { storefrontUrl, storeSlug } from '../../common/store-context';
-import {
-  merchantOf,
-  MERCHANT_STATUS,
-  PLATFORM_KPI,
-  INCIDENTS,
-  type Merchant,
-} from './superadmin-data';
 
-const FILTERS: Record<string, (m: Merchant) => boolean> = {
-  All: () => true,
-  Enterprise: (m) => m.plan === 'Enterprise',
-  'In review': (m) => m.status === 'review',
-  'At risk': (m) => m.status === 'risk',
-  Onboarding: (m) => m.status === 'onboarding',
-};
+// Platform-admin "Stores" view: every store on the platform, bound to REAL data — name, domain, owner
+// (resolved to a Clerk name via the users endpoint), created-since, and the live storefront link.
+// GMV / orders / status are intentionally absent until the analytics API lands (OFCE-619); we don't
+// show placeholder numbers. Row select fills the detail rail; owner links across to the Users view.
+
+type OwnerInfo = { name: string | null; email: string | null };
 
 const initials = (name: string) =>
   (
@@ -29,84 +21,66 @@ const initials = (name: string) =>
       .join('') || '?'
   ).toUpperCase();
 
-const pillClass = (tone: string) =>
-  tone === 'ok'
-    ? 'pill pill-ok'
-    : tone === 'warn'
-      ? 'pill pill-warn'
-      : tone === 'err'
-        ? 'pill pill-err'
-        : 'pill';
-
-function Spark({ values, height = 28 }: { values: number[]; height?: number }) {
-  return (
-    <div className="spark" style={{ height }}>
-      {values.map((h, i) => (
-        <span
-          key={i}
-          className={i >= values.length - 3 ? 'lead' : ''}
-          style={{ height: `${h}%` }}
-        />
-      ))}
-    </div>
-  );
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-// Platform-admin "Merchants" view (reference SuperAdmin screen). Real stores + deterministic
-// placeholder metrics from superadmin-data. Row select fills the detail rail; "Manage store" opens
-// the store admin; "View storefront" opens the live site; "New store" opens the create-store dialog.
 export function SuperAdmin({
+  api,
   stores,
   isLocal,
   onCreate,
 }: {
+  api: Api;
   stores: Store[];
   isLocal: boolean;
   onCreate: () => void;
 }) {
   const toast = useToast();
-  const merchants = useMemo(() => stores.map(merchantOf), [stores]);
-  const [tab, setTab] = useState('All');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Resolve owner clerk ids to real names/emails (falls back to the id when Clerk isn't configured).
+  const [owners, setOwners] = useState<Map<string, OwnerInfo>>(new Map());
+
+  useEffect(() => {
+    api
+      .listUsers()
+      .then((us) =>
+        setOwners(
+          new Map(us.map((u) => [u.userId, { name: u.name ?? null, email: u.email ?? null }]))
+        )
+      )
+      .catch(() => {
+        /* degrade to raw owner ids */
+      });
+  }, [api]);
+
+  const ownerName = (id: string | null | undefined) => (id ? (owners.get(id)?.name ?? id) : null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return merchants
-      .filter(FILTERS[tab])
-      .filter((m) => !q || `${m.name} ${m.domain} ${m.owner} ${m.plan}`.toLowerCase().includes(q));
-  }, [merchants, tab, query]);
+    if (!q) return stores;
+    return stores.filter((s) => {
+      const o = s.ownerId ? owners.get(s.ownerId) : undefined;
+      return `${s.name} ${s.host ?? ''} ${s.ownerId ?? ''} ${o?.name ?? ''} ${o?.email ?? ''}`
+        .toLowerCase()
+        .includes(q);
+    });
+  }, [stores, query, owners]);
 
-  const tabs = Object.keys(FILTERS).map((label) => ({
-    label,
-    count: merchants.filter(FILTERS[label]).length,
-  }));
-  const current =
-    merchants.find((m) => m.store.id === selectedId) ?? rows[0] ?? merchants[0] ?? null;
-
-  const kpis = PLATFORM_KPI.map((k) =>
-    k.label === 'Active merchants'
-      ? { ...k, value: String(merchants.length) }
-      : k.label === 'Merchants at risk'
-        ? { ...k, value: String(merchants.filter((m) => m.status === 'risk').length) }
-        : k
-  );
+  const current = stores.find((s) => s.id === selectedId) ?? rows[0] ?? null;
 
   return (
     <div className={`sa-grid fade-in${current ? '' : ' sa-grid-full'}`}>
       <div className="sa-main">
         <div className="page-head">
           <div className="head-text">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <h1>Merchants</h1>
-              <span
-                className="badge"
-                title="GMV and status are placeholder demo figures — not real analytics yet."
-              >
-                Sample metrics
-              </span>
-            </div>
-            <p>Every store on Ratio and what needs a human today.</p>
+            <h1>Stores</h1>
+            <p>Every store on the platform.</p>
           </div>
           <button
             className="btn btn-ghost"
@@ -119,22 +93,6 @@ export function SuperAdmin({
           </button>
         </div>
 
-        {/* This is analytics data we will uncomment this once we have analytics api ready */}
-        {/* <div className="kpi-grid">
-          {kpis.map((k) => (
-            <div className="kpi-card" key={k.label}>
-              <div className="kpi-label">{k.label}</div>
-              <div className="kpi-value-row">
-                <span className="kpi-value">{k.value}</span>
-                <span className={k.dir === 'up' ? 'kpi-delta up' : 'kpi-delta down'}>
-                  {k.delta}
-                </span>
-              </div>
-              <Spark values={k.spark} />
-            </div>
-          ))}
-        </div> */}
-
         <div className="card" style={{ overflow: 'hidden' }}>
           <div
             style={{
@@ -146,45 +104,26 @@ export function SuperAdmin({
               borderBottom: '1px solid var(--line)',
             }}
           >
-            <div className="seg">
-              {tabs.map((t) => (
-                <button
-                  key={t.label}
-                  className={t.label === tab ? 'on' : ''}
-                  aria-pressed={t.label === tab}
-                  onClick={() => setTab(t.label)}
-                >
-                  {t.label}{' '}
-                  <span style={{ color: 'var(--text-3)', fontVariantNumeric: 'tabular-nums' }}>
-                    {t.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-            <div style={{ flex: 1 }} />
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-              {rows.length} of {merchants.length} merchants
+              {rows.length} of {stores.length} stores
             </span>
+            <div style={{ flex: 1 }} />
             <input
               className="input"
               style={{ width: 240, height: 34 }}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Filter by store, owner, domain…"
-              aria-label="Filter merchants"
+              aria-label="Filter stores"
             />
           </div>
 
           <div className="table-wrap">
-            <table className="data-table" style={{ minWidth: 860 }}>
+            <table className="data-table" style={{ minWidth: 720 }}>
               <thead>
                 <tr>
-                  <th>Merchant</th>
+                  <th>Store</th>
                   <th>Owner</th>
-                  <th>Plan</th>
-                  <th className="num">GMV · 30d</th>
-                  <th className="num">Orders</th>
-                  <th>Status</th>
                   <th className="num">Since</th>
                   <th>Storefront</th>
                 </tr>
@@ -192,34 +131,34 @@ export function SuperAdmin({
               <tbody>
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="table-empty">
+                    <td colSpan={4} className="table-empty">
                       <span className="table-empty-emoji" aria-hidden>
                         🏪
                       </span>
-                      {merchants.length === 0
+                      {stores.length === 0
                         ? 'No stores yet — create your first store with “New store”.'
-                        : 'No merchants match your filters.'}
+                        : 'No stores match your filter.'}
                     </td>
                   </tr>
                 ) : (
-                  rows.map((m) => {
-                    const s = MERCHANT_STATUS[m.status];
-                    const active = current?.store.id === m.store.id;
-                    const sfUrl = storefrontUrl(m.store, isLocal);
+                  rows.map((s) => {
+                    const active = current?.id === s.id;
+                    const sfUrl = storefrontUrl(s, isLocal);
                     return (
                       <tr
-                        key={m.store.id}
-                        onClick={() => setSelectedId(m.store.id)}
+                        key={s.id}
+                        onClick={() => setSelectedId(s.id)}
                         onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault();
-                            setSelectedId(m.store.id);
+                            setSelectedId(s.id);
                           }
                         }}
                         tabIndex={0}
                         role="button"
                         aria-pressed={active}
-                        aria-label={`Select ${m.name}`}
+                        aria-label={`Select ${s.name}`}
                         style={{
                           cursor: 'pointer',
                           background: active ? 'var(--surface-2)' : undefined,
@@ -234,7 +173,7 @@ export function SuperAdmin({
                               style={{ width: 28, height: 28, fontSize: 11 }}
                               aria-hidden
                             >
-                              {initials(m.name)}
+                              {initials(s.name)}
                             </span>
                             <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                               <span
@@ -245,7 +184,7 @@ export function SuperAdmin({
                                   whiteSpace: 'nowrap',
                                 }}
                               >
-                                {m.name}
+                                {s.name}
                               </span>
                               <span
                                 style={{
@@ -256,48 +195,36 @@ export function SuperAdmin({
                                   whiteSpace: 'nowrap',
                                 }}
                               >
-                                {m.domain}
+                                {s.host ?? 'no domain'}
                               </span>
                             </span>
                           </span>
                         </td>
-                        <td style={{ maxWidth: 160 }}>
-                          {m.store.ownerId ? (
+                        <td style={{ maxWidth: 200 }}>
+                          {s.ownerId ? (
                             <Link
-                              className="mono"
-                              to={`/admin?user=${encodeURIComponent(m.store.ownerId)}`}
+                              to={`/admin?user=${encodeURIComponent(s.ownerId)}`}
                               onClick={(e) => e.stopPropagation()}
                               onKeyDown={(e) => e.stopPropagation()}
-                              title={`View ${m.store.ownerId} in Users`}
+                              title={`View ${ownerName(s.ownerId)} in Users`}
                               style={{
                                 display: 'inline-block',
-                                maxWidth: 160,
-                                fontSize: 12,
-                                color: 'var(--accent)',
+                                maxWidth: 200,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
                                 verticalAlign: 'bottom',
+                                color: 'var(--accent)',
                               }}
                             >
-                              {m.store.ownerId}
+                              {ownerName(s.ownerId)}
                             </Link>
                           ) : (
                             <span style={{ color: 'var(--text-3)' }}>—</span>
                           )}
                         </td>
-                        <td style={{ color: 'var(--muted)' }}>{m.plan}</td>
-                        <td className="num" style={{ fontWeight: 600 }}>
-                          {m.gmv}
-                        </td>
-                        <td className="num" style={{ color: 'var(--muted)' }}>
-                          {m.orders}
-                        </td>
-                        <td>
-                          <span className={pillClass(s.tone)}>{s.label}</span>
-                        </td>
                         <td className="num" style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                          {m.since}
+                          {fmtDate(s.since)}
                         </td>
                         <td>
                           {sfUrl ? (
@@ -308,7 +235,7 @@ export function SuperAdmin({
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
                               onKeyDown={(e) => e.stopPropagation()}
-                              aria-label={`Open ${m.name} storefront in a new tab`}
+                              aria-label={`Open ${s.name} storefront in a new tab`}
                             >
                               Open <Icon.external size={13} />
                             </a>
@@ -326,22 +253,32 @@ export function SuperAdmin({
         </div>
       </div>
 
-      {current && <DetailRail m={current} isLocal={isLocal} />}
+      {current && (
+        <DetailRail
+          s={current}
+          owner={current.ownerId ? owners.get(current.ownerId) : undefined}
+          isLocal={isLocal}
+        />
+      )}
     </div>
   );
 }
 
-function DetailRail({ m, isLocal }: { m: Merchant; isLocal: boolean }) {
-  const s = MERCHANT_STATUS[m.status];
-  const sfUrl = storefrontUrl(m.store, isLocal);
+function DetailRail({
+  s,
+  owner,
+  isLocal,
+}: {
+  s: Store;
+  owner: OwnerInfo | undefined;
+  isLocal: boolean;
+}) {
+  const sfUrl = storefrontUrl(s, isLocal);
   const detail: [string, string][] = [
-    ['Plan', m.plan],
-    ['GMV · 30d', m.gmv],
-    ['Orders · 30d', m.orders],
-    ['Owner', m.owner],
-    ['Location', m.location],
-    ['Merchant since', m.since],
-    ['Payout method', 'Ratio Payments'],
+    ['Owner', owner?.name ?? s.ownerId ?? '—'],
+    ['Email', owner?.email ?? '—'],
+    ['Domain', s.host ?? '—'],
+    ['Store since', fmtDate(s.since)],
   ];
   return (
     <aside className="sa-rail">
@@ -352,25 +289,23 @@ function DetailRail({ m, isLocal }: { m: Merchant; isLocal: boolean }) {
             style={{ width: 36, height: 36, fontSize: 13 }}
             aria-hidden
           >
-            {initials(m.name)}
+            {initials(s.name)}
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
             <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.01em' }}>
-              {m.name}
+              {s.name}
             </span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{m.domain}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{s.host ?? 'no domain'}</span>
           </span>
-          <span className={pillClass(s.tone)}>{s.label}</span>
         </div>
-        <Spark values={m.spark} height={44} />
         <div style={{ display: 'flex', gap: 8 }}>
           <a
             className="btn btn-ghost"
             style={{ flex: 1 }}
-            href={`/stores/${storeSlug(m.store)}`}
+            href={`/stores/${storeSlug(s)}`}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={`Manage ${m.name} in a new tab`}
+            aria-label={`Manage ${s.name} in a new tab`}
           >
             Manage store <Icon.external size={13} />
           </a>
@@ -380,7 +315,7 @@ function DetailRail({ m, isLocal }: { m: Merchant; isLocal: boolean }) {
               href={sfUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Open ${m.name} storefront in a new tab`}
+              aria-label={`Open ${s.name} storefront in a new tab`}
             >
               View storefront <Icon.external size={13} />
             </a>
@@ -393,27 +328,6 @@ function DetailRail({ m, isLocal }: { m: Merchant; isLocal: boolean }) {
           <div className="detail-row" key={k}>
             <span className="k">{k}</span>
             <span className="v">{v}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="sa-rail-sec">
-        <div style={{ fontSize: 13, fontWeight: 600 }}>Platform status</div>
-        {INCIDENTS.map((i) => (
-          <div className="incident" key={i.title}>
-            <span
-              className="dot"
-              style={{ background: i.tone === 'ok' ? 'var(--success)' : 'var(--warning)' }}
-            />
-            <span
-              style={{ display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 500 }}>{i.title}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{i.note}</span>
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-              {i.when}
-            </span>
           </div>
         ))}
       </div>

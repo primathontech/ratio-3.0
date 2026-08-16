@@ -10,6 +10,7 @@ export interface Store {
   host: string | null;
   hosts: string[];
   ownerId?: string | null; // the owner's clerk user id (platform-admin store↔user link)
+  since?: string | null; // ISO — earliest membership (a real store "created"/age proxy)
 }
 
 // A registered user + the stores they belong to (platform-admin console). Memberships-derived —

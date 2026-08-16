@@ -309,10 +309,7 @@ export interface NavItem {
 export const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Store',
-    items: [
-      { label: 'All Stores', route: 'home', hint: 'G H', real: true },
-      { label: 'Dashboard', route: 'dashboard', hint: 'G D' },
-    ],
+    items: [{ label: 'Dashboard', route: 'home', hint: 'G D' }],
   },
   {
     title: 'Storefront',
@@ -325,8 +322,7 @@ export const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Settings',
     items: [
-      { label: 'Payments', route: 'commerce', real: true, ownerOnly: true },
-      { label: 'Developers', route: 'access', real: true },
+      { label: 'Commerce', route: 'commerce', real: true, ownerOnly: true },
       { label: 'Activity', route: 'audit', real: true },
     ],
   },
