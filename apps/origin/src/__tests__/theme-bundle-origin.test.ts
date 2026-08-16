@@ -316,7 +316,10 @@ test(
     assert.match(body, /class="ftr"/, 'base footer section composes in');
     // ...alongside the merchant's OVERRIDE section, which replaced the base hero and still binds the
     // base template's data (the default home hero heading) through the sandbox isolate.
-    assert.match(body, /<section class="mine"><h1>MERCHANT New season, new look<\/h1><\/section>/);
+    assert.match(
+      body,
+      /<section class="mine"><h1>MERCHANT Everything you love, in one place<\/h1><\/section>/
+    );
     assert.doesNotMatch(
       body,
       /class="hero"/,

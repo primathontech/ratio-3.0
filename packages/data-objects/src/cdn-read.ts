@@ -7,9 +7,9 @@ import type { ObjectStore } from './object-store';
 // non-2xx or network error falls back to the wrapped store, so the CDN is a pure accelerator: if it's
 // misconfigured or cold, reads still succeed against S3.
 export interface CdnReadOptions {
-  // Logical-key prefix that marks immutable content-addressed objects. Default matches ThemeStore's
-  // `versions/...` layout.
-  immutablePrefix?: string;
+  // Marks immutable content-addressed objects — a key that CONTAINS this segment is served from the
+  // CDN. Default matches ThemeStore's `themes/<themeId>/versions/...` layout.
+  immutableMarker?: string;
   // Namespace prepended to keys in the bucket — must match the wrapped S3ObjectStore's keyPrefix so
   // the CDN URL points at the same object path.
   keyPrefix?: string;
@@ -19,7 +19,7 @@ export interface CdnReadOptions {
 
 export class CdnReadObjectStore implements ObjectStore {
   private readonly base: string;
-  private readonly immutablePrefix: string;
+  private readonly immutableMarker: string;
   private readonly keyPrefix: string;
   private readonly fetchImpl: typeof fetch;
 
@@ -29,13 +29,13 @@ export class CdnReadObjectStore implements ObjectStore {
     opts: CdnReadOptions = {}
   ) {
     this.base = cdnBaseUrl.replace(/\/+$/, '');
-    this.immutablePrefix = opts.immutablePrefix ?? 'versions/';
+    this.immutableMarker = opts.immutableMarker ?? '/versions/';
     this.keyPrefix = opts.keyPrefix ?? '';
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
   async get(key: string): Promise<Uint8Array | null> {
-    if (key.startsWith(this.immutablePrefix)) {
+    if (key.includes(this.immutableMarker)) {
       const viaCdn = await this.tryCdn(key);
       if (viaCdn !== undefined) return viaCdn;
     }

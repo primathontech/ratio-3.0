@@ -52,9 +52,13 @@ export interface PublishedBundles {
 export type PublishResult = PublishedBundles & { version: number };
 
 const GZIP = 'application/gzip';
+// Every object for a store's theme lives under themes/<themeId>/… (themeId embeds the store id), so a
+// store owns a single prefix — clean isolation + prefix-delete. Versions are content-hash keyed
+// within that namespace (immutable ⇒ CDN-cacheable forever); the draft is the one mutable object.
 const draftKey = (themeId: string) => `themes/${themeId}/draft/source.gz`;
-const sourceKey = (hash: string) => `versions/source/${hash}.gz`;
-const compiledKey = (hash: string) => `versions/compiled/${hash}.gz`;
+const sourceKey = (themeId: string, hash: string) => `themes/${themeId}/versions/source/${hash}.gz`;
+const compiledKey = (themeId: string, hash: string) =>
+  `themes/${themeId}/versions/compiled/${hash}.gz`;
 
 // themeId is interpolated into S3 keys, so it must be a plain slug — reject anything with path
 // separators or traversal before it can escape a theme's namespace in the shared bucket.
@@ -182,12 +186,16 @@ export class ThemeStore {
   async freezeBundles(ref: ThemeRef, opts: { compile: CompileFn }): Promise<PublishedBundles> {
     const overrides = await this.readDraft(ref);
     const sourceHash = bundleId(overrides);
-    await this.objects.put(sourceKey(sourceHash), packBundle(overrides), { contentType: GZIP });
+    await this.objects.put(sourceKey(ref.themeId, sourceHash), packBundle(overrides), {
+      contentType: GZIP,
+    });
 
     const composed = composeTheme(await this.loadBaseSource(ref.themeId), overrides);
     const compiled = await opts.compile(composed);
     const compiledHash = bundleId(compiled);
-    await this.objects.put(compiledKey(compiledHash), packBundle(compiled), { contentType: GZIP });
+    await this.objects.put(compiledKey(ref.themeId, compiledHash), packBundle(compiled), {
+      contentType: GZIP,
+    });
 
     return { sourceHash, compiledHash };
   }
@@ -218,7 +226,7 @@ export class ThemeStore {
     // own, that bundle is only its overrides — composing it would silently drop files. Fail loud.
     if (row.base_theme_id)
       throw new Error(`base '${baseThemeId}' is not a root theme (tracks '${row.base_theme_id}')`);
-    return (await this.loadSource(row.source_hash)) ?? {};
+    return (await this.loadSource(baseThemeId, row.source_hash)) ?? {};
   }
 
   // The full theme the compiler/preview sees: the base composed with the current draft overrides.
@@ -531,16 +539,16 @@ export class ThemeStore {
   // What the origin calls on a cache miss: the compiled bundle of the tenant's live version, or null
   // if the tenant has never published.
   async loadLiveCompiled(tenantId: string): Promise<ThemeFiles | null> {
-    const { rows } = await pool.query<{ compiled_hash: string }>(
-      `SELECT bv.compiled_hash
+    const { rows } = await pool.query<{ compiled_hash: string; live_theme_id: string }>(
+      `SELECT bv.compiled_hash, t.live_theme_id
          FROM tenants t
          JOIN theme_bundle_version bv
            ON bv.theme_id = t.live_theme_id AND bv.version = t.live_theme_version
         WHERE t.id = $1`,
       [tenantId]
     );
-    const hash = rows[0]?.compiled_hash;
-    return hash ? this.loadCompiled(hash) : null;
+    const row = rows[0];
+    return row?.compiled_hash ? this.loadCompiled(row.live_theme_id, row.compiled_hash) : null;
   }
 
   // Load a compiled bundle by its content hash (what the origin renders), or null if absent. Cached
@@ -548,10 +556,10 @@ export class ThemeStore {
   // before caching: the value is shared across requests, so an accidental mutation must throw rather
   // than silently corrupt the cached (and hash-addressed) bundle. Render is read-only; a path that
   // needs to edit a compiled tree must clone it.
-  async loadCompiled(compiledHash: string): Promise<ThemeFiles | null> {
+  async loadCompiled(themeId: string, compiledHash: string): Promise<ThemeFiles | null> {
     const cached = this.compiledCache.get(compiledHash);
     if (cached) return cached;
-    const blob = await this.objects.get(compiledKey(compiledHash));
+    const blob = await this.objects.get(compiledKey(themeId, compiledHash));
     if (!blob) return null;
     const files = unpackBundle(Buffer.from(blob));
     Object.freeze(files);
@@ -560,8 +568,8 @@ export class ThemeStore {
   }
 
   // Load a source bundle by its content hash (for merges / re-editing an old version), or null.
-  async loadSource(sourceHash: string): Promise<ThemeFiles | null> {
-    const blob = await this.objects.get(sourceKey(sourceHash));
+  async loadSource(themeId: string, sourceHash: string): Promise<ThemeFiles | null> {
+    const blob = await this.objects.get(sourceKey(themeId, sourceHash));
     return blob ? unpackBundle(Buffer.from(blob)) : null;
   }
 }

@@ -95,8 +95,8 @@ test(
   async () => {
     await store.saveDraft({ themeId: CHILD }, { 'a.liquid': 'X' });
     const r = await store.publish({ themeId: CHILD }, { compile: identity });
-    assert.deepEqual(await store.loadSource(r.sourceHash), { 'a.liquid': 'X' }); // overrides only
-    assert.deepEqual(await store.loadCompiled(r.compiledHash), {
+    assert.deepEqual(await store.loadSource(CHILD, r.sourceHash), { 'a.liquid': 'X' }); // overrides only
+    assert.deepEqual(await store.loadCompiled(CHILD, r.compiledHash), {
       'a.liquid': 'X',
       'b.liquid': 'BASE-B',
     });
@@ -109,8 +109,8 @@ test(
   async () => {
     await store.saveDraft({ themeId: BASE }, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
     const r = await store.publish({ themeId: BASE }, { compile: identity, makeLive: false });
-    const src = await store.loadSource(r.sourceHash);
-    assert.deepEqual(await store.loadCompiled(r.compiledHash), src); // nothing composed beneath a root
+    const src = await store.loadSource(BASE, r.sourceHash);
+    assert.deepEqual(await store.loadCompiled(BASE, r.compiledHash), src); // nothing composed beneath a root
     assert.deepEqual(src, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
   }
 );
