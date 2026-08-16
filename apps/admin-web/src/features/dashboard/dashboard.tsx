@@ -55,6 +55,13 @@ export function DashboardHome({ storeName }: { storeName: string }) {
 
   return (
     <div className="dash fade-in">
+      <div className="dash-notice" role="status">
+        <span aria-hidden>⚠️</span>
+        <span>
+          Heads up — this dashboard shows <strong>sample data</strong>. Real analytics aren’t
+          connected yet.
+        </span>
+      </div>
       <div className="page-head">
         <div className="head-text">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

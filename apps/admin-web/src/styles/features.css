@@ -193,6 +193,21 @@
   flex-direction: column;
   gap: 20px;
 }
+/* Red announcement bar: the dashboard is placeholder data until analytics is wired. */
+.dash-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--danger);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.dash-notice strong {
+  font-weight: 700;
+}
 /* Roomier 3-across KPI cards on the dashboard (the shared .kpi-grid stays 5-across for the
    super-admin console). */
 .dash .kpi-grid {
