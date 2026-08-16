@@ -23,14 +23,23 @@ const unreachable: ObjectStore = {
 const store = new ThemeStore(unreachable);
 
 test('rejects a themeId with a path separator or traversal (before any S3 call)', async () => {
-  await assert.rejects(() => store.readDraft({ themeId: '../evil' }), /invalid theme id/);
-  await assert.rejects(() => store.saveDraft({ themeId: 'a/b' }, {}), /invalid theme id/);
   await assert.rejects(
-    () => store.freezeBundles({ themeId: 'x/../y' }, { compile: (s) => s }),
+    () => store.readDraft({ themeId: '../evil', tenantId: 't_v' }),
+    /invalid theme id/
+  );
+  await assert.rejects(
+    () => store.saveDraft({ themeId: 'a/b', tenantId: 't_v' }, {}),
+    /invalid theme id/
+  );
+  await assert.rejects(
+    () => store.freezeBundles({ themeId: 'x/../y', tenantId: 't_v' }, { compile: (s) => s }),
     /invalid theme id/
   );
 });
 
 test('a normal slug themeId passes the guard (store then reached)', async () => {
-  await assert.rejects(() => store.readDraft({ themeId: 'store_main' }), /unreachable/);
+  await assert.rejects(
+    () => store.readDraft({ themeId: 'store_main', tenantId: 't_v' }),
+    /unreachable/
+  );
 });

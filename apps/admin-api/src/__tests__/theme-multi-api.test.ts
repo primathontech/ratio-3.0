@@ -171,7 +171,7 @@ test('create with duplicateOf copies the source theme’s overrides', async () =
   assert.notStrictEqual(dup.id, t1, 'a distinct theme id');
 
   // The duplicate carries the source's override (the delta), composed over the same base.
-  assert.deepStrictEqual(await store.readDraft({ themeId: dup.id }), {
+  assert.deepStrictEqual(await store.readDraft({ themeId: dup.id, tenantId: A }), {
     'sections/hero.liquid': '<section>MINE</section>',
   });
   const composed = (

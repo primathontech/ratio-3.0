@@ -681,7 +681,7 @@ export function createApp(
 
   // Provably-complete hard-delete (ADR-010 D-SEC4) — owner-only (M-4).
   app.delete('/stores/:id', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const cfg = cfConfig();
     const kv = kvConfig();
     // Gather hosts (for cache + edge-KV cleanup) BEFORE the rows are purged.
@@ -813,7 +813,7 @@ export function createApp(
   // exists (assertThemeInStore ran).
   async function draftPut(c: Context<Vars>, themeId: string, ensure?: () => Promise<void>) {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as {
       files?: ThemeFiles;
       revision?: string;
@@ -826,7 +826,7 @@ export function createApp(
     // Store only the delta from the base (untouched files keep tracking base updates); reject the save
     // if another editor moved the draft first (409) instead of silently clobbering it.
     try {
-      const { hash } = await themes.saveOverrides({ themeId }, body.files ?? {}, {
+      const { hash } = await themes.saveOverrides({ themeId, tenantId: id }, body.files ?? {}, {
         expectedRevision: body.revision,
       });
       c.set('auditTenant', id);
@@ -841,9 +841,10 @@ export function createApp(
   // Read a theme's composed draft (base ⊕ overrides) + the revision token the editor round-trips.
   async function draftGet(c: Context<Vars>, themeId: string) {
     if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
     const [files, revision] = await Promise.all([
-      themes.readComposed({ themeId }),
-      themes.draftRevision({ themeId }),
+      themes.readComposed({ themeId, tenantId: id }),
+      themes.draftRevision({ themeId, tenantId: id }),
     ]);
     return c.json({ files, revision });
   }
@@ -851,18 +852,18 @@ export function createApp(
   // Ensure the theme opens populated instead of empty. A no-op (seeded:false) once it has content.
   async function scaffold(c: Context<Vars>, themeId: string, ensure: () => Promise<void>) {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
-    const existing = await themes.readComposed({ themeId });
+    const id = c.req.param('id')!;
+    const existing = await themes.readComposed({ themeId, tenantId: id });
     if (Object.keys(existing).length > 0)
       return c.json({
         files: existing,
         seeded: false,
-        revision: await themes.draftRevision({ themeId }),
+        revision: await themes.draftRevision({ themeId, tenantId: id }),
       });
     await ensure();
     const [files, revision] = await Promise.all([
-      themes.readComposed({ themeId }),
-      themes.draftRevision({ themeId }),
+      themes.readComposed({ themeId, tenantId: id }),
+      themes.draftRevision({ themeId, tenantId: id }),
     ]);
     c.set('auditTenant', id);
     return c.json({ files, seeded: true, revision });
@@ -874,7 +875,7 @@ export function createApp(
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles; page?: string };
-    const files = body.files ?? (await themes.readComposed({ themeId }));
+    const files = body.files ?? (await themes.readComposed({ themeId, tenantId: id }));
     const page = body.page || 'index';
     try {
       const tenant = await forTenant(id).getTenant();
@@ -901,7 +902,7 @@ export function createApp(
     let version: number;
     try {
       ({ version } = await themes.publish(
-        { themeId },
+        { themeId, tenantId: id },
         { compile: identityCompile, by: c.get('userId') }
       ));
     } catch (e) {
@@ -944,10 +945,10 @@ export function createApp(
     // Ensure the theme row exists first (legacy main-theme mount) so reset can't write an orphan draft
     // blob for a never-created theme; the multi-theme mount skips this (assertThemeInStore proved it).
     if (ensure) await ensure();
-    await themes.resetDraft({ themeId });
+    await themes.resetDraft({ themeId, tenantId: id });
     const [files, revision] = await Promise.all([
-      themes.readComposed({ themeId }),
-      themes.draftRevision({ themeId }),
+      themes.readComposed({ themeId, tenantId: id }),
+      themes.draftRevision({ themeId, tenantId: id }),
     ]);
     c.set('auditTenant', id);
     return c.json({ ok: true, files, revision });
@@ -987,7 +988,7 @@ export function createApp(
   // Create a theme — a fresh one adopting the shared Default base, or a duplicate of an existing theme.
   app.post('/stores/:id/themes', requireMembership, async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { name?: string; duplicateOf?: string };
     const themeId = `${id}-${randomUUID().replace(/-/g, '').slice(0, 10)}`;
     const name = body.name ?? 'New theme';
@@ -1005,7 +1006,7 @@ export function createApp(
   // Rename a theme.
   app.patch('/stores/:id/themes/:themeId', requireMembership, async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     const body = (await c.req.json().catch(() => ({}))) as { name?: string };
@@ -1019,7 +1020,7 @@ export function createApp(
   // Delete a theme (owner). Refuses the live theme (409).
   app.delete('/stores/:id/themes/:themeId', requireRole('owner'), async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     try {
@@ -1036,7 +1037,7 @@ export function createApp(
   // Activate a theme at a given (or its latest published) version — the general switch/rollback primitive.
   app.post('/stores/:id/themes/:themeId/activate', requireRole('owner'), async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
@@ -1058,7 +1059,7 @@ export function createApp(
   // A theme's published version history + which one is live.
   app.get('/stores/:id/themes/:themeId/versions', requireMembership, async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     const versions = await themes.listVersions(id, themeId);
@@ -1100,7 +1101,7 @@ export function createApp(
   // theme back to vN makes THAT theme live at vN. Same primitive as activate.
   app.post('/stores/:id/themes/:themeId/rollback', requireRole('owner'), async (c) => {
     if (!themes) return bundle503(c);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
@@ -1127,7 +1128,7 @@ export function createApp(
   // Connect/update (or disconnect with an empty id) the commerce backend. Owner-only. Purge the
   // store's pages — product/collection data is baked into the cached shells.
   app.put('/stores/:id/commerce', requireRole('owner'), async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { merchantId?: string };
     const merchantId = String(body.merchantId ?? '').trim();
     await forTenant(id).setCommerce(merchantId ? { merchantId } : null);
@@ -1154,7 +1155,7 @@ export function createApp(
   });
 
   app.get('/stores/:id/page-builder', requireMembership, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const path = c.req.query('path') || '/';
     const [draft, live, revision] = await Promise.all([
       pbStore.getDraft(id, path),
@@ -1165,7 +1166,7 @@ export function createApp(
   });
 
   app.put('/stores/:id/page-builder', requireMembership, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const body = (await c.req.json().catch(() => ({}))) as { doc?: unknown };
     if (typeof body.doc !== 'object' || body.doc === null) {
       return c.json({ error: 'doc (a PageDoc) is required' }, 400);
@@ -1181,7 +1182,7 @@ export function createApp(
   });
 
   app.post('/stores/:id/page-builder/publish', requireMembership, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const path = ((await c.req.json().catch(() => ({}))) as { path?: string }).path || '/';
     const res = await pageBuilder.publish(id, path);
     if (!res) return c.json({ error: 'no draft to publish' }, 404);
@@ -1197,7 +1198,7 @@ export function createApp(
   const isPlatformHost = (h: string) => h.endsWith('.ratiodev.in') || h.endsWith('.localhost');
 
   app.get('/stores/:id/domains', requireMembership, async (c) => {
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const hosts = await listDomains(id);
     const cfg = cfConfig();
     // Which hosts are already verified — so we skip the redundant read-repair write on every
@@ -1302,7 +1303,7 @@ export function createApp(
   app.delete('/stores/:id/domains', requireRole('owner'), async (c) => {
     const { host } = (await c.req.json().catch(() => ({}))) as { host?: string };
     if (!host) return c.json({ error: 'host is required' }, 400);
-    const id = c.req.param('id');
+    const id = c.req.param('id')!;
     const removed = await removeDomain(id, host);
     // Drop the edge-KV mapping so the host stops resolving at the edge (S2 Decision #7).
     const kv = kvConfig();
