@@ -87,6 +87,17 @@ test('starter theme ships an editable CSS file, injected into the head AFTER the
   );
 });
 
+test("a store's brand token override wins over the base defaults (cascade order)", () => {
+  // BASE ships a full :root of default tokens; the per-theme overrides re-declare the same vars, so
+  // they MUST be emitted AFTER the base or the default silently wins and the brand colour never applies.
+  const head = storefrontHead({ color: '#ff0000' });
+  assert.match(head, /--accent:#ff0000/, 'the brand colour override is present');
+  assert.ok(
+    head.lastIndexOf('--accent:#ff0000') > head.indexOf('--accent:#2563eb'),
+    'the override comes after the base default --accent, so it wins the cascade'
+  );
+});
+
 test('starter theme ships an editable order (thank-you) section with the hydration hook intact', async () => {
   const files = defaultBundleTheme();
   const liquid = files['sections/order.liquid'];
