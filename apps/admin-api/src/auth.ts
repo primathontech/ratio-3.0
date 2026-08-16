@@ -215,7 +215,8 @@ const DOMAIN_COLS = `
               FROM domains WHERE tenant_id = t.id), ARRAY[]::text[]) AS hosts`;
 
 // The store's owner (earliest owner membership). Lets the platform-admin store list link back
-// to the user who owns it.
+// to the user who owns it. Assumes a single owner per store (true today — nothing inserts a second
+// 'owner' row); revisit this pick if ownership transfer ever appends owner rows.
 const OWNER_COL = `
   (SELECT clerk_user_id FROM memberships WHERE tenant_id = t.id AND role = 'owner'
     ORDER BY created_at LIMIT 1) AS "ownerId"`;

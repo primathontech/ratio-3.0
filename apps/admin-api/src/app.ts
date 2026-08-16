@@ -548,7 +548,9 @@ export function createApp(
 
   // Every registered user + their stores (platform-admin console). The one cross-tenant read of
   // users, so it's platform-admin only — a normal member has no business enumerating the platform.
-  app.get('/admin/users', async (c) => {
+  // denyNarrowedScope: even a platform admin's scope-narrowed agent token must not pull the full
+  // cross-tenant list; only full sessions (the SPA) reach this.
+  app.get('/admin/users', denyNarrowedScope, async (c) => {
     if (!isPlatformAdmin(c.get('userId'))) return c.json({ error: 'forbidden' }, 403);
     return c.json({ users: await listAllUsers() });
   });

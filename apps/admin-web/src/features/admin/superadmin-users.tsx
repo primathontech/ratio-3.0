@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Api, PlatformUser } from '../../common/api';
 import { Spinner } from '../../common/ui';
+import { storeSlug } from '../../common/store-context';
 
 // Platform-admin "Users" view: every registered person and the stores they run. Memberships-derived
 // (no Clerk profiles yet), so a user is labelled by their store(s) + Clerk id. Row select fills the
@@ -261,7 +262,7 @@ function UserRail({ u }: { u: PlatformUser }) {
             </span>
             <a
               className="btn btn-ghost btn-sm"
-              href={`/stores/${s.id}`}
+              href={`/stores/${storeSlug(s)}`}
               target="_blank"
               rel="noopener noreferrer"
               aria-label={`Manage ${s.name}`}
