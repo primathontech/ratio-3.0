@@ -1,15 +1,9 @@
 // Theme Settings: the store's global style knobs (brand colour + typography + layout), with a live
-// mock-storefront preview. Every option except the brand colour is a fixed scale (values mirror the
-// backend @ratio/builder-core scales), so a merchant can't produce a broken or off-brand result.
+// preview of the REAL storefront (the draft rendered through previewBundle → renderThemePreview, the
+// same path the origin serves). Every option except the brand colour is a fixed scale (values mirror
+// the backend @ratio/builder-core scales), so a merchant can't produce a broken or off-brand result.
 // Saving purges the storefront (the theme is baked into every cached page).
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Api, Store, StoreTheme, ThemeFiles } from '../../common/api';
 import { ApiError, canManageStore } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
@@ -55,9 +49,6 @@ const CORNER_ICON: Record<string, ReactNode> = {
     </svg>
   ),
 };
-// Content width has no control (fixed at the default), but the preview still renders at its width.
-const WIDTH_PX: Record<string, number> = { narrow: 960, normal: 1120, wide: 1200 };
-
 // Human labels for the save-bar change summary, in the order they appear in the panel. Heading and
 // body font move together (one typeface), so only the body font drives the "font" line.
 const CHANGE_LABELS: Partial<Record<keyof StoreTheme, string>> = {
@@ -68,10 +59,10 @@ const CHANGE_LABELS: Partial<Record<keyof StoreTheme, string>> = {
 };
 const CHANGE_ORDER = Object.keys(CHANGE_LABELS) as (keyof StoreTheme)[];
 
-const BRAND_SWATCHES = ['#3F53FE', '#131927', '#217005', '#E88B00', '#1A2C44', '#667691'];
+const BRAND_SWATCHES = ['#3F53FE', '#131927', '#E88B00', '#217005', '#1A2C44'];
 
 const DEFAULTS: Required<StoreTheme> = {
-  color: '#2563eb',
+  color: '#3F53FE',
   headingFont: 'sans',
   bodyFont: 'sans',
   baseSize: 'm',
@@ -83,7 +74,7 @@ type Preset = { id: string; name: string; theme: Required<StoreTheme>; desc: str
 const PRESETS: Preset[] = [
   {
     id: 'default',
-    name: 'Ratio default',
+    name: 'Default',
     theme: {
       color: '#3F53FE',
       headingFont: 'sans',
@@ -92,7 +83,7 @@ const PRESETS: Preset[] = [
       radius: 'soft',
       container: 'normal',
     },
-    desc: 'Sans · soft corners',
+    desc: 'Sans · soft',
   },
   {
     id: 'editorial',
@@ -228,93 +219,6 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
   );
 }
 
-/* ── live mock storefront preview ──────────────────────────────────────────── */
-
-const PREVIEW_PRODUCTS = [
-  { name: 'Linen shirt — Ecru', price: '$128' },
-  { name: 'Wide trouser — Sand', price: '$164' },
-  { name: 'Camp collar — Slate', price: '$118' },
-];
-
-function StorefrontPreview({ t, mobile }: { t: Required<StoreTheme>; mobile: boolean }) {
-  const brand = isHex(t.color) ? t.color : DEFAULTS.color;
-  const radius = RADIUS_PX[t.radius];
-  const base = SIZE_PX[t.baseSize];
-  const head = FONT_STACK[t.headingFont];
-  const body = FONT_STACK[t.bodyFont];
-  const btn: CSSProperties = {
-    height: 34,
-    padding: '0 16px',
-    borderRadius: radius,
-    display: 'inline-flex',
-    alignItems: 'center',
-    fontFamily: body,
-    fontSize: base - 3,
-    fontWeight: 600,
-    cursor: 'default',
-  };
-  return (
-    <div className={mobile ? 'sf sf-mobile' : 'sf'} style={{ fontFamily: body, fontSize: base }}>
-      <div className="sf-inner" style={{ maxWidth: mobile ? '100%' : WIDTH_PX[t.container] }}>
-        <div className="sf-header">
-          <span style={{ fontFamily: head, fontSize: base + 2, fontWeight: 700 }}>
-            Aster &amp; Oak
-          </span>
-          <nav className="sf-nav" style={{ fontSize: base - 3 }}>
-            <span>Shop</span>
-            <span>Journal</span>
-            <span>About</span>
-            <span style={{ color: brand, fontWeight: 600 }}>Cart · 2</span>
-          </nav>
-        </div>
-        <div className="sf-hero">
-          <div className="sf-eyebrow" style={{ color: brand, fontSize: base - 4 }}>
-            NEW SEASON
-          </div>
-          <h2
-            style={{
-              fontFamily: head,
-              fontSize: base * 2,
-              lineHeight: 1.08,
-              margin: '6px 0 0',
-              fontWeight: 700,
-            }}
-          >
-            Linen, cut for warm mornings
-          </h2>
-          <p className="muted" style={{ fontSize: base - 2, margin: '10px 0 16px', maxWidth: 420 }}>
-            Naturally breathable pieces, made in small runs and shipped the day you order.
-          </p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <span style={{ ...btn, background: brand, color: '#fff' }}>Shop the edit</span>
-            <span
-              style={{
-                ...btn,
-                background: 'transparent',
-                boxShadow: 'inset 0 0 0 1px #000',
-                color: '#000',
-              }}
-            >
-              Look book
-            </span>
-          </div>
-        </div>
-        <div className={mobile ? 'sf-grid sf-grid-mobile' : 'sf-grid'}>
-          {PREVIEW_PRODUCTS.map((p) => (
-            <div key={p.name}>
-              <div className="sf-thumb" style={{ borderRadius: radius }} />
-              <div style={{ fontSize: base - 3, marginTop: 8 }}>{p.name}</div>
-              <div className="muted" style={{ fontSize: base - 4, marginTop: 2 }}>
-                {p.price}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── panel ─────────────────────────────────────────────────────────────────── */
 
 export function ThemeSettingsPanel({
@@ -359,6 +263,26 @@ export function ThemeSettingsPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Live preview of the REAL storefront: render the draft with the in-flight tokens through the same
+  // path the origin serves (previewBundle → renderThemePreview), debounced so dragging the colour
+  // picker doesn't hammer it. A transient failure keeps the last good frame rather than blocking.
+  const [previewHtml, setPreviewHtml] = useState('');
+  const previewTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!files || !theme) return;
+    const draft = filesWithTokens(files, resolve(theme));
+    clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      api
+        .previewBundle(store.id, themeId, draft, 'index')
+        .then((res) => setPreviewHtml(res.html ?? ''))
+        .catch(() => {
+          /* a transient preview render failure shouldn't block editing */
+        });
+    }, 300);
+    return () => clearTimeout(previewTimer.current);
+  }, [api, store.id, themeId, files, theme]);
 
   function set<K extends keyof StoreTheme>(key: K, value: StoreTheme[K]) {
     setTheme((t) => ({ ...(t ?? {}), [key]: value }));
@@ -543,7 +467,20 @@ export function ThemeSettingsPanel({
               </button>
             </div>
           </div>
-          <StorefrontPreview t={r} mobile={mobile} />
+          <div className={mobile ? 'ts-frame-wrap mobile' : 'ts-frame-wrap'}>
+            {previewHtml ? (
+              <iframe
+                className="ts-frame"
+                sandbox=""
+                srcDoc={previewHtml}
+                title="Storefront preview"
+              />
+            ) : (
+              <div className="ts-frame center-pad">
+                <Spinner />
+              </div>
+            )}
+          </div>
           <p className="muted ts-preview-note">
             {owner
               ? 'Preview only — nothing changes on the storefront until you save & publish.'
