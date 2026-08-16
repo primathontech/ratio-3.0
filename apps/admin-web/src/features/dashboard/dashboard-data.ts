@@ -309,10 +309,7 @@ export interface NavItem {
 export const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Store',
-    items: [
-      { label: 'All Stores', route: 'home', hint: 'G H', real: true },
-      { label: 'Dashboard', route: 'dashboard', hint: 'G D' },
-    ],
+    items: [{ label: 'Dashboard', route: 'dashboard', hint: 'G D' }],
   },
   {
     title: 'Storefront',
