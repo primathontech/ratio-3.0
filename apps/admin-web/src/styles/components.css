@@ -427,6 +427,21 @@
 .data-table tbody tr:hover {
   background: var(--surface-2);
 }
+/* Empty state rendered as a full-width row inside the table body. */
+.data-table td.table-empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-3);
+  font-size: 13px;
+}
+.data-table tbody tr:hover td.table-empty {
+  background: transparent;
+}
+.table-empty-emoji {
+  display: block;
+  font-size: 26px;
+  margin-bottom: 8px;
+}
 .data-table .num {
   text-align: right;
   font-variant-numeric: tabular-nums;

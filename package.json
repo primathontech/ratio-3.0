@@ -19,6 +19,7 @@
     "prove": "node --env-file-if-exists=apps/origin/.env --import tsx tests/prove.ts",
     "prove:s1": "node --env-file-if-exists=apps/origin/.env --import tsx tests/prove-s1.ts",
     "onboard": "node --env-file-if-exists=apps/origin/.env --import tsx scripts/onboard.ts",
+    "reset:local": "node --env-file-if-exists=apps/origin/.env --import tsx scripts/reset-local.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

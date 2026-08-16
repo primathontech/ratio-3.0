@@ -47,12 +47,14 @@ const CORNER_ICON: Record<string, ReactNode> = {
   ),
 };
 
-const BRAND_SWATCHES = ['#3F53FE', '#131927', '#E88B00', '#217005', '#1A2C44'];
+const BRAND_SWATCHES = ['#2563eb', '#131927', '#E88B00', '#217005', '#1A2C44'];
 
+// Must match the default bundle theme (packages/builder-core default-theme.ts config/tokens.json) so a
+// fresh store reads as the "Default" preset — otherwise nothing shows selected.
 export const DEFAULTS: Required<StoreTheme> = {
-  color: '#3F53FE',
-  headingFont: 'sans',
-  bodyFont: 'sans',
+  color: '#2563eb',
+  headingFont: 'system',
+  bodyFont: 'system',
   baseSize: 'm',
   radius: 'soft',
   container: 'normal',
@@ -64,14 +66,14 @@ const PRESETS: Preset[] = [
     id: 'default',
     name: 'Default',
     theme: {
-      color: '#3F53FE',
-      headingFont: 'sans',
-      bodyFont: 'sans',
+      color: '#2563eb',
+      headingFont: 'system',
+      bodyFont: 'system',
       baseSize: 'm',
       radius: 'soft',
       container: 'normal',
     },
-    desc: 'Sans · soft',
+    desc: 'System · soft',
   },
   {
     id: 'editorial',

@@ -5,7 +5,7 @@ import { EmptyState, ErrorBoundary, Icon, Spinner, ToastProvider } from './commo
 import { MerchantLayout, PlatformLayout } from './features/shell/app-shell';
 import { AskRatio } from './features/assistant/ask-sophie';
 import { OnboardingWizard } from './features/onboarding/onboarding-wizard';
-import { Route, Routes, useNavigate } from 'react-router-dom';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { StoreDataProvider, type Me } from './common/store-context';
 import { ThemePage } from './routes/theme-page';
 import { FullScreenEditorPage } from './routes/full-screen-editor-page';
@@ -113,7 +113,7 @@ function AuthedRoutes() {
   }
   // A brand-new merchant with no stores yet — the empty state is the onboarding entry point.
   const emptyState = (
-    <main className="container">
+    <main className="onboard-home">
       <EmptyState emoji="🏪" title="No stores yet">
         <p className="muted" style={{ maxWidth: 320 }}>
           Create your first store — it goes live instantly at its own subdomain.
@@ -122,10 +122,10 @@ function AuthedRoutes() {
           <Icon.plus /> Create a store
         </button>
       </EmptyState>
+      <div className="onboard-or" aria-hidden>
+        <b>OR</b>
+      </div>
       <div className="onboard-ask">
-        <p className="muted" style={{ textAlign: 'center', fontSize: 13 }}>
-          …or just tell Ratio to set it up for you.
-        </p>
         <AskRatio api={api} storeId={null} onChanged={load} />
       </div>
     </main>
@@ -138,20 +138,26 @@ function AuthedRoutes() {
             BEFORE /stores/:storeId so "new" isn't captured as a store id. Always mounted, so a
             merchant with zero stores can still reach it (that's who it's for). */}
         <Route path="/stores/new" element={<OnboardingWizard />} />
+        {/* Platform admin console is store-independent, so it's always mounted (RequireAdmin gates it)
+            — a platform admin with zero stores must still reach it, not be trapped on the empty state. */}
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <PlatformLayout />
+            </RequireAdmin>
+          }
+        >
+          <Route index element={<SuperAdminPage />} />
+        </Route>
         {stores.length === 0 ? (
-          <Route path="*" element={emptyState} />
+          // No stores: merchants get the create-store empty state; platform admins go to /admin.
+          <Route
+            path="*"
+            element={me?.isPlatformAdmin ? <Navigate to="/admin" replace /> : emptyState}
+          />
         ) : (
           <>
-            <Route
-              path="/admin"
-              element={
-                <RequireAdmin>
-                  <PlatformLayout />
-                </RequireAdmin>
-              }
-            >
-              <Route index element={<SuperAdminPage />} />
-            </Route>
             {/* Full-screen code editor — its own route, OUTSIDE MerchantLayout (no nav / search /
                 Ask Ratio), so the IDE fills the viewport. Launched from the Theme page. */}
             <Route

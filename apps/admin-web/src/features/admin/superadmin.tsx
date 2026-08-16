@@ -92,7 +92,7 @@ export function SuperAdmin({
   );
 
   return (
-    <div className="sa-grid fade-in">
+    <div className={`sa-grid fade-in${current ? '' : ' sa-grid-full'}`}>
       <div className="sa-main">
         <div className="page-head">
           <div className="head-text">
@@ -188,98 +188,111 @@ export function SuperAdmin({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((m) => {
-                  const s = MERCHANT_STATUS[m.status];
-                  const active = current?.store.id === m.store.id;
-                  const sfUrl = storefrontUrl(m.store, isLocal);
-                  return (
-                    <tr
-                      key={m.store.id}
-                      onClick={() => setSelectedId(m.store.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          setSelectedId(m.store.id);
-                        }
-                      }}
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={active}
-                      aria-label={`Select ${m.name}`}
-                      style={{
-                        cursor: 'pointer',
-                        background: active ? 'var(--surface-2)' : undefined,
-                      }}
-                    >
-                      <td>
-                        <span
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}
-                        >
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="table-empty">
+                      <span className="table-empty-emoji" aria-hidden>
+                        🏪
+                      </span>
+                      {merchants.length === 0
+                        ? 'No stores yet — create your first store with “New store”.'
+                        : 'No merchants match your filters.'}
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((m) => {
+                    const s = MERCHANT_STATUS[m.status];
+                    const active = current?.store.id === m.store.id;
+                    const sfUrl = storefrontUrl(m.store, isLocal);
+                    return (
+                      <tr
+                        key={m.store.id}
+                        onClick={() => setSelectedId(m.store.id)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setSelectedId(m.store.id);
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-pressed={active}
+                        aria-label={`Select ${m.name}`}
+                        style={{
+                          cursor: 'pointer',
+                          background: active ? 'var(--surface-2)' : undefined,
+                        }}
+                      >
+                        <td>
                           <span
-                            className="avatar avatar-sq"
-                            style={{ width: 28, height: 28, fontSize: 11 }}
-                            aria-hidden
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}
                           >
-                            {initials(m.name)}
-                          </span>
-                          <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                             <span
-                              style={{
-                                fontWeight: 500,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
+                              className="avatar avatar-sq"
+                              style={{ width: 28, height: 28, fontSize: 11 }}
+                              aria-hidden
                             >
-                              {m.name}
+                              {initials(m.name)}
                             </span>
-                            <span
-                              style={{
-                                fontSize: 12,
-                                color: 'var(--text-3)',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {m.domain}
+                            <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span
+                                style={{
+                                  fontWeight: 500,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {m.name}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  color: 'var(--text-3)',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {m.domain}
+                              </span>
                             </span>
                           </span>
-                        </span>
-                      </td>
-                      <td style={{ color: 'var(--muted)' }}>{m.plan}</td>
-                      <td className="num" style={{ fontWeight: 600 }}>
-                        {m.gmv}
-                      </td>
-                      <td className="num" style={{ color: 'var(--muted)' }}>
-                        {m.orders}
-                      </td>
-                      <td>
-                        <span className={pillClass(s.tone)}>{s.label}</span>
-                      </td>
-                      <td className="num" style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                        {m.since}
-                      </td>
-                      <td>
-                        {sfUrl ? (
-                          <a
-                            className="btn btn-ghost btn-sm"
-                            href={sfUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                            aria-label={`Open ${m.name} storefront in a new tab`}
-                          >
-                            Open <Icon.external size={13} />
-                          </a>
-                        ) : (
-                          <span style={{ color: 'var(--text-3)' }}>—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td style={{ color: 'var(--muted)' }}>{m.plan}</td>
+                        <td className="num" style={{ fontWeight: 600 }}>
+                          {m.gmv}
+                        </td>
+                        <td className="num" style={{ color: 'var(--muted)' }}>
+                          {m.orders}
+                        </td>
+                        <td>
+                          <span className={pillClass(s.tone)}>{s.label}</span>
+                        </td>
+                        <td className="num" style={{ color: 'var(--text-3)', fontSize: 12 }}>
+                          {m.since}
+                        </td>
+                        <td>
+                          {sfUrl ? (
+                            <a
+                              className="btn btn-ghost btn-sm"
+                              href={sfUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              onKeyDown={(e) => e.stopPropagation()}
+                              aria-label={`Open ${m.name} storefront in a new tab`}
+                            >
+                              Open <Icon.external size={13} />
+                            </a>
+                          ) : (
+                            <span style={{ color: 'var(--text-3)' }}>—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
