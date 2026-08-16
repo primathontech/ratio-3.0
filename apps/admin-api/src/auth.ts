@@ -203,6 +203,7 @@ export interface StoreRow {
   role: string;
   host: string | null; // primary (real domains before .localhost)
   hosts: string[]; // every domain mapped to the store
+  ownerId: string | null; // the store owner's clerk user id (for the platform-admin store↔user link)
 }
 
 // Domain columns shared by both listings: a primary host + the full list. Real domains
@@ -213,10 +214,17 @@ const DOMAIN_COLS = `
   COALESCE((SELECT array_agg(host ORDER BY (host LIKE '%.localhost'), host)
               FROM domains WHERE tenant_id = t.id), ARRAY[]::text[]) AS hosts`;
 
+// The store's owner (earliest owner membership). Lets the platform-admin store list link back
+// to the user who owns it. Assumes a single owner per store (true today — nothing inserts a second
+// 'owner' row); revisit this pick if ownership transfer ever appends owner rows.
+const OWNER_COL = `
+  (SELECT clerk_user_id FROM memberships WHERE tenant_id = t.id AND role = 'owner'
+    ORDER BY created_at LIMIT 1) AS "ownerId"`;
+
 // Every store (platform-admin view). Role reported as 'admin'.
 export async function listAllStores(): Promise<StoreRow[]> {
   const { rows } = await pool.query<StoreRow>(
-    `SELECT t.id, t.name, 'admin' AS role, ${DOMAIN_COLS}
+    `SELECT t.id, t.name, 'admin' AS role, ${DOMAIN_COLS}, ${OWNER_COL}
        FROM tenants t
       ORDER BY t.name`
   );
@@ -227,11 +235,41 @@ export async function listAllStores(): Promise<StoreRow[]> {
 // boundaries by design — it's the caller's own access list, scoped to their user id.
 export async function listStoresForUser(userId: string): Promise<StoreRow[]> {
   const { rows } = await pool.query<StoreRow>(
-    `SELECT t.id, t.name, m.role, ${DOMAIN_COLS}
+    `SELECT t.id, t.name, m.role, ${DOMAIN_COLS}, ${OWNER_COL}
        FROM memberships m JOIN tenants t ON t.id = m.tenant_id
       WHERE m.clerk_user_id = $1
       ORDER BY t.name`,
     [userId]
+  );
+  return rows;
+}
+
+export interface UserStoreRef {
+  id: string;
+  name: string;
+  role: string;
+}
+export interface PlatformUserRow {
+  userId: string; // clerk user id
+  storeCount: number;
+  joined: string; // ISO — their earliest membership
+  stores: UserStoreRef[];
+}
+
+// Every registered user (platform-admin view), grouped from memberships with the stores each one
+// belongs to. A user appears once, with all their stores; `joined` is their earliest membership.
+// This is memberships-derived — it lists users who own/belong to a store, not raw Clerk sign-ups
+// (real profiles/emails + zero-store sign-ups are a follow-up that needs the Clerk backend API).
+export async function listAllUsers(): Promise<PlatformUserRow[]> {
+  const { rows } = await pool.query<PlatformUserRow>(
+    `SELECT m.clerk_user_id AS "userId",
+            COUNT(*)::int AS "storeCount",
+            MIN(m.created_at) AS joined,
+            json_agg(json_build_object('id', t.id, 'name', t.name, 'role', m.role)
+                     ORDER BY t.name) AS stores
+       FROM memberships m JOIN tenants t ON t.id = m.tenant_id
+      GROUP BY m.clerk_user_id
+      ORDER BY COUNT(*) DESC, MIN(m.created_at) ASC`
   );
   return rows;
 }

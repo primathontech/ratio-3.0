@@ -39,7 +39,7 @@ export function useMerchant(): MerchantCtx {
 // The URL identifier for a store: its internal id — stable across domain changes, always present,
 // and URL-safe. So /stores/t_acme_1a2b/themes, not /stores/acme.ratiodev.in/themes. resolveStore
 // still accepts an old domain-based URL, so existing links keep working.
-export function storeSlug(store: Store): string {
+export function storeSlug(store: { id: string }): string {
   return store.id;
 }
 

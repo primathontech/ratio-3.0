@@ -9,6 +9,16 @@ export interface Store {
   role: string;
   host: string | null;
   hosts: string[];
+  ownerId?: string | null; // the owner's clerk user id (platform-admin store↔user link)
+}
+
+// A registered user + the stores they belong to (platform-admin console). Memberships-derived —
+// name/email aren't stored locally yet, so the UI labels a user by their store(s) and id.
+export interface PlatformUser {
+  userId: string;
+  storeCount: number;
+  joined: string; // ISO
+  stores: { id: string; name: string; role: string }[];
 }
 
 // Owner-level store powers (publish, set-live, rename, delete, danger). Platform admins get the
@@ -232,6 +242,11 @@ export function createApi(
     me: () => req<{ userId: string; isPlatformAdmin: boolean; isLocal?: boolean }>('GET', '/me'),
     listStores: () =>
       req<Record<string, unknown>>('GET', '/stores').then((d) => pickArray<Store>(d, 'stores')),
+    // Platform-admin only: every registered user + their stores.
+    listUsers: () =>
+      req<Record<string, unknown>>('GET', '/admin/users').then((d) =>
+        pickArray<PlatformUser>(d, 'users')
+      ),
     createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
     // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
