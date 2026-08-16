@@ -64,7 +64,6 @@ import {
   requireRole,
   listStoresForUser,
   listAllStores,
-  listAllUsers,
   isPlatformAdmin,
   clerkVerifier,
   insecureDevClerkVerifier,
@@ -74,6 +73,7 @@ import {
   denyNarrowedScope,
   type Verifier,
 } from './auth';
+import { listPlatformUsers } from './platform-users';
 import { auditMiddleware, recentAudit } from './audit';
 import { openApiDocument } from './openapi';
 import { createPgRateLimiter } from '@ratio/data-db';
@@ -552,7 +552,7 @@ export function createApp(
   // cross-tenant list; only full sessions (the SPA) reach this.
   app.get('/admin/users', denyNarrowedScope, async (c) => {
     if (!isPlatformAdmin(c.get('userId'))) return c.json({ error: 'forbidden' }, 403);
-    return c.json({ users: await listAllUsers() });
+    return c.json({ users: await listPlatformUsers() });
   });
 
   // Create a store. The authenticated caller becomes its owner — the membership is

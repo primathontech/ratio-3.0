@@ -19,6 +19,8 @@ export interface PlatformUser {
   storeCount: number;
   joined: string; // ISO
   stores: { id: string; name: string; role: string }[];
+  name?: string | null; // from Clerk; null when Clerk isn't configured or has no profile
+  email?: string | null;
 }
 
 // Owner-level store powers (publish, set-live, rename, delete, danger). Platform admins get the
