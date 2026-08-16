@@ -1,8 +1,8 @@
 import type { ObjectStore } from './object-store';
 
 // Reads immutable (content-addressed) objects through a CDN (e.g. CloudFront over the bucket),
-// delegating everything else to the wrapped store. Only keys under `immutablePrefix` are served from
-// the CDN — those are content-hash keys, so they're never stale and the CDN can cache them forever.
+// delegating everything else to the wrapped store. Only keys containing `immutableMarker` are served
+// from the CDN — those are content-hash keys, so they're never stale and the CDN can cache them forever.
 // The mutable draft object and all writes/head/delete always go to the wrapped store. Any CDN
 // non-2xx or network error falls back to the wrapped store, so the CDN is a pure accelerator: if it's
 // misconfigured or cold, reads still succeed against S3.
