@@ -619,8 +619,13 @@ export function createApp(
       console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
     });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
-    const cfg = cfConfig();
-    if (hostReclaimedFrom && cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
+    // Only reach for Cloudflare when a host was actually reclaimed: cfConfig() fails closed on a
+    // missing SaaS zone in prod, so calling it on every onboard would 500 a fresh store that has
+    // nothing to clean up (after the store row already committed → stranded, 409 on retry).
+    if (hostReclaimedFrom) {
+      const cfg = cfConfig();
+      if (cfg) await deleteCustomHostname(cfg, lcHost).catch(() => {});
+    }
     return c.json({ id: tenantId, url: `https://${lcHost}/` }, 201);
   });
 
