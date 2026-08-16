@@ -14,7 +14,7 @@
   background: var(--surface);
 }
 .ob-top-spacer {
-  width: 72px; /* balances the Cancel button so the stepper stays centred */
+  width: 40px; /* balances the Cancel button so the stepper stays centred */
 }
 
 /* progress rail */

@@ -118,6 +118,7 @@
   }
 }
 .note {
+  margin-top: 8px;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;

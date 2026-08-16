@@ -37,11 +37,11 @@ export function OnboardingWizard() {
   return (
     <div className="ob-wrap">
       <header className="ob-top">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
-          Cancel
-        </button>
-        <Stepper steps={STEP_LABELS} current={step} />
         <span className="ob-top-spacer" />
+        <Stepper steps={STEP_LABELS} current={step} />
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>
+          X
+        </button>
       </header>
       <main className="ob-main">
         {step === 0 && (
