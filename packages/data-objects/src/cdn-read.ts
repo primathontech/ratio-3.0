@@ -8,7 +8,7 @@ import type { ObjectStore } from './object-store';
 // misconfigured or cold, reads still succeed against S3.
 export interface CdnReadOptions {
   // Marks immutable content-addressed objects — a key that CONTAINS this segment is served from the
-  // CDN. Default matches ThemeStore's `themes/<themeId>/versions/...` layout.
+  // CDN. Default matches ThemeStore's `stores/<tenantId>/themes/<themeId>/versions/...` layout.
   immutableMarker?: string;
   // Namespace prepended to keys in the bucket — must match the wrapped S3ObjectStore's keyPrefix so
   // the CDN URL points at the same object path.
