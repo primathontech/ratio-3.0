@@ -6,3 +6,4 @@ export { sideCartTag, readableCartCookie, type SideCartConfig } from './side-car
 export { sideCartIntegration } from './side-cart';
 export { checkoutTag, type CheckoutConfig } from './checkout/checkout';
 export { checkoutIntegration } from './checkout';
+export { checkoutPathHealth, type CheckoutPathHealth, type CheckoutPathStatus } from './health';

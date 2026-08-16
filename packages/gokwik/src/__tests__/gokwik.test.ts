@@ -6,6 +6,7 @@ import { checkoutTag } from '../checkout/checkout';
 import { checkoutIntegration } from '../checkout';
 import { composeGokwik, gokwikCartCookies } from '../compose';
 import { mergeCsp, cspToString } from '../csp';
+import { checkoutPathHealth } from '../health';
 import type { IntegrationContext } from '../types';
 
 const ctx = (over: Partial<IntegrationContext> = {}): IntegrationContext => ({
@@ -159,4 +160,43 @@ test('mergeCsp drops none when a real source is added; keeps none when alone', (
 test('cspToString serializes directives in `key v1 v2; …` form', () => {
   const s = cspToString({ 'default-src': ["'none'"], 'script-src': ["'self'"] });
   assert.equal(s, "default-src 'none'; script-src 'self'");
+});
+
+// checkoutPathHealth: the side-cart drawer + checkout are gated on separate env vars. Three states —
+// ready (both), partial (one — silently breaks buying), off (neither — no cart/checkout at all).
+const SIDE_ENV = {
+  GOKWIK_SIDECART_SCRIPT_URL: 'https://kwikcart.gokwik.co/kwikcart/side-cart-os.js',
+  GOKWIK_ENVIRONMENT: 'production',
+  GOKWIK_CURRENCY: 'INR',
+  GOKWIK_CURRENCY_FORMAT: 'en-IN',
+};
+const CHECKOUT_ENV = {
+  GOKWIK_BASE_SCRIPT_URL: 'https://pdp.gokwik.co',
+  GOKWIK_ENVIRONMENT: 'production',
+};
+
+test('checkoutPathHealth: both configured → ready', () => {
+  assert.deepEqual(checkoutPathHealth({ ...SIDE_ENV, ...CHECKOUT_ENV }), {
+    status: 'ready',
+    sideCart: true,
+    checkout: true,
+  });
+});
+
+test('checkoutPathHealth: side-cart only → partial (drawer opens, checkout dead)', () => {
+  const h = checkoutPathHealth(SIDE_ENV);
+  assert.equal(h.status, 'partial');
+  assert.equal(h.sideCart, true);
+  assert.equal(h.checkout, false);
+});
+
+test('checkoutPathHealth: checkout only → partial', () => {
+  const h = checkoutPathHealth(CHECKOUT_ENV);
+  assert.equal(h.status, 'partial');
+  assert.equal(h.sideCart, false);
+  assert.equal(h.checkout, true);
+});
+
+test('checkoutPathHealth: neither configured → off (no cart/checkout at all)', () => {
+  assert.deepEqual(checkoutPathHealth({}), { status: 'off', sideCart: false, checkout: false });
 });

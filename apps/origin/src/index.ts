@@ -22,6 +22,7 @@ import {
 import {
   composeGokwik,
   gokwikCartCookies,
+  checkoutPathHealth,
   mergeCsp,
   cspToString,
   type CspDirectives,
@@ -88,6 +89,36 @@ setUntrustedRenderer(renderUntrusted);
 // local dev renders without a backend — but in production a missing COMMERCE_* throws here rather
 // than silently serving sample data (see storefrontResolver).
 const resolver = storefrontResolver(process.env);
+
+// Surface GoKwik purchase-path config problems at boot (the side-cart drawer + checkout are gated on
+// SEPARATE env vars). A half-config silently breaks buying (drawer opens, Checkout no-ops) → refuse to
+// boot in production, warn elsewhere. "Neither configured" means the storefront has no cart/checkout at
+// all → warn everywhere (it may be an intentional pre-launch state, so never a hard fail).
+{
+  const gk = checkoutPathHealth(process.env);
+  if (gk.status === 'partial') {
+    const msg =
+      `GoKwik is half-configured (side-cart=${gk.sideCart}, checkout=${gk.checkout}) — the cart drawer ` +
+      `and Checkout must both be on or both off, else the purchase path silently breaks. Set the missing ` +
+      `script URL: side-cart=GOKWIK_SIDECART_SCRIPT_URL (+ GOKWIK_CURRENCY/_FORMAT), ` +
+      `checkout=GOKWIK_BASE_SCRIPT_URL; both need GOKWIK_ENVIRONMENT.`;
+    if (process.env.NODE_ENV === 'production') throw new Error(msg);
+    logger.warn({
+      evt: 'gokwik_config_incomplete',
+      sideCart: gk.sideCart,
+      checkout: gk.checkout,
+      msg,
+    });
+  } else if (gk.status === 'off') {
+    logger.warn({
+      evt: 'gokwik_not_configured',
+      msg:
+        `GoKwik is not configured — the storefront has no cart or checkout. Set ` +
+        `GOKWIK_SIDECART_SCRIPT_URL + GOKWIK_BASE_SCRIPT_URL (plus GOKWIK_ENVIRONMENT, GOKWIK_CURRENCY, ` +
+        `GOKWIK_CURRENCY_FORMAT) to enable buying.`,
+    });
+  }
+}
 
 // Bundle theme store (BC1), only when configured (BUNDLE_S3_BUCKET). When present, a store that has
 // published a bundle theme renders from its compiled bundle; otherwise the origin uses only the
