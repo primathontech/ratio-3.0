@@ -32,8 +32,8 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
 /* Route elements: thin wrappers that pull api + the resolved store from context (or the store list
    for the platform view) and render the real panel. */
 export function SuperAdminPage() {
-  const { stores, me, openCreate } = useStoreData();
-  return <SuperAdmin stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
+  const { api, stores, me, openCreate } = useStoreData();
+  return <SuperAdmin api={api} stores={stores} isLocal={!!me?.isLocal} onCreate={openCreate} />;
 }
 
 export function SuperAdminUsersPage() {

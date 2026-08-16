@@ -91,10 +91,12 @@ test('users are ordered by store count desc (alice before bob)', async () => {
   assert.ok(ai < bi, 'alice (2 stores) sorts before bob (1 store)');
 });
 
-test('the store list exposes each store’s ownerId for the store↔user link', async () => {
+test('the store list exposes each store’s ownerId + since for the platform view', async () => {
   const { stores } = (await (await call('GET', '/stores', superadmin)).json()) as {
-    stores: { id: string; ownerId: string | null }[];
+    stores: { id: string; ownerId: string | null; since: string | null }[];
   };
-  assert.strictEqual(stores.find((s) => s.id === A1)!.ownerId, ALICE);
+  const a1 = stores.find((s) => s.id === A1)!;
+  assert.strictEqual(a1.ownerId, ALICE);
   assert.strictEqual(stores.find((s) => s.id === B1)!.ownerId, BOB);
+  assert.ok(a1.since && !Number.isNaN(Date.parse(a1.since)), 'since is a real date');
 });

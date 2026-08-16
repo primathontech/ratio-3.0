@@ -204,6 +204,7 @@ export interface StoreRow {
   host: string | null; // primary (real domains before .localhost)
   hosts: string[]; // every domain mapped to the store
   ownerId: string | null; // the store owner's clerk user id (for the platform-admin store↔user link)
+  since: string | null; // earliest membership on the store (a real "created"/age proxy)
 }
 
 // Domain columns shared by both listings: a primary host + the full list. Real domains
@@ -221,10 +222,13 @@ const OWNER_COL = `
   (SELECT clerk_user_id FROM memberships WHERE tenant_id = t.id AND role = 'owner'
     ORDER BY created_at LIMIT 1) AS "ownerId"`;
 
+// A real "since" for the store: its earliest membership (creation proxy — tenants has no created_at).
+const SINCE_COL = `(SELECT MIN(created_at) FROM memberships WHERE tenant_id = t.id) AS since`;
+
 // Every store (platform-admin view). Role reported as 'admin'.
 export async function listAllStores(): Promise<StoreRow[]> {
   const { rows } = await pool.query<StoreRow>(
-    `SELECT t.id, t.name, 'admin' AS role, ${DOMAIN_COLS}, ${OWNER_COL}
+    `SELECT t.id, t.name, 'admin' AS role, ${DOMAIN_COLS}, ${OWNER_COL}, ${SINCE_COL}
        FROM tenants t
       ORDER BY t.name`
   );
@@ -235,7 +239,7 @@ export async function listAllStores(): Promise<StoreRow[]> {
 // boundaries by design — it's the caller's own access list, scoped to their user id.
 export async function listStoresForUser(userId: string): Promise<StoreRow[]> {
   const { rows } = await pool.query<StoreRow>(
-    `SELECT t.id, t.name, m.role, ${DOMAIN_COLS}, ${OWNER_COL}
+    `SELECT t.id, t.name, m.role, ${DOMAIN_COLS}, ${OWNER_COL}, ${SINCE_COL}
        FROM memberships m JOIN tenants t ON t.id = m.tenant_id
       WHERE m.clerk_user_id = $1
       ORDER BY t.name`,
