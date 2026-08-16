@@ -332,6 +332,11 @@
   flex-wrap: wrap;
   margin-bottom: 22px;
 }
+/* Super-admin pages space their sections with .sa-main's flex gap, so the header needs no extra
+   bottom margin (it would double up). */
+.sa-main .page-head {
+  margin-bottom: 0;
+}
 .page-head .head-text {
   flex: 1;
   min-width: 260px;

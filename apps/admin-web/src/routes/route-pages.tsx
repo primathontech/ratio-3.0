@@ -34,8 +34,8 @@ export function SuperAdminPage() {
 }
 
 export function SuperAdminUsersPage() {
-  const { api } = useStoreData();
-  return <SuperAdminUsers api={api} />;
+  const { api, openCreate } = useStoreData();
+  return <SuperAdminUsers api={api} onCreate={openCreate} />;
 }
 
 export function Stores() {
