@@ -323,7 +323,6 @@ export const NAV: { title: string; items: NavItem[] }[] = [
     title: 'Settings',
     items: [
       { label: 'Commerce', route: 'commerce', real: true, ownerOnly: true },
-      { label: 'Developers', route: 'access', real: true },
       { label: 'Activity', route: 'audit', real: true },
     ],
   },
