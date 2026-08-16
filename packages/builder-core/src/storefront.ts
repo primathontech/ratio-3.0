@@ -104,14 +104,14 @@ a{color:inherit;text-decoration:none}
 .hdr-acc-solo::after{display:none}
 .hdr-acc-list{margin:0 0 6px 22px;padding:0;border-left:2px solid var(--border)}
 .hdr-actions{margin-left:auto;display:flex;align-items:center;gap:18px}
-.hdr-search{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:9px 14px;min-width:230px;color:var(--muted)}
+.hdr-search{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:10px;padding:9px 14px;flex:0 1 230px;min-width:52px;color:var(--muted)}
 .hdr-search input{border:0;outline:0;background:transparent;font:inherit;font-size:.92rem;color:var(--ink);width:100%}
 .hdr-search input::placeholder{color:var(--muted)}
 .hdr-action{display:inline-flex;align-items:center;gap:7px;position:relative;font-size:.92rem;font-weight:600;white-space:nowrap}
 .hdr-action:hover{color:var(--accent)}
 .hdr-ic{width:22px;height:22px;flex:none}
 .hdr-badge{position:absolute;top:-7px;left:12px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:#e11d48;color:#fff;font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center;line-height:1}
-@media (max-width:900px){.hdr-search{min-width:0;width:150px}}
+@media (max-width:900px){.hdr-search{flex-basis:150px}}
 @media (max-width:760px){.hdr-nav,.hdr-action-t{display:none}}
 .hero{padding:76px 0 64px;text-align:center}
 .hero h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
