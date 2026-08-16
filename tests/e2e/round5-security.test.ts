@@ -42,6 +42,13 @@ const TV = 't_r5_victim';
 const TA = 't_r5_attacker';
 const HV = 'r5victim.example.com';
 
+// M-7 renders the storefront, which now needs a published bundle theme (object store). Skip it when
+// the object store isn't configured (CI), same as the other bundle-dependent tests. C-2/H-2 only
+// exercise store-creation validation, so they run regardless.
+const bundleSkip = process.env.BUNDLE_S3_ENDPOINT
+  ? false
+  : 'set BUNDLE_S3_ENDPOINT (MinIO) — the storefront needs a published bundle to render';
+
 async function cleanup() {
   for (const id of [TV, TA]) {
     await pool.query('DELETE FROM audit_log WHERE tenant_id=$1', [id]);
@@ -91,7 +98,7 @@ test('H-2: onboarding a store cannot take over a host owned by another tenant', 
   assert.strictEqual(rows[0].tenant_id, TV, 'victim still owns the host');
 });
 
-test('M-7: the storefront sets a CSP and nosniff header', async () => {
+test('M-7: the storefront sets a CSP and nosniff header', { skip: bundleSkip }, async () => {
   const res = await origin.fetch(
     new Request('http://origin/', { headers: { 'x-edge-auth': SECRET, 'x-ratio-tenant': TV } })
   );
