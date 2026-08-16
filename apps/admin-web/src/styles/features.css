@@ -533,6 +533,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
+  margin: 20px 0;
 }
 .store-card {
   display: flex;
