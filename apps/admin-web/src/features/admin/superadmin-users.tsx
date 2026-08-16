@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import type { Api, PlatformUser } from '../../common/api';
 import { Icon, Spinner, useToast } from '../../common/ui';
 import { storeSlug } from '../../common/store-context';
@@ -52,6 +53,13 @@ export function SuperAdminUsers({ api, onCreate }: { api: Api; onCreate: () => v
       .then(setUsers)
       .catch((e) => setError((e as Error).message));
   }, [api]);
+
+  // Cross-link from the Stores view (Owner → /admin?user=<id>) pre-selects that user.
+  const [searchParams] = useSearchParams();
+  const userParam = searchParams.get('user');
+  useEffect(() => {
+    if (userParam) setSelectedId(userParam);
+  }, [userParam]);
 
   const rows = useMemo(() => {
     if (!users) return [];
