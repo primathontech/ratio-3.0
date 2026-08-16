@@ -122,14 +122,17 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
               <div className="ts-label">Featured collections</div>
               {collections.length > 0 ? (
                 <>
-                  <Field label="New arrivals row" info="Which collection this featured row shows.">
+                  <Field
+                    label="Feature collection"
+                    info="Which collection this featured row shows."
+                  >
                     <CollectionSelect
                       value={newArrivals}
                       options={collections}
                       onChange={setNewArrivals}
                     />
                   </Field>
-                  <Field label="New launches row">
+                  <Field label="New launches">
                     <CollectionSelect
                       value={trending}
                       options={collections}

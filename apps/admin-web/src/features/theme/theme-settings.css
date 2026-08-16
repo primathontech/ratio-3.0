@@ -21,7 +21,7 @@
 .ts-controls section {
   display: flex;
   flex-direction: column;
-  padding: 20px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--line);
 }
 .ts-controls section:last-child {
@@ -40,7 +40,7 @@
   font-size: 13px;
 }
 .ts-field-label {
-  margin: 14px 0 7px;
+  margin: 12px 0 8px;
   font-size: 12px;
   font-weight: 500;
   color: var(--text);
@@ -52,7 +52,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  margin: 16px 0 8px;
+  margin: 12px 0 8px;
 }
 .ts-field-head .ts-field-label {
   margin: 0;
