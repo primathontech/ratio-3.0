@@ -27,6 +27,7 @@
 }
 .pane {
   padding: 18px;
+  margin: 0;
 }
 .pane-head {
   display: flex;
