@@ -251,10 +251,9 @@ export function MerchantLayout() {
 
 // The platform (super-admin) view (/admin): no store sidebar, its own top bar, Merchants in Outlet.
 export function PlatformLayout() {
-  const { stores } = useStoreData();
+  const { openCreate } = useStoreData();
   const navigate = useNavigate();
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const first = stores[0];
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -267,15 +266,11 @@ export function PlatformLayout() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const commands: Command[] = first
-    ? [
-        {
-          label: 'Stores',
-          group: 'Navigate',
-          run: () => navigate(`/stores/${storeSlug(first)}`),
-        },
-      ]
-    : [];
+  const commands: Command[] = [
+    { label: 'Users', group: 'Navigate', run: () => navigate('/admin') },
+    { label: 'Stores', group: 'Navigate', run: () => navigate('/admin/stores') },
+    { label: 'New store', group: 'Actions', run: openCreate },
+  ];
 
   return (
     <div className="app-shell no-sidebar">
@@ -297,17 +292,6 @@ export function PlatformLayout() {
               <span className="kbd">⌘K</span>
             </button>
             <ThemeToggle />
-            {first && (
-              <a
-                className="btn btn-ghost"
-                href={`/stores/${storeSlug(first)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label="Open the store dashboard in a new tab"
-              >
-                Stores <Icon.external />
-              </a>
-            )}
             <UserButton afterSignOutUrl="/" />
           </div>
         </header>
