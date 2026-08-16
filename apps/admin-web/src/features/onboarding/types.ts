@@ -10,6 +10,10 @@ export interface VerifyResult {
 // Details step, which fills storeId / storeUrl / themeId for the Design + Launch steps to work on.
 export interface WizardData {
   merchantId: string;
+  // The merchant ID actually persisted on the store's commerce (set once the store exists). Lets the
+  // Details step push a change made after creation — and skip a redundant edge-purging save when it
+  // hasn't changed.
+  savedMerchantId: string;
   verify: VerifyResult | null;
   skipCommerce: boolean; // the "set up catalog later" escape
   name: string;
