@@ -170,9 +170,8 @@ function AuthedRoutes() {
               element={<FullScreenEditorPage />}
             />
             <Route path="/stores/:storeId" element={<MerchantLayout />}>
-              {/* A store URL always means THAT store — its dashboard, never the all-stores list. */}
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<HomePage />} />
+              {/* A store URL renders that store's dashboard directly — no /dashboard sub-path. */}
+              <Route index element={<HomePage />} />
               <Route path="themes" element={<ThemesListPage />} />
               <Route path="themes/:themeId" element={<ThemePage />} />
               <Route path="pages" element={<PagesPage />} />

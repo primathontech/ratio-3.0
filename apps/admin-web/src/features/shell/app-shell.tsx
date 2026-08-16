@@ -88,13 +88,16 @@ export function MerchantLayout() {
   // Switch store via a searchable picker — cycling one-by-one doesn't scale to many stores. Switching
   // keeps you on the SAME section (themes → themes, etc.); a deep id route (e.g. the theme editor)
   // falls back to that section's list, since the id won't exist on the other store.
-  const section = location.pathname.split('/')[3] || 'dashboard';
+  // The section after the store id (undefined on the store's dashboard/index), so switching keeps you
+  // on the same section — or on the dashboard when there isn't one.
+  const section = location.pathname.split('/')[3];
   const storeCommands: Command[] = useMemo(
     () => [
       ...stores.map((s) => ({
         label: s.name,
         group: s.host ?? '',
-        run: () => navigate(`/stores/${storeSlug(s)}/${section}`),
+        run: () =>
+          navigate(section ? `/stores/${storeSlug(s)}/${section}` : `/stores/${storeSlug(s)}`),
       })),
       { label: 'View all stores', group: '', run: () => navigate('/stores') },
     ],

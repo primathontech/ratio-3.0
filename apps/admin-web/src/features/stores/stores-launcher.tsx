@@ -24,7 +24,7 @@ export function StoresLauncher() {
   const { stores, me, openCreate } = useStoreData();
   const navigate = useNavigate();
   const isLocal = !!me?.isLocal;
-  const open = (s: Store) => navigate(`/stores/${storeSlug(s)}/dashboard`);
+  const open = (s: Store) => navigate(`/stores/${storeSlug(s)}`);
 
   return (
     <div className="app-shell no-sidebar">

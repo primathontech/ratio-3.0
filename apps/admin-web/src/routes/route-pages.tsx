@@ -18,7 +18,7 @@ export function RoleRedirect() {
   const { stores, me } = useStoreData();
   if (me?.isPlatformAdmin) return <Navigate to="/admin" replace />;
   if (stores.length === 1) {
-    return <Navigate to={`/stores/${storeSlug(stores[0])}/dashboard`} replace />;
+    return <Navigate to={`/stores/${storeSlug(stores[0])}`} replace />;
   }
   return <Navigate to="/stores" replace />;
 }
