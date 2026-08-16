@@ -63,6 +63,9 @@ export function StoresLauncher() {
                     aria-label={`Open ${s.name}`}
                     onClick={() => open(s)}
                     onKeyDown={(e) => {
+                      // Only when the card itself has focus — let the nested storefront link handle
+                      // its own Enter/Space instead of navigating to the dashboard.
+                      if (e.target !== e.currentTarget) return;
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
                         open(s);
