@@ -18,23 +18,40 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
   }
 
   async function create() {
-    if (data.storeId) return onNext(); // already created (e.g. navigated back then forward) — don't re-create
     setBusy(true);
     setError(null);
     try {
+      if (data.storeId) {
+        // Already created (navigated back then forward), so don't re-create. But the merchant may
+        // have changed the merchant ID on the Connect step since — push it (an empty value
+        // disconnects) so commerce doesn't stay stale. Only on an actual change: saveCommerce purges
+        // the edge, so we don't fire it on every back/forward.
+        const mid = data.merchantId.trim();
+        if (mid !== data.savedMerchantId) {
+          await api.saveCommerce(data.storeId, mid);
+          patch({ savedMerchantId: mid });
+        }
+        onNext();
+        return;
+      }
       // Publish on create: the store goes LIVE on the default bundle theme immediately (what you see
       // in the editor), never a page-builder scaffold. The Design + Launch steps then edit and
       // republish it. OFCE-618.
+      const mid = data.merchantId.trim();
       const res = await api.createStore({
         name: data.name.trim(),
         host: data.host.trim().toLowerCase(),
-        merchantId:
-          data.skipCommerce || !data.merchantId.trim() ? undefined : data.merchantId.trim(),
+        merchantId: mid || undefined,
       });
-      patch({ storeId: res.id, storeUrl: res.url, themeId: `${res.id}-main` });
+      patch({
+        storeId: res.id,
+        storeUrl: res.url,
+        themeId: `${res.id}-main`,
+        savedMerchantId: mid,
+      });
       onNext();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not create the store');
+      setError(e instanceof ApiError ? e.message : 'Could not save your store');
     } finally {
       setBusy(false);
     }

@@ -11,6 +11,7 @@ import './onboarding-wizard.css';
 
 const EMPTY: WizardData = {
   merchantId: '',
+  savedMerchantId: '',
   verify: null,
   skipCommerce: false,
   name: '',

@@ -53,7 +53,7 @@ export function ConnectStep({ api, data, patch, onNext }: StepProps) {
           className="input mono"
           placeholder="196jdfqy1aot"
           value={data.merchantId}
-          onChange={(e) => patch({ merchantId: e.target.value, verify: null })}
+          onChange={(e) => patch({ merchantId: e.target.value, verify: null, skipCommerce: false })}
           autoFocus
         />
       </Field>
@@ -68,7 +68,7 @@ export function ConnectStep({ api, data, patch, onNext }: StepProps) {
         <button
           type="button"
           className="ob-link"
-          onClick={() => patch({ skipCommerce: true, verify: null })}
+          onClick={() => patch({ skipCommerce: true, verify: null, merchantId: '' })}
         >
           I'll set up my catalogue later
         </button>
