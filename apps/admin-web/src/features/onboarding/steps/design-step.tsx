@@ -1,39 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Field, Spinner } from '../../../common/ui';
-import { ApiError, type ThemeFiles } from '../../../common/api';
+import { ApiError, type StoreTheme, type ThemeFiles } from '../../../common/api';
 import { tokensFromFiles, filesWithTokens } from '../../theme/tokens-file';
+import { ThemeControls, resolve } from '../../theme/theme-controls';
 import { readFeatured, mapFeaturedCollections } from '../featured';
 import type { StepProps } from '../types';
 
-// Fixed scales, mirroring packages/builder-core/src/storefront.ts so the wizard can't produce an
-// off-scale (broken) theme. (The Settings panel keeps richer controls; onboarding stays lean.)
-const FONTS: [string, string][] = [
-  ['system', 'System'],
-  ['sans', 'Sans'],
-  ['serif', 'Serif'],
-  ['rounded', 'Rounded'],
-  ['mono', 'Mono'],
-];
-const CORNERS: [string, string][] = [
-  ['square', 'Square'],
-  ['soft', 'Soft'],
-  ['rounded', 'Rounded'],
-];
-
-// Step 3 — design (Phase C). Full brand controls (colour / font / corners) + mapping the merchant's
-// REAL collections into the theme's featured home rows, all against a LIVE preview rendered from the
-// draft with their real products. Edits the theme draft (config/tokens.json + templates/index.json)
-// and the Launch step publishes it.
+// Step 3 — design (Phase C). The SAME theme controls the Settings panel uses (presets + brand +
+// typography + layout, via <ThemeControls>) plus the merchant's REAL collections mapped into the
+// featured home rows, all against a LIVE preview of their real store. Edits the theme draft
+// (config/tokens.json + templates/index.json); the Launch step publishes it.
 export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
   const [files, setFiles] = useState<ThemeFiles | null>(null);
   const [revision, setRevision] = useState('');
   const [collections, setCollections] = useState<{ handle: string; title: string }[]>([]);
-  const [color, setColor] = useState(data.color);
-  const [font, setFont] = useState('sans');
-  const [corners, setCorners] = useState('soft');
+  const [tokens, setTokens] = useState<StoreTheme>({ color: data.color });
   const [newArrivals, setNewArrivals] = useState('');
   const [trending, setTrending] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
+  const [mobile, setMobile] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,30 +34,22 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
       .then(([draft, cols]) => {
         setFiles(draft.files);
         setRevision(draft.revision);
-        const t = tokensFromFiles(draft.files);
-        if (t.color) setColor(t.color);
-        if (t.bodyFont) setFont(t.bodyFont);
-        if (t.radius) setCorners(t.radius);
+        // The theme's own tokens win; fall back to the colour chosen in step 2 when the theme omits it.
+        setTokens({ color: data.color, ...tokensFromFiles(draft.files) });
         const f = readFeatured(draft.files);
         setNewArrivals(f.newArrivals);
         setTrending(f.trending);
         setCollections(cols);
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load the theme'));
-  }, [api, storeId, themeId]);
+  }, [api, storeId, themeId, data.color]);
 
   // The draft with the in-flight design applied — both what we preview and what we save.
   const draft = useMemo(() => {
     if (!files) return null;
-    const withTokens = filesWithTokens(files, {
-      ...tokensFromFiles(files),
-      color,
-      bodyFont: font,
-      headingFont: font,
-      radius: corners,
-    });
+    const withTokens = filesWithTokens(files, resolve(tokens));
     return mapFeaturedCollections(withTokens, { newArrivals, trending });
-  }, [files, color, font, corners, newArrivals, trending]);
+  }, [files, tokens, newArrivals, trending]);
 
   // Live preview, debounced so dragging the colour picker doesn't hammer the render.
   const previewTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -86,7 +63,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
         .catch(() => {
           /* a transient preview failure shouldn't block the step */
         });
-    }, 400);
+    }, 300);
     return () => clearTimeout(previewTimer.current);
   }, [api, storeId, themeId, draft]);
 
@@ -98,7 +75,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
       const res = await api.saveBundleDraft(storeId, themeId, draft, revision);
       setFiles(draft);
       setRevision(res.hash);
-      patch({ color });
+      patch({ color: resolve(tokens).color });
       onNext();
     } catch (e) {
       // The draft moved since we loaded it (rare in a fresh single-editor wizard) → refresh files +
@@ -134,74 +111,70 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
     <div className="ob-card ob-card-wide">
       <h1 className="ob-title">Design your store</h1>
       <p className="ob-lede">
-        Set your brand and choose which collections to feature. The preview shows your real store as
+        Pick a look and choose which collections to feature. The preview shows your real store as
         you go.
       </p>
 
-      <div className="ob-design">
-        <div className="ob-design-controls">
-          <Field label="Brand colour">
-            <input
-              className="input"
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              style={{ height: 42, padding: 4, maxWidth: 120 }}
-            />
-          </Field>
-          <Field label="Font">
-            <select className="input" value={font} onChange={(e) => setFont(e.target.value)}>
-              {FONTS.map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Corners">
-            <select className="input" value={corners} onChange={(e) => setCorners(e.target.value)}>
-              {CORNERS.map(([k, label]) => (
-                <option key={k} value={k}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </Field>
+      <div className="ts">
+        <div className="ts-grid">
+          <ThemeControls theme={tokens} onChange={setTokens}>
+            <section>
+              <div className="ts-label">Featured collections</div>
+              {collections.length > 0 ? (
+                <>
+                  <Field label="New arrivals row" info="Which collection this featured row shows.">
+                    <CollectionSelect
+                      value={newArrivals}
+                      options={collections}
+                      onChange={setNewArrivals}
+                    />
+                  </Field>
+                  <Field label="New launches row">
+                    <CollectionSelect
+                      value={trending}
+                      options={collections}
+                      onChange={setTrending}
+                    />
+                  </Field>
+                </>
+              ) : (
+                <p className="muted ts-desc">
+                  Connect a catalogue to feature your collections — the rows fill in once products
+                  are available.
+                </p>
+              )}
+            </section>
+          </ThemeControls>
 
-          {collections.length > 0 ? (
-            <>
-              <Field label="New arrivals row" info="Which collection this featured row shows.">
-                <CollectionSelect
-                  value={newArrivals}
-                  options={collections}
-                  onChange={setNewArrivals}
-                />
-              </Field>
-              <Field label="New launches row">
-                <CollectionSelect value={trending} options={collections} onChange={setTrending} />
-              </Field>
-            </>
-          ) : (
-            <p className="muted" style={{ fontSize: 13 }}>
-              Connect a catalogue to feature your collections — the theme's rows fill in once
-              products are available.
-            </p>
-          )}
-        </div>
-
-        <div className="ob-design-preview">
-          {previewHtml ? (
-            <iframe
-              className="ob-preview-frame"
-              sandbox=""
-              srcDoc={previewHtml}
-              title="Store preview"
-            />
-          ) : (
-            <div className="ob-preview-frame center-pad">
-              <Spinner />
+          <div className="ts-preview">
+            <div className="ts-preview-bar">
+              <span className="ts-label" style={{ flex: 1 }}>
+                Live preview
+              </span>
+              <div className="seg ts-seg">
+                <button className={!mobile ? 'on' : ''} onClick={() => setMobile(false)}>
+                  Desktop
+                </button>
+                <button className={mobile ? 'on' : ''} onClick={() => setMobile(true)}>
+                  Mobile
+                </button>
+              </div>
             </div>
-          )}
+            <div className={mobile ? 'ts-frame-wrap mobile' : 'ts-frame-wrap'}>
+              {previewHtml ? (
+                <iframe
+                  className="ts-frame"
+                  sandbox=""
+                  srcDoc={previewHtml}
+                  title="Store preview"
+                />
+              ) : (
+                <div className="ts-frame center-pad">
+                  <Spinner />
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
