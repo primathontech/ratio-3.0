@@ -64,8 +64,8 @@ const assertThemeId = (themeId: string): void => assertKeyPart(themeId, 'theme i
 
 // Every object a store owns lives under stores/<tenantId>/… — one prefix per store (clean isolation +
 // prefix-delete), with room for other asset types alongside themes/ later (assets/, exports/, …). The
-// shared base library is just tenant '_library'. Versions are content-hash keyed within the theme
-// namespace (immutable ⇒ CDN-cacheable forever); the draft is the one mutable object.
+// shared base library is just tenant '_library'. Published artifacts are content-hash keyed under
+// published/ (immutable ⇒ CDN-cacheable forever); the draft is the one mutable object.
 const themeBase = (tenantId: string, themeId: string) => {
   assertKeyPart(tenantId, 'tenant id');
   assertKeyPart(themeId, 'theme id');
@@ -74,9 +74,9 @@ const themeBase = (tenantId: string, themeId: string) => {
 const draftKey = (tenantId: string, themeId: string) =>
   `${themeBase(tenantId, themeId)}/draft/source.gz`;
 const sourceKey = (tenantId: string, themeId: string, hash: string) =>
-  `${themeBase(tenantId, themeId)}/versions/source/${hash}.gz`;
+  `${themeBase(tenantId, themeId)}/published/source/${hash}.gz`;
 const compiledKey = (tenantId: string, themeId: string, hash: string) =>
-  `${themeBase(tenantId, themeId)}/versions/compiled/${hash}.gz`;
+  `${themeBase(tenantId, themeId)}/published/compiled/${hash}.gz`;
 
 // A tiny insertion-ordered LRU. Compiled bundles are content-addressed (immutable), so caching them
 // by hash is always safe — a repeat load skips the object-store round-trip (LLD BC3). Values are
