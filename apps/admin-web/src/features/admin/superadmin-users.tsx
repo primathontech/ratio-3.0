@@ -3,11 +3,23 @@ import type { Api, PlatformUser } from '../../common/api';
 import { Spinner } from '../../common/ui';
 import { storeSlug } from '../../common/store-context';
 
-// Platform-admin "Users" view: every registered person and the stores they run. Memberships-derived
-// (no Clerk profiles yet), so a user is labelled by their store(s) + Clerk id. Row select fills the
-// detail rail; "Manage" opens that store's admin. Cross-links with the Stores view (owner → user).
+// Platform-admin "Users" view: every registered person and the stores they run. Enriched with Clerk
+// name/email when configured (falls back to store name + Clerk id otherwise); includes sign-ups with
+// no store yet. Row select fills the detail rail; "Manage" opens that store's admin. Cross-links with
+// the Stores view (owner → user).
 
-const initials = (id: string) => (id.replace(/^user_/, '').slice(0, 2) || '?').toUpperCase();
+// Initials from a display name ("Ada Lovelace" → "AL") or, lacking one, a Clerk id ("user_ab…" → "AB").
+function initials(label: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  const s =
+    words.length > 1
+      ? words
+          .map((w) => w[0])
+          .slice(0, 2)
+          .join('')
+      : label.replace(/^user_/, '').slice(0, 2);
+  return (s || '?').toUpperCase();
+}
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -18,8 +30,13 @@ function fmtDate(iso: string): string {
 
 function roleLabel(stores: { role: string }[]): string {
   const roles = Array.from(new Set(stores.map((s) => s.role)));
+  if (roles.length === 0) return '—';
   return roles.length === 1 ? roles[0] : 'mixed';
 }
+
+// What to show as a user's primary/secondary label, given Clerk may or may not be wired.
+const primaryLabel = (u: PlatformUser) => u.name || u.stores[0]?.name || u.userId;
+const secondaryLabel = (u: PlatformUser) => u.email || u.userId;
 
 export function SuperAdminUsers({ api }: { api: Api }) {
   const [users, setUsers] = useState<PlatformUser[] | null>(null);
@@ -38,7 +55,11 @@ export function SuperAdminUsers({ api }: { api: Api }) {
     if (!users) return [];
     const q = query.trim().toLowerCase();
     return users.filter(
-      (u) => !q || `${u.userId} ${u.stores.map((s) => s.name).join(' ')}`.toLowerCase().includes(q)
+      (u) =>
+        !q ||
+        `${u.userId} ${u.name ?? ''} ${u.email ?? ''} ${u.stores.map((s) => s.name).join(' ')}`
+          .toLowerCase()
+          .includes(q)
     );
   }, [users, query]);
 
@@ -109,9 +130,7 @@ export function SuperAdminUsers({ api }: { api: Api }) {
                         <span className="table-empty-emoji" aria-hidden>
                           👥
                         </span>
-                        {users!.length === 0
-                          ? 'No users yet — nobody has created a store.'
-                          : 'No users match your filter.'}
+                        {users!.length === 0 ? 'No users yet.' : 'No users match your filter.'}
                       </td>
                     </tr>
                   ) : (
@@ -150,7 +169,7 @@ export function SuperAdminUsers({ api }: { api: Api }) {
                                 style={{ width: 28, height: 28, fontSize: 11 }}
                                 aria-hidden
                               >
-                                {initials(u.userId)}
+                                {initials(u.name || u.userId)}
                               </span>
                               <span
                                 style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}
@@ -163,11 +182,10 @@ export function SuperAdminUsers({ api }: { api: Api }) {
                                     whiteSpace: 'nowrap',
                                   }}
                                 >
-                                  {u.stores[0]?.name ?? '—'}
-                                  {u.storeCount > 1 ? ` +${u.storeCount - 1}` : ''}
+                                  {primaryLabel(u)}
                                 </span>
                                 <span
-                                  className="mono"
+                                  className={u.email ? undefined : 'mono'}
                                   style={{
                                     fontSize: 12,
                                     color: 'var(--text-3)',
@@ -176,7 +194,7 @@ export function SuperAdminUsers({ api }: { api: Api }) {
                                     whiteSpace: 'nowrap',
                                   }}
                                 >
-                                  {u.userId}
+                                  {secondaryLabel(u)}
                                 </span>
                               </span>
                             </span>
@@ -214,14 +232,22 @@ function UserRail({ u }: { u: PlatformUser }) {
             style={{ width: 36, height: 36, fontSize: 13 }}
             aria-hidden
           >
-            {initials(u.userId)}
+            {initials(u.name || u.userId)}
           </span>
           <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>
-              {u.storeCount} store{u.storeCount === 1 ? '' : 's'}
+            <span
+              style={{
+                fontSize: 15,
+                fontWeight: 600,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {primaryLabel(u)}
             </span>
             <span
-              className="mono"
+              className={u.email ? undefined : 'mono'}
               style={{
                 fontSize: 12,
                 color: 'var(--text-3)',
@@ -230,9 +256,13 @@ function UserRail({ u }: { u: PlatformUser }) {
                 whiteSpace: 'nowrap',
               }}
             >
-              {u.userId}
+              {secondaryLabel(u)}
             </span>
           </span>
+        </div>
+        <div className="detail-row">
+          <span className="k">Stores</span>
+          <span className="v">{u.storeCount}</span>
         </div>
         <div className="detail-row">
           <span className="k">Joined</span>
@@ -242,6 +272,9 @@ function UserRail({ u }: { u: PlatformUser }) {
 
       <div className="sa-rail-sec">
         <div style={{ fontSize: 13, fontWeight: 600 }}>Stores</div>
+        {u.stores.length === 0 && (
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}>No stores yet.</span>
+        )}
         {u.stores.map((s) => (
           <div className="incident" key={s.id}>
             <span

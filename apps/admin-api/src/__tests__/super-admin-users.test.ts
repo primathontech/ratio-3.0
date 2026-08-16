@@ -10,6 +10,7 @@ const ALICE = 'user_alice_sau';
 const BOB = 'user_bob_sau';
 const SUPER = 'user_super_sau';
 process.env.PLATFORM_ADMIN_IDS = SUPER; // read lazily by auth
+delete process.env.CLERK_SECRET_KEY; // keep the users view on the memberships-only path (no network)
 
 const TOKENS: Record<string, string> = {
   'tok-alice': ALICE,
