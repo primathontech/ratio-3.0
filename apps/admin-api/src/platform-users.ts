@@ -34,7 +34,7 @@ export async function fetchClerkProfiles(): Promise<ClerkProfile[]> {
   } catch (e) {
     console.warn(
       '[admin-api] Clerk user fetch failed; users view degrades to memberships only:',
-      e
+      e instanceof Error ? e.message : e
     );
     return [];
   }
