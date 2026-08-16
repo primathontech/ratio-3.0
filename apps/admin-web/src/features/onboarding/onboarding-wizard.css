@@ -133,7 +133,7 @@
 
 /* design step — controls + live preview */
 .ob-card-wide {
-  max-width: 900px;
+  max-width: 100%;
 }
 .ob-design {
   display: grid;
