@@ -87,6 +87,24 @@ test('starter theme ships an editable CSS file, injected into the head AFTER the
   );
 });
 
+test('starter theme ships an editable order (thank-you) section with the hydration hook intact', async () => {
+  const files = defaultBundleTheme();
+  const liquid = files['sections/order.liquid'];
+  assert.ok(liquid, 'the theme ships an editable sections/order.liquid');
+  // The origin renders it with the order context (total in paise → money filter).
+  const html = await render(
+    liquid,
+    { order_id: 'ORD-9', total: 49900, payment_method: 'UPI' },
+    { trusted: true }
+  );
+  assert.match(html, /Thank you/, 'the thank-you heading renders');
+  assert.match(html, /ORD-9/, 'the order id renders');
+  assert.match(html, /₹499\.00/, 'the total is formatted from paise via the money filter');
+  assert.match(html, /UPI/, 'the payment method renders');
+  // The checkout integration fills this element client-side — editing must keep the id.
+  assert.match(html, /id="rt-order-items"/, 'the line-item hydration hook survives');
+});
+
 test('default theme binds + renders the collection products with rupee prices', async () => {
   const { html } = await renderPage('collection', { handle: 'summer' });
   assert.match(html, /Sample product 1/, 'a resolved product title renders');

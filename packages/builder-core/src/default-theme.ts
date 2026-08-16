@@ -230,5 +230,24 @@ export function defaultBundleTheme(): ThemeFiles {
   </div>
 </main>
 `,
+
+    // Order confirmation (thank-you) page body — editable. The ORIGIN renders this after checkout with
+    // the order's context (order_id, total in paise → use the money filter, payment_method). KEEP the
+    // element with id="rt-order-items": the checkout integration fills it client-side with the ordered
+    // line items from the completion event. Removing that id drops the per-item list.
+    'sections/order.liquid': `<main class="rt order-main">
+  <div class="order-card">
+    <h1 class="order-title">Thank you!</h1>
+    <p class="order-sub">Your order is confirmed. A confirmation will be sent to you.</p>
+    <div class="order-rows">
+      {% if order_id %}<div class="order-row"><span>Order</span><span>{{ order_id | escape }}</span></div>{% endif %}
+      {% if total %}<div class="order-row"><span>Total</span><span>{{ total | money }}</span></div>{% endif %}
+      {% if payment_method %}<div class="order-row"><span>Payment</span><span>{{ payment_method | escape }}</span></div>{% endif %}
+    </div>
+    <div class="order-rows order-items" id="rt-order-items"></div>
+    <a class="btn" href="/">Continue shopping</a>
+  </div>
+</main>
+`,
   };
 }
