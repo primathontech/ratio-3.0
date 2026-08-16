@@ -330,7 +330,6 @@
   align-items: flex-end;
   gap: 16px;
   flex-wrap: wrap;
-  margin-bottom: 22px;
 }
 .page-head .head-text {
   flex: 1;

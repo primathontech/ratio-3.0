@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Api, PlatformUser } from '../../common/api';
-import { Spinner } from '../../common/ui';
+import { Icon, Spinner, useToast } from '../../common/ui';
 import { storeSlug } from '../../common/store-context';
 
 // Platform-admin "Users" view: every registered person and the stores they run. Enriched with Clerk
@@ -38,11 +38,13 @@ function roleLabel(stores: { role: string }[]): string {
 const primaryLabel = (u: PlatformUser) => u.name || u.stores[0]?.name || u.userId;
 const secondaryLabel = (u: PlatformUser) => u.email || u.userId;
 
-export function SuperAdminUsers({ api }: { api: Api }) {
+export function SuperAdminUsers({ api, onCreate }: { api: Api; onCreate: () => void }) {
   const [users, setUsers] = useState<PlatformUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const toast = useToast();
 
   useEffect(() => {
     api
@@ -81,6 +83,15 @@ export function SuperAdminUsers({ api }: { api: Api }) {
             <h1>Users</h1>
             <p>Everyone with a store on Ratio, and what they run.</p>
           </div>
+          <button
+            className="btn btn-ghost"
+            onClick={() => toast('Export queued — we’ll email the CSV')}
+          >
+            Export
+          </button>
+          <button className="btn btn-primary" onClick={onCreate}>
+            <Icon.plus /> New store
+          </button>
         </div>
 
         {error ? (
