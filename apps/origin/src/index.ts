@@ -240,25 +240,35 @@ async function renderOrderResponse(
       siteName: tenant.name,
     })
   );
-  const html = renderOrderPage(
-    {
-      id: url.searchParams.get('id') ?? '',
-      // The checkout event reports amounts in MAJOR units (rupees), unlike the cart API (paise).
-      total: Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : undefined,
-      paymentMethod: url.searchParams.get('payment') ?? undefined,
-    },
-    {
-      siteName: tenant.name,
-      styleHead: storefrontHead(
-        resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
-        (compiled ?? {})['assets/theme.css'] ?? ''
-      ),
-      header,
-      footer,
-      headExtra: ix.head,
-      bodyEnd: ix.bodyEnd,
-    }
-  );
+  const order = {
+    id: url.searchParams.get('id') ?? '',
+    // The checkout event reports amounts in MAJOR units (rupees), unlike the cart API (paise).
+    total: Number.isFinite(rawTotal) && rawTotal > 0 ? rawTotal : undefined,
+    paymentMethod: url.searchParams.get('payment') ?? undefined,
+  };
+  // The thank-you page body is an editable theme section (sections/order.liquid); render it with the
+  // order context when the theme has one, else renderOrderPage falls back to the built-in body. The
+  // money filter wants paise but the checkout event reports rupees, so pass total × 100.
+  const orderLiquid = (compiled ?? {})['sections/order.liquid'];
+  const body = orderLiquid
+    ? await renderUntrusted(orderLiquid, {
+        order_id: order.id,
+        total: order.total != null ? Math.round(order.total * 100) : undefined,
+        payment_method: order.paymentMethod,
+      })
+    : undefined;
+  const html = renderOrderPage(order, {
+    siteName: tenant.name,
+    styleHead: storefrontHead(
+      resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
+      (compiled ?? {})['assets/theme.css'] ?? ''
+    ),
+    header,
+    footer,
+    headExtra: ix.head,
+    bodyEnd: ix.bodyEnd,
+    body,
+  });
   c.header('x-tenant', tenantId);
   c.header('x-handler', 'order');
   c.header('x-cache', 'no-store');

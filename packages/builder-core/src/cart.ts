@@ -205,18 +205,10 @@ export interface OrderSummary {
   total?: number; // in the store's display currency
   paymentMethod?: string;
 }
-export function renderOrderPage(
-  order: OrderSummary,
-  opts: {
-    siteName: string;
-    styleHead: string;
-    header?: string;
-    footer?: string;
-    headExtra?: string;
-    bodyEnd?: string;
-  }
-): string {
-  const { siteName, styleHead, header = '', footer = '', headExtra = '', bodyEnd = '' } = opts;
+// The thank-you page body (everything between header and footer). Its own function so the origin can
+// use it as the FALLBACK when a theme carries no editable sections/order.liquid. Keeps the
+// #rt-order-items hook the checkout hydration script fills from sessionStorage.
+export function orderBody(order: OrderSummary): string {
   const rows =
     (order.id
       ? `<div class="order-row"><span>Order</span><span>${esc(order.id)}</span></div>`
@@ -228,10 +220,6 @@ export function renderOrderPage(
       ? `<div class="order-row"><span>Payment</span><span>${esc(order.paymentMethod)}</span></div>`
       : '');
   return (
-    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>Order confirmed · ${esc(siteName)}</title>${styleHead}${headExtra}</head><body>` +
-    header +
     `<main class="rt order-main"><div class="order-card">` +
     `<h1 class="order-title">Thank you!</h1>` +
     `<p class="order-sub">Your order is confirmed. A confirmation will be sent to you.</p>` +
@@ -240,7 +228,30 @@ export function renderOrderPage(
     // fills this from sessionStorage. Empty (and invisible) when there's nothing to show.
     `<div class="order-rows order-items" id="rt-order-items"></div>` +
     `<a class="btn" href="/">Continue shopping</a>` +
-    `</div></main>` +
+    `</div></main>`
+  );
+}
+
+export function renderOrderPage(
+  order: OrderSummary,
+  opts: {
+    siteName: string;
+    styleHead: string;
+    header?: string;
+    footer?: string;
+    headExtra?: string;
+    bodyEnd?: string;
+    body?: string; // the theme's rendered sections/order.liquid; falls back to the built-in body
+  }
+): string {
+  const { siteName, styleHead, header = '', footer = '', headExtra = '', bodyEnd = '' } = opts;
+  const main = opts.body ?? orderBody(order);
+  return (
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>Order confirmed · ${esc(siteName)}</title>${styleHead}${headExtra}</head><body>` +
+    header +
+    main +
     footer +
     bodyEnd +
     `</body></html>`
