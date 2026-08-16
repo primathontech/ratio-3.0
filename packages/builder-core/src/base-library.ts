@@ -47,17 +47,23 @@ export async function ensureDefaultBaseTheme(
       // are content-addressed, so this rewrites the same keys and cuts no new version. We check only
       // the SOURCE bytes: the base is never a live theme, so nothing reads its compiled bundle, and a
       // missing compiled blob for the base is inert. Re-freezing rewrites both regardless.
-      if (!(await store.loadSource(latest.source_hash))) {
-        await store.saveDraft({ themeId: DEFAULT_BASE_THEME_ID }, files);
-        await store.freezeBundles({ themeId: DEFAULT_BASE_THEME_ID }, { compile: opts.compile });
+      if (!(await store.loadSource(LIBRARY_TENANT_ID, DEFAULT_BASE_THEME_ID, latest.source_hash))) {
+        await store.saveDraft(
+          { themeId: DEFAULT_BASE_THEME_ID, tenantId: LIBRARY_TENANT_ID },
+          files
+        );
+        await store.freezeBundles(
+          { themeId: DEFAULT_BASE_THEME_ID, tenantId: LIBRARY_TENANT_ID },
+          { compile: opts.compile }
+        );
       }
       await client.query('COMMIT');
       return { themeId: DEFAULT_BASE_THEME_ID, version: latest.version };
     }
     // No base version yet, or the default content changed → cut a new base version.
-    await store.saveDraft({ themeId: DEFAULT_BASE_THEME_ID }, files);
+    await store.saveDraft({ themeId: DEFAULT_BASE_THEME_ID, tenantId: LIBRARY_TENANT_ID }, files);
     const { version } = await store.publish(
-      { themeId: DEFAULT_BASE_THEME_ID },
+      { themeId: DEFAULT_BASE_THEME_ID, tenantId: LIBRARY_TENANT_ID },
       { compile: opts.compile, makeLive: false }
     );
     await client.query('COMMIT');
@@ -87,7 +93,7 @@ export async function adoptAndPublishDefaultTheme(
   const base = await ensureDefaultBaseTheme(store, { compile: opts.compile });
   await store.ensureTheme(tenantId, themeId, opts.name ?? 'Theme', base);
   const { version } = await store.publish(
-    { themeId },
+    { themeId, tenantId },
     { compile: opts.compile, makeLive: true, by: opts.by }
   );
   return { version };

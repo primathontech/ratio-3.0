@@ -98,7 +98,7 @@ async function seed() {
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
   await store.saveDraft(
-    { themeId: THEME },
+    { themeId: THEME, tenantId: T },
     {
       'layout/theme.liquid':
         '<!doctype html><html><head><title>Bench</title></head><body>{{ content_for_layout }}</body></html>',
@@ -124,7 +124,7 @@ async function seed() {
       }),
     }
   );
-  await store.publish({ themeId: THEME }, { compile: (s) => s });
+  await store.publish({ themeId: THEME, tenantId: T }, { compile: (s) => s });
 }
 
 async function cleanup() {

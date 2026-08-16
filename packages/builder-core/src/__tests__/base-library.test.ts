@@ -91,13 +91,13 @@ test(
     });
     // The merchant overrides one base section and adds a brand-new one.
     await store.saveDraft(
-      { themeId: STORE_THEME },
+      { themeId: STORE_THEME, tenantId: STORE_TENANT },
       {
         'sections/hero.liquid': '<section>MY HERO</section>',
         'sections/promo.liquid': '<section>PROMO</section>',
       }
     );
-    await store.publish({ themeId: STORE_THEME }, { compile: identity }); // makes STORE_THEME live
+    await store.publish({ themeId: STORE_THEME, tenantId: STORE_TENANT }, { compile: identity }); // makes STORE_THEME live
 
     const composed = await store.loadLiveCompiled(STORE_TENANT);
     const base = defaultBundleTheme();

@@ -23,7 +23,7 @@ const files: ThemeFiles = {
   'templates/index.json': '{"sections":["hero"]}',
 };
 // A unique theme id per run so repeated runs (immutable draft key) don't collide.
-const ref = { themeId: `t_${Date.now()}` };
+const ref = { themeId: `t_${Date.now()}`, tenantId: 't_ts' };
 
 let store: ThemeStore;
 
@@ -39,7 +39,10 @@ before(async () => {
 });
 
 test('readDraft is empty before any save', { skip }, async () => {
-  assert.deepEqual(await store.readDraft({ themeId: `${ref.themeId}_empty` }), {});
+  assert.deepEqual(
+    await store.readDraft({ themeId: `${ref.themeId}_empty`, tenantId: ref.tenantId }),
+    {}
+  );
 });
 
 test('saveDraft → readDraft round-trips the files', { skip }, async () => {
@@ -53,8 +56,8 @@ test('freezeBundles writes source + compiled bundles, loadable by hash', { skip 
   const { sourceHash, compiledHash } = await store.freezeBundles(ref, { compile: identity });
   // identity compile → the compiled bundle equals the source bundle → same content address.
   assert.equal(compiledHash, sourceHash);
-  assert.deepEqual(await store.loadSource(sourceHash), files);
-  assert.deepEqual(await store.loadCompiled(compiledHash), files);
+  assert.deepEqual(await store.loadSource(ref.tenantId, ref.themeId, sourceHash), files);
+  assert.deepEqual(await store.loadCompiled(ref.tenantId, ref.themeId, compiledHash), files);
 });
 
 test('a real compile transform yields a different compiled hash', { skip }, async () => {
@@ -62,12 +65,12 @@ test('a real compile transform yields a different compiled hash', { skip }, asyn
   const compile: CompileFn = (s) => ({ ...s, 'BUILT.txt': 'compiled marker' });
   const { sourceHash, compiledHash } = await store.freezeBundles(ref, { compile });
   assert.notEqual(compiledHash, sourceHash);
-  const compiled = await store.loadCompiled(compiledHash);
+  const compiled = await store.loadCompiled(ref.tenantId, ref.themeId, compiledHash);
   assert.equal(compiled?.['BUILT.txt'], 'compiled marker');
 });
 
 test('loadCompiled returns null for an unknown hash', { skip }, async () => {
-  assert.equal(await store.loadCompiled('0'.repeat(64)), null);
+  assert.equal(await store.loadCompiled(ref.tenantId, ref.themeId, '0'.repeat(64)), null);
 });
 
 // An in-memory ObjectStore that counts reads — lets the LRU tests run without MinIO.
@@ -97,11 +100,14 @@ function memStore() {
 test('loadCompiled caches by hash — read once, same frozen instance returned', async () => {
   const { objects, counter } = memStore();
   const s = new ThemeStore(objects);
-  await s.saveDraft({ themeId: 't_lru' }, files);
-  const { compiledHash } = await s.freezeBundles({ themeId: 't_lru' }, { compile: identity });
+  await s.saveDraft({ themeId: 't_lru', tenantId: 't_lru' }, files);
+  const { compiledHash } = await s.freezeBundles(
+    { themeId: 't_lru', tenantId: 't_lru' },
+    { compile: identity }
+  );
   counter.gets = 0;
-  const a = await s.loadCompiled(compiledHash);
-  const b = await s.loadCompiled(compiledHash);
+  const a = await s.loadCompiled('t_lru', 't_lru', compiledHash);
+  const b = await s.loadCompiled('t_lru', 't_lru', compiledHash);
   assert.deepEqual(a, files);
   assert.equal(b, a); // second load returns the cached instance, not a fresh unpack
   assert.equal(counter.gets, 1); // object store read once
@@ -112,13 +118,19 @@ test('loadCompiled caches by hash — read once, same frozen instance returned',
 test('loadCompiled evicts the oldest bundle past compiledCacheMax', async () => {
   const { objects, counter } = memStore();
   const s = new ThemeStore(objects, { compiledCacheMax: 1 });
-  await s.saveDraft({ themeId: 't_a' }, { 'a.liquid': 'A' });
-  const { compiledHash: ha } = await s.freezeBundles({ themeId: 't_a' }, { compile: identity });
-  await s.saveDraft({ themeId: 't_b' }, { 'b.liquid': 'B' });
-  const { compiledHash: hb } = await s.freezeBundles({ themeId: 't_b' }, { compile: identity });
+  await s.saveDraft({ themeId: 't_a', tenantId: 't_a' }, { 'a.liquid': 'A' });
+  const { compiledHash: ha } = await s.freezeBundles(
+    { themeId: 't_a', tenantId: 't_a' },
+    { compile: identity }
+  );
+  await s.saveDraft({ themeId: 't_b', tenantId: 't_b' }, { 'b.liquid': 'B' });
+  const { compiledHash: hb } = await s.freezeBundles(
+    { themeId: 't_b', tenantId: 't_b' },
+    { compile: identity }
+  );
   counter.gets = 0;
-  await s.loadCompiled(ha); // miss → cache [ha]
-  await s.loadCompiled(hb); // miss → evicts ha, cache [hb]
-  await s.loadCompiled(ha); // evicted → re-fetch
+  await s.loadCompiled('t_a', 't_a', ha); // miss → cache [ha]
+  await s.loadCompiled('t_b', 't_b', hb); // miss → evicts ha, cache [hb]
+  await s.loadCompiled('t_a', 't_a', ha); // evicted → re-fetch
   assert.equal(counter.gets, 3);
 });

@@ -78,16 +78,19 @@ test(
   'publish records v1, flips the pointer, and serves the compiled bundle',
   { skip },
   async () => {
-    await store.saveDraft({ themeId: THEME }, files);
-    const r1 = await store.publish({ themeId: THEME }, { compile: identity, by: 'tester' });
+    await store.saveDraft({ themeId: THEME, tenantId: TENANT }, files);
+    const r1 = await store.publish(
+      { themeId: THEME, tenantId: TENANT },
+      { compile: identity, by: 'tester' }
+    );
     assert.equal(r1.version, 1);
     assert.deepEqual(await store.loadLiveCompiled(TENANT), files);
   }
 );
 
 test('a second publish bumps the version and moves the pointer', { skip }, async () => {
-  await store.saveDraft({ themeId: THEME }, changed);
-  const r2 = await store.publish({ themeId: THEME }, { compile: identity });
+  await store.saveDraft({ themeId: THEME, tenantId: TENANT }, changed);
+  const r2 = await store.publish({ themeId: THEME, tenantId: TENANT }, { compile: identity });
   assert.equal(r2.version, 2);
   assert.deepEqual(await store.loadLiveCompiled(TENANT), changed);
 });
@@ -109,7 +112,7 @@ test('rollback to an unknown version throws', { skip }, async () => {
 
 test('publish on an unknown theme throws', { skip }, async () => {
   await assert.rejects(
-    () => store.publish({ themeId: 'does_not_exist' }, { compile: identity }),
+    () => store.publish({ themeId: 'does_not_exist', tenantId: TENANT }, { compile: identity }),
     /unknown theme/
   );
 });
@@ -120,7 +123,7 @@ test('publish on an unknown theme writes no bundles (no S3 orphans)', { skip }, 
   const counting = new CountingStore(new S3ObjectStore({ bucket, ...common }));
   const s = new ThemeStore(counting);
   await assert.rejects(
-    () => s.publish({ themeId: 'does_not_exist' }, { compile: identity }),
+    () => s.publish({ themeId: 'does_not_exist', tenantId: TENANT }, { compile: identity }),
     /unknown theme/
   );
   assert.equal(counting.puts, 0);
@@ -141,8 +144,11 @@ test(
     const OTHER = 't_mca_bundle_alt';
     await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
     await store.ensureTheme(TENANT, OTHER, 'Alt');
-    await store.saveDraft({ themeId: OTHER }, files);
-    const r = await store.publish({ themeId: OTHER }, { compile: identity, makeLive: false });
+    await store.saveDraft({ themeId: OTHER, tenantId: TENANT }, files);
+    const r = await store.publish(
+      { themeId: OTHER, tenantId: TENANT },
+      { compile: identity, makeLive: false }
+    );
     assert.equal(r.version, 1);
     const v = await pool.query(
       'SELECT 1 FROM theme_bundle_version WHERE theme_id = $1 AND version = 1',
@@ -163,8 +169,8 @@ test(
 // every cached page of that store. Same page_purge_outbox + drainPurges() worker as the legacy path.
 test('publish enqueues a durable tenant-tag purge in the outbox', { skip }, async () => {
   await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
-  await store.saveDraft({ themeId: THEME }, files);
-  await store.publish({ themeId: THEME }, { compile: identity });
+  await store.saveDraft({ themeId: THEME, tenantId: TENANT }, files);
+  await store.publish({ themeId: THEME, tenantId: TENANT }, { compile: identity });
   const { rows } = await pool.query<{ tags: string[] }>(
     'SELECT tags FROM page_purge_outbox WHERE tenant_id = $1',
     [TENANT]
@@ -183,8 +189,11 @@ test(
     await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);
     await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
     await store.ensureTheme(TENANT, OTHER, 'Alt2');
-    await store.saveDraft({ themeId: OTHER }, files);
-    await store.publish({ themeId: OTHER }, { compile: identity, makeLive: false });
+    await store.saveDraft({ themeId: OTHER, tenantId: TENANT }, files);
+    await store.publish(
+      { themeId: OTHER, tenantId: TENANT },
+      { compile: identity, makeLive: false }
+    );
     const n = await pool.query('SELECT 1 FROM page_purge_outbox WHERE tenant_id = $1', [TENANT]);
     assert.equal(n.rowCount, 0);
     await pool.query('DELETE FROM theme WHERE id = $1', [OTHER]);

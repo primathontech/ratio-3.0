@@ -11,6 +11,7 @@ import { pool } from '@ratio/data-db';
 
 export interface ThemeRef {
   themeId: string;
+  tenantId: string;
 }
 
 // A store's theme as the multi-theme picker sees it: its identity, whether it's the tenant's live
@@ -52,16 +53,30 @@ export interface PublishedBundles {
 export type PublishResult = PublishedBundles & { version: number };
 
 const GZIP = 'application/gzip';
-const draftKey = (themeId: string) => `themes/${themeId}/draft/source.gz`;
-const sourceKey = (hash: string) => `versions/source/${hash}.gz`;
-const compiledKey = (hash: string) => `versions/compiled/${hash}.gz`;
 
-// themeId is interpolated into S3 keys, so it must be a plain slug — reject anything with path
-// separators or traversal before it can escape a theme's namespace in the shared bucket.
-const THEME_ID_RE = /^[A-Za-z0-9_-]+$/;
-function assertThemeId(themeId: string): void {
-  if (!THEME_ID_RE.test(themeId)) throw new Error(`invalid theme id: '${themeId}'`);
+// tenantId + themeId are interpolated into object keys, so both must be plain slugs — reject path
+// separators / traversal before they can escape a store's namespace in the shared bucket.
+const KEY_PART_RE = /^[A-Za-z0-9_-]+$/;
+function assertKeyPart(value: string, kind: string): void {
+  if (!KEY_PART_RE.test(value)) throw new Error(`invalid ${kind}: '${value}'`);
 }
+const assertThemeId = (themeId: string): void => assertKeyPart(themeId, 'theme id');
+
+// Every object a store owns lives under stores/<tenantId>/… — one prefix per store (clean isolation +
+// prefix-delete), with room for other asset types alongside themes/ later (assets/, exports/, …). The
+// shared base library is just tenant '_library'. Published artifacts are content-hash keyed under
+// published/ (immutable ⇒ CDN-cacheable forever); the draft is the one mutable object.
+const themeBase = (tenantId: string, themeId: string) => {
+  assertKeyPart(tenantId, 'tenant id');
+  assertKeyPart(themeId, 'theme id');
+  return `stores/${tenantId}/themes/${themeId}`;
+};
+const draftKey = (tenantId: string, themeId: string) =>
+  `${themeBase(tenantId, themeId)}/draft/source.gz`;
+const sourceKey = (tenantId: string, themeId: string, hash: string) =>
+  `${themeBase(tenantId, themeId)}/published/source/${hash}.gz`;
+const compiledKey = (tenantId: string, themeId: string, hash: string) =>
+  `${themeBase(tenantId, themeId)}/published/compiled/${hash}.gz`;
 
 // A tiny insertion-ordered LRU. Compiled bundles are content-addressed (immutable), so caching them
 // by hash is always safe — a repeat load skips the object-store round-trip (LLD BC3). Values are
@@ -96,7 +111,7 @@ export class ThemeStore {
   // Read the editable draft's source files (empty theme if never written).
   async readDraft(ref: ThemeRef): Promise<ThemeFiles> {
     assertThemeId(ref.themeId);
-    const blob = await this.objects.get(draftKey(ref.themeId));
+    const blob = await this.objects.get(draftKey(ref.tenantId, ref.themeId));
     return blob ? unpackBundle(Buffer.from(blob)) : {};
   }
 
@@ -112,7 +127,9 @@ export class ThemeStore {
     assertThemeId(ref.themeId);
     const hash = bundleId(files);
     if (opts.expectedRevision === undefined) {
-      await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
+      await this.objects.put(draftKey(ref.tenantId, ref.themeId), packBundle(files), {
+        contentType: GZIP,
+      });
       return { hash };
     }
     const client = await pool.connect();
@@ -129,7 +146,9 @@ export class ThemeStore {
       const current = bundleId(await this.readDraft(ref));
       if (current !== opts.expectedRevision)
         throw new DraftConflict(opts.expectedRevision, current);
-      await this.objects.put(draftKey(ref.themeId), packBundle(files), { contentType: GZIP });
+      await this.objects.put(draftKey(ref.tenantId, ref.themeId), packBundle(files), {
+        contentType: GZIP,
+      });
       // The put is the authoritative, durable write. This transaction changed no Postgres rows — COMMIT
       // only releases the row lock (which also releases when the connection is torn down) — so a COMMIT
       // failure can't lose the draft. Swallow it rather than report a durable save as an error, which
@@ -182,12 +201,24 @@ export class ThemeStore {
   async freezeBundles(ref: ThemeRef, opts: { compile: CompileFn }): Promise<PublishedBundles> {
     const overrides = await this.readDraft(ref);
     const sourceHash = bundleId(overrides);
-    await this.objects.put(sourceKey(sourceHash), packBundle(overrides), { contentType: GZIP });
+    await this.objects.put(
+      sourceKey(ref.tenantId, ref.themeId, sourceHash),
+      packBundle(overrides),
+      {
+        contentType: GZIP,
+      }
+    );
 
     const composed = composeTheme(await this.loadBaseSource(ref.themeId), overrides);
     const compiled = await opts.compile(composed);
     const compiledHash = bundleId(compiled);
-    await this.objects.put(compiledKey(compiledHash), packBundle(compiled), { contentType: GZIP });
+    await this.objects.put(
+      compiledKey(ref.tenantId, ref.themeId, compiledHash),
+      packBundle(compiled),
+      {
+        contentType: GZIP,
+      }
+    );
 
     return { sourceHash, compiledHash };
   }
@@ -204,8 +235,12 @@ export class ThemeStore {
     const baseThemeId = rows[0]?.base_theme_id;
     const baseVersion = rows[0]?.base_version;
     if (!baseThemeId || baseVersion == null) return {};
-    const v = await pool.query<{ source_hash: string; base_theme_id: string | null }>(
-      `SELECT tbv.source_hash, t.base_theme_id
+    const v = await pool.query<{
+      source_hash: string;
+      base_theme_id: string | null;
+      tenant_id: string;
+    }>(
+      `SELECT tbv.source_hash, t.base_theme_id, t.tenant_id
          FROM theme_bundle_version tbv
          JOIN theme t ON t.id = tbv.theme_id
         WHERE tbv.theme_id = $1 AND tbv.version = $2`,
@@ -218,7 +253,7 @@ export class ThemeStore {
     // own, that bundle is only its overrides — composing it would silently drop files. Fail loud.
     if (row.base_theme_id)
       throw new Error(`base '${baseThemeId}' is not a root theme (tracks '${row.base_theme_id}')`);
-    return (await this.loadSource(row.source_hash)) ?? {};
+    return (await this.loadSource(row.tenant_id, baseThemeId, row.source_hash)) ?? {};
   }
 
   // The full theme the compiler/preview sees: the base composed with the current draft overrides.
@@ -303,9 +338,10 @@ export class ThemeStore {
         row.base_theme_id && row.base_version != null
           ? { themeId: row.base_theme_id, version: row.base_version }
           : undefined;
-      const srcOverrides = await this.readDraft({ themeId: opts.duplicateOf });
+      const srcOverrides = await this.readDraft({ themeId: opts.duplicateOf, tenantId });
       await this.ensureTheme(tenantId, themeId, name, srcBase);
-      if (Object.keys(srcOverrides).length > 0) await this.saveDraft({ themeId }, srcOverrides);
+      if (Object.keys(srcOverrides).length > 0)
+        await this.saveDraft({ themeId, tenantId }, srcOverrides);
       return;
     }
     await this.ensureTheme(tenantId, themeId, name, opts.base);
@@ -349,7 +385,7 @@ export class ThemeStore {
     } finally {
       client.release();
     }
-    await this.objects.delete(draftKey(themeId)).catch(() => {});
+    await this.objects.delete(draftKey(tenantId, themeId)).catch(() => {});
   }
 
   // Make one of the tenant's themes live at a given (or its latest) published version — the general
@@ -531,16 +567,18 @@ export class ThemeStore {
   // What the origin calls on a cache miss: the compiled bundle of the tenant's live version, or null
   // if the tenant has never published.
   async loadLiveCompiled(tenantId: string): Promise<ThemeFiles | null> {
-    const { rows } = await pool.query<{ compiled_hash: string }>(
-      `SELECT bv.compiled_hash
+    const { rows } = await pool.query<{ compiled_hash: string; live_theme_id: string }>(
+      `SELECT bv.compiled_hash, t.live_theme_id
          FROM tenants t
          JOIN theme_bundle_version bv
            ON bv.theme_id = t.live_theme_id AND bv.version = t.live_theme_version
         WHERE t.id = $1`,
       [tenantId]
     );
-    const hash = rows[0]?.compiled_hash;
-    return hash ? this.loadCompiled(hash) : null;
+    const row = rows[0];
+    return row?.compiled_hash
+      ? this.loadCompiled(tenantId, row.live_theme_id, row.compiled_hash)
+      : null;
   }
 
   // Load a compiled bundle by its content hash (what the origin renders), or null if absent. Cached
@@ -548,10 +586,14 @@ export class ThemeStore {
   // before caching: the value is shared across requests, so an accidental mutation must throw rather
   // than silently corrupt the cached (and hash-addressed) bundle. Render is read-only; a path that
   // needs to edit a compiled tree must clone it.
-  async loadCompiled(compiledHash: string): Promise<ThemeFiles | null> {
+  async loadCompiled(
+    tenantId: string,
+    themeId: string,
+    compiledHash: string
+  ): Promise<ThemeFiles | null> {
     const cached = this.compiledCache.get(compiledHash);
     if (cached) return cached;
-    const blob = await this.objects.get(compiledKey(compiledHash));
+    const blob = await this.objects.get(compiledKey(tenantId, themeId, compiledHash));
     if (!blob) return null;
     const files = unpackBundle(Buffer.from(blob));
     Object.freeze(files);
@@ -560,8 +602,12 @@ export class ThemeStore {
   }
 
   // Load a source bundle by its content hash (for merges / re-editing an old version), or null.
-  async loadSource(sourceHash: string): Promise<ThemeFiles | null> {
-    const blob = await this.objects.get(sourceKey(sourceHash));
+  async loadSource(
+    tenantId: string,
+    themeId: string,
+    sourceHash: string
+  ): Promise<ThemeFiles | null> {
+    const blob = await this.objects.get(sourceKey(tenantId, themeId, sourceHash));
     return blob ? unpackBundle(Buffer.from(blob)) : null;
   }
 }

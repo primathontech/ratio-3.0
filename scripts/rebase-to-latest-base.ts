@@ -51,11 +51,12 @@ function bundleStoreFromEnv() {
   // Every non-library theme pinned to an OLDER base version.
   const { rows } = await pool.query<{
     id: string;
+    tenant_id: string;
     base_version: number;
     name: string;
     live_theme_id: string | null;
   }>(
-    `SELECT th.id, th.base_version, ten.name, ten.live_theme_id
+    `SELECT th.id, th.tenant_id, th.base_version, ten.name, ten.live_theme_id
        FROM theme th JOIN tenants ten ON ten.id = th.tenant_id
       WHERE th.base_theme_id = $1 AND th.base_version < $2 AND th.tenant_id <> '_library'
       ORDER BY th.tenant_id`,
@@ -70,7 +71,7 @@ function bundleStoreFromEnv() {
     // Whole iteration guarded so one store's failure (an S3 read, a publish error) never aborts the
     // run — including dry-run, where a readDraft error would otherwise kill the loop.
     try {
-      const overrides = await store.readDraft({ themeId: r.id });
+      const overrides = await store.readDraft({ themeId: r.id, tenantId: r.tenant_id });
       const overrideCount = Object.keys(overrides).filter((k) => k !== '_deletes').length;
       const isLive = r.live_theme_id === r.id;
       const label = `  ${r.name} (${r.id}): v${r.base_version} → v${latest} · ${overrideCount} override(s) · ${isLive ? 'live' : 'not-live'}`;
@@ -86,7 +87,7 @@ function bundleStoreFromEnv() {
         // Only flip the live pointer for a theme that IS the store's live one — never switch a store
         // that has activated a different theme. The rebase still cuts a version either way.
         const { version } = await store.publish(
-          { themeId: r.id },
+          { themeId: r.id, tenantId: r.tenant_id },
           { compile: identity, makeLive: isLive }
         );
         ok++;

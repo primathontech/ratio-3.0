@@ -45,8 +45,11 @@ before(async () => {
 
   // The base is a ROOT theme (no base) holding the full default files, published as base@1 (not live).
   await store.ensureTheme(TENANT, BASE);
-  await store.saveDraft({ themeId: BASE }, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
-  await store.publish({ themeId: BASE }, { compile: identity, makeLive: false });
+  await store.saveDraft(
+    { themeId: BASE, tenantId: TENANT },
+    { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' }
+  );
+  await store.publish({ themeId: BASE, tenantId: TENANT }, { compile: identity, makeLive: false });
 });
 
 after(async () => {
@@ -65,8 +68,11 @@ test(
   },
   async () => {
     await store.ensureTheme(TENANT, CHILD, 'Child', { themeId: BASE, version: 1 });
-    await store.saveDraft({ themeId: CHILD }, { 'a.liquid': 'MINE-A', 'c.liquid': 'MINE-C' });
-    await store.publish({ themeId: CHILD }, { compile: identity }); // makes CHILD live
+    await store.saveDraft(
+      { themeId: CHILD, tenantId: TENANT },
+      { 'a.liquid': 'MINE-A', 'c.liquid': 'MINE-C' }
+    );
+    await store.publish({ themeId: CHILD, tenantId: TENANT }, { compile: identity }); // makes CHILD live
     assert.deepEqual(await store.loadLiveCompiled(TENANT), {
       'a.liquid': 'MINE-A', // override wins over the base
       'b.liquid': 'BASE-B', // untouched → tracks the base
@@ -82,10 +88,12 @@ test(
   },
   async () => {
     await store.saveDraft(
-      { themeId: CHILD },
+      { themeId: CHILD, tenantId: TENANT },
       { 'a.liquid': 'DRAFT-A', [DELETES_MANIFEST]: JSON.stringify(['b.liquid']) }
     );
-    assert.deepEqual(await store.readComposed({ themeId: CHILD }), { 'a.liquid': 'DRAFT-A' });
+    assert.deepEqual(await store.readComposed({ themeId: CHILD, tenantId: TENANT }), {
+      'a.liquid': 'DRAFT-A',
+    });
   }
 );
 
@@ -93,10 +101,10 @@ test(
   'source bundle is the overrides (small); compiled is the full composed theme',
   { skip },
   async () => {
-    await store.saveDraft({ themeId: CHILD }, { 'a.liquid': 'X' });
-    const r = await store.publish({ themeId: CHILD }, { compile: identity });
-    assert.deepEqual(await store.loadSource(r.sourceHash), { 'a.liquid': 'X' }); // overrides only
-    assert.deepEqual(await store.loadCompiled(r.compiledHash), {
+    await store.saveDraft({ themeId: CHILD, tenantId: TENANT }, { 'a.liquid': 'X' });
+    const r = await store.publish({ themeId: CHILD, tenantId: TENANT }, { compile: identity });
+    assert.deepEqual(await store.loadSource(TENANT, CHILD, r.sourceHash), { 'a.liquid': 'X' }); // overrides only
+    assert.deepEqual(await store.loadCompiled(TENANT, CHILD, r.compiledHash), {
       'a.liquid': 'X',
       'b.liquid': 'BASE-B',
     });
@@ -107,19 +115,25 @@ test(
   'a root theme (no base) freezes its whole draft unchanged: compiled === source',
   { skip },
   async () => {
-    await store.saveDraft({ themeId: BASE }, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
-    const r = await store.publish({ themeId: BASE }, { compile: identity, makeLive: false });
-    const src = await store.loadSource(r.sourceHash);
-    assert.deepEqual(await store.loadCompiled(r.compiledHash), src); // nothing composed beneath a root
+    await store.saveDraft(
+      { themeId: BASE, tenantId: TENANT },
+      { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' }
+    );
+    const r = await store.publish(
+      { themeId: BASE, tenantId: TENANT },
+      { compile: identity, makeLive: false }
+    );
+    const src = await store.loadSource(TENANT, BASE, r.sourceHash);
+    assert.deepEqual(await store.loadCompiled(TENANT, BASE, r.compiledHash), src); // nothing composed beneath a root
     assert.deepEqual(src, { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' });
   }
 );
 
 test('publish throws when the tracked base version has no published bundle', { skip }, async () => {
   await store.ensureTheme(TENANT, DANGLING, 'Dangling', { themeId: BASE, version: 99 });
-  await store.saveDraft({ themeId: DANGLING }, { 'a.liquid': 'MINE' });
+  await store.saveDraft({ themeId: DANGLING, tenantId: TENANT }, { 'a.liquid': 'MINE' });
   await assert.rejects(
-    () => store.publish({ themeId: DANGLING }, { compile: identity }),
+    () => store.publish({ themeId: DANGLING, tenantId: TENANT }, { compile: identity }),
     /base '.*'@99 has no published version/
   );
 });
@@ -131,9 +145,9 @@ test(
     // CHILD tracks BASE, so CHILD is a non-root. Pointing a theme's base at CHILD would compose CHILD's
     // OVERRIDES as if they were a full theme — silent file loss. It must fail loud instead.
     await store.ensureTheme(TENANT, GRANDCHILD, 'Grandchild', { themeId: CHILD, version: 1 });
-    await store.saveDraft({ themeId: GRANDCHILD }, { 'a.liquid': 'MINE' });
+    await store.saveDraft({ themeId: GRANDCHILD, tenantId: TENANT }, { 'a.liquid': 'MINE' });
     await assert.rejects(
-      () => store.publish({ themeId: GRANDCHILD }, { compile: identity }),
+      () => store.publish({ themeId: GRANDCHILD, tenantId: TENANT }, { compile: identity }),
       /base '.*' is not a root theme/
     );
   }

@@ -97,7 +97,7 @@ before(async () => {
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
   await store.saveDraft(
-    { themeId: THEME },
+    { themeId: THEME, tenantId: T },
     {
       'sections/hero.liquid': '<section class="hero"><h1>{{ heading }}</h1></section>',
       'templates/index.json': JSON.stringify({
@@ -105,18 +105,18 @@ before(async () => {
       }),
     }
   );
-  await store.publish({ themeId: THEME }, { compile: (s) => s });
+  await store.publish({ themeId: THEME, tenantId: T }, { compile: (s) => s });
 
   // A live bundle whose template is malformed JSON — the render must throw and DEGRADE to legacy.
   await store.ensureTheme(T3, THEME3);
-  await store.saveDraft({ themeId: THEME3 }, { 'templates/index.json': 'NOT JSON' });
-  await store.publish({ themeId: THEME3 }, { compile: (s) => s });
+  await store.saveDraft({ themeId: THEME3, tenantId: T3 }, { 'templates/index.json': 'NOT JSON' });
+  await store.publish({ themeId: THEME3, tenantId: T3 }, { compile: (s) => s });
 
   // A bundle mixing a PLATFORM section (heading — first-party code, no Liquid in the bundle) and a
   // THEME section (promo — Liquid in the bundle).
   await store.ensureTheme(T4, THEME4);
   await store.saveDraft(
-    { themeId: THEME4 },
+    { themeId: THEME4, tenantId: T4 },
     {
       'sections/promo.liquid': '<p class="promo">{{ msg }}</p>',
       'templates/index.json': JSON.stringify({
@@ -127,13 +127,13 @@ before(async () => {
       }),
     }
   );
-  await store.publish({ themeId: THEME4 }, { compile: (s) => s });
+  await store.publish({ themeId: THEME4, tenantId: T4 }, { compile: (s) => s });
 
   // Shared templates by page type — /collections/:handle → collection.json, /products/:handle →
   // product.json (Shopify-shaped), so one template serves every collection/product URL.
   await store.ensureTheme(T5, THEME5);
   await store.saveDraft(
-    { themeId: THEME5 },
+    { themeId: THEME5, tenantId: T5 },
     {
       'sections/collmark.liquid': '<div class="coll">Collection template</div>',
       'sections/prodmark.liquid': '<div class="prod">Product template</div>',
@@ -141,13 +141,13 @@ before(async () => {
       'templates/product.json': JSON.stringify({ sections: [{ type: 'prodmark', data: {} }] }),
     }
   );
-  await store.publish({ themeId: THEME5 }, { compile: (s) => s });
+  await store.publish({ themeId: THEME5, tenantId: T5 }, { compile: (s) => s });
 
   // A data-sourced home: the section binds to a collection, so the resolver's col:* tags must reach
   // x-surrogate-keys (data-driven purge — a collection change purges the pages showing it).
   await store.ensureTheme(T6, THEME6);
   await store.saveDraft(
-    { themeId: THEME6 },
+    { themeId: THEME6, tenantId: T6 },
     {
       'sections/plist.liquid':
         '<ul>{% for p in products %}<li>{{ p.title | escape }}</li>{% endfor %}</ul>',
@@ -157,7 +157,7 @@ before(async () => {
       }),
     }
   );
-  await store.publish({ themeId: THEME6 }, { compile: (s) => s });
+  await store.publish({ themeId: THEME6, tenantId: T6 }, { compile: (s) => s });
 
   // A store that ADOPTS the shared Default base and overrides ONE section (its hero). The origin must
   // render the BASE's own sections (header, footer) alongside the merchant's OVERRIDE (hero) on a real
@@ -165,14 +165,14 @@ before(async () => {
   const base = await ensureDefaultBaseTheme(store, { compile: (s) => s });
   await store.ensureTheme(T7, THEME7, 'Store', { themeId: base.themeId, version: base.version });
   await store.saveDraft(
-    { themeId: THEME7 },
+    { themeId: THEME7, tenantId: T7 },
     { 'sections/hero.liquid': '<section class="mine"><h1>MERCHANT {{ heading }}</h1></section>' }
   );
-  await store.publish({ themeId: THEME7 }, { compile: (s) => s });
+  await store.publish({ themeId: THEME7, tenantId: T7 }, { compile: (s) => s });
 
   await store.ensureTheme(T8, THEME8);
   await store.saveDraft(
-    { themeId: THEME8 },
+    { themeId: THEME8, tenantId: T8 },
     {
       'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
       'sections/hero.liquid': '<section class="hero"><h1>{{ heading }}</h1></section>',
@@ -181,7 +181,7 @@ before(async () => {
       }),
     }
   );
-  await store.publish({ themeId: THEME8 }, { compile: (s) => s });
+  await store.publish({ themeId: THEME8, tenantId: T8 }, { compile: (s) => s });
 
   // The onboarding path itself (OFCE-616): adopt the Default base + publish + activate in one call.
   await adoptAndPublishDefaultTheme(store, T9, THEME9, { compile: (s) => s });
@@ -316,7 +316,10 @@ test(
     assert.match(body, /class="ftr"/, 'base footer section composes in');
     // ...alongside the merchant's OVERRIDE section, which replaced the base hero and still binds the
     // base template's data (the default home hero heading) through the sandbox isolate.
-    assert.match(body, /<section class="mine"><h1>MERCHANT New season, new look<\/h1><\/section>/);
+    assert.match(
+      body,
+      /<section class="mine"><h1>MERCHANT Everything you love, in one place<\/h1><\/section>/
+    );
     assert.doesNotMatch(
       body,
       /class="hero"/,

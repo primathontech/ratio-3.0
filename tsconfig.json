@@ -10,6 +10,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["apps", "packages", "dev", "scripts", "tests"],
+  "include": ["apps", "packages", "dev", "scripts", "tests", "bench"],
   "exclude": ["apps/admin-web"]
 }

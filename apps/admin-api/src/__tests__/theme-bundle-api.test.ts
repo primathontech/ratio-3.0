@@ -163,7 +163,7 @@ test('draft save stores only the delta from base (base ⊕ overrides), not a ful
   assert.ok(view['layout/theme.liquid'], 'the base layout still composes in');
 
   // The stored OVERRIDES are ONLY the delta — just the one edited section, not a full base copy.
-  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN, tenantId: ID }), {
     'sections/hero.liquid': '<section>MINE</section>',
   });
 });
@@ -335,7 +335,7 @@ test('scaffold adopts the shared Default base (base ⊕ overrides), not a per-st
   );
   assert.strictEqual(rows[0].base_theme_id, DEFAULT_BASE_THEME_ID, 'theme tracks the base');
   assert.deepStrictEqual(
-    await store.readDraft({ themeId: MAIN }),
+    await store.readDraft({ themeId: MAIN, tenantId: ID }),
     {},
     'no per-store copy — overrides are empty'
   );
@@ -363,7 +363,9 @@ test('a legacy baseless theme (no base) can still save a draft and keeps its bas
     null,
     'a legacy root theme keeps its baseless identity'
   );
-  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), { 'a.liquid': 'legacy' });
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN, tenantId: ID }), {
+    'a.liquid': 'legacy',
+  });
 });
 
 test('preview renders a page to HTML through the theme render path (layout + section + data)', async () => {
@@ -442,7 +444,7 @@ test('reset drops all overrides → the draft composes to pure base again', asyn
 
   // Customize one section, then confirm the override is stored.
   await putDraft({ ...composed, 'sections/hero.liquid': '<section>MINE</section>' });
-  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN, tenantId: ID }), {
     'sections/hero.liquid': '<section>MINE</section>',
   });
 
@@ -452,7 +454,7 @@ test('reset drops all overrides → the draft composes to pure base again', asyn
 
   // The override is gone — the stored draft is empty, so the composed theme is the pure base: the
   // customized section reverts to the base's own version (not the merchant's edit).
-  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {});
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN, tenantId: ID }), {});
   assert.ok(body.files['layout/theme.liquid'], 'the reply composes the base layout back in');
   assert.notStrictEqual(
     body.files['sections/hero.liquid'],
@@ -470,7 +472,7 @@ test('a member (non-owner) can reset a draft to base', async () => {
   await putDraft({ 'a.liquid': 'by-editor' }, carol);
   const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, carol, {});
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN }), {});
+  assert.deepStrictEqual(await store.readDraft({ themeId: MAIN, tenantId: ID }), {});
 });
 
 test('every bundle endpoint is 503 when no object store is configured', async () => {
