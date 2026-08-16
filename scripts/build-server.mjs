@@ -45,3 +45,10 @@ await build({
   entryPoints: ['apps/admin-api/src/server.ts'],
   outfile: 'dist/admin-api/server.js',
 });
+// admin-api renders the onboarding/editor theme preview through the same isolate, which spawns
+// ./worker.mjs relative to ITS bundle — so it needs its own copy next to admin-api/server.js.
+await build({
+  ...common,
+  entryPoints: ['packages/builder-render/src/worker.mjs'],
+  outfile: 'dist/admin-api/worker.mjs',
+});
