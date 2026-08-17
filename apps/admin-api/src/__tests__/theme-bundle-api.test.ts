@@ -471,6 +471,99 @@ test('preview surfaces a render error as { error } (200, not a 500)', async () =
   assert.ok(body.error, 'a template error comes back as a message, not a crash');
 });
 
+// OFCE-645 asset upload: a binary asset goes to the content-hash store; the draft's config/assets.json
+// manifest gains an entry so it ships + freezes with the theme on publish.
+const uploadAsset = (
+  headers: Record<string, string>,
+  path: string,
+  file: File | null,
+  route = `/stores/${ID}/theme/bundle/assets`
+) => {
+  const fd = new FormData();
+  fd.append('path', path);
+  if (file) fd.append('file', file);
+  return app.fetch(new Request('http://cp' + route, { method: 'POST', headers, body: fd }));
+};
+
+test('upload a binary asset → stored in the content-hash store + added to the draft manifest', async () => {
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]); // pretend-PNG
+  const res = await uploadAsset(
+    alice,
+    'images/logo.png',
+    new File([bytes], 'logo.png', { type: 'image/png' })
+  );
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as {
+    ok: boolean;
+    path: string;
+    asset: { hash: string; contentType: string; size: number };
+  };
+  assert.strictEqual(body.path, 'images/logo.png');
+  assert.strictEqual(body.asset.contentType, 'image/png');
+  assert.strictEqual(body.asset.size, bytes.byteLength);
+  // The bytes are retrievable from the content-hash store.
+  const back = await store.getAsset({ themeId: MAIN, tenantId: ID }, body.asset.hash);
+  assert.ok(back && Buffer.from(back).equals(Buffer.from(bytes)), 'bytes stored + retrievable');
+  // The draft manifest (config/assets.json) gained the entry — so it ships with the theme.
+  const overrides = await store.readDraft({ themeId: MAIN, tenantId: ID });
+  const manifest = JSON.parse(overrides['config/assets.json']) as Record<string, unknown>;
+  assert.deepStrictEqual(manifest['images/logo.png'], body.asset);
+  // A second upload to a different path co-exists in the manifest (read-modify-write, not clobber).
+  await uploadAsset(
+    alice,
+    'favicon.ico',
+    new File([new Uint8Array([1, 2])], 'favicon.ico', { type: 'image/x-icon' })
+  );
+  const overrides2 = await store.readDraft({ themeId: MAIN, tenantId: ID });
+  const manifest2 = JSON.parse(overrides2['config/assets.json']) as Record<string, unknown>;
+  assert.ok(manifest2['images/logo.png'] && manifest2['favicon.ico'], 'both assets kept');
+});
+
+test('upload rejects a scriptable content-type (415) — no stored-XSS surface', async () => {
+  const svg = new File(['<svg onload="alert(1)"/>'], 'x.svg', { type: 'image/svg+xml' });
+  const res = await uploadAsset(alice, 'x.svg', svg);
+  assert.strictEqual(res.status, 415);
+  const html = new File(['<script>alert(1)</script>'], 'x.html', { type: 'text/html' });
+  assert.strictEqual((await uploadAsset(alice, 'x.html', html)).status, 415);
+});
+
+test('upload rejects a traversal / reserved asset path (400)', async () => {
+  const f = () => new File([new Uint8Array([1])], 'x.png', { type: 'image/png' });
+  assert.strictEqual((await uploadAsset(alice, '../evil.png', f())).status, 400);
+  assert.strictEqual((await uploadAsset(alice, '/abs.png', f())).status, 400);
+  assert.strictEqual((await uploadAsset(alice, '__proto__', f())).status, 400);
+});
+
+test('upload rejects a missing file (400) and an oversize file (413)', async () => {
+  assert.strictEqual((await uploadAsset(alice, 'a.png', null)).status, 400);
+  const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'big.png', { type: 'image/png' });
+  assert.strictEqual((await uploadAsset(alice, 'big.png', big)).status, 413);
+});
+
+test('a 2 MB asset (over the global 1 MB body limit) uploads — the asset routes get a higher limit', async () => {
+  // The global bodyLimit is 1 MB; a real font/image commonly exceeds that. The asset routes must carry
+  // up to MAX_ASSET_BYTES, so this proves the per-route limit override actually takes effect (before the
+  // fix, the global limiter 413'd this before the handler ran).
+  const bytes = new Uint8Array(2 * 1024 * 1024).fill(7);
+  const res = await uploadAsset(
+    alice,
+    'big.png',
+    new File([bytes], 'big.png', { type: 'image/png' })
+  );
+  assert.strictEqual(res.status, 200, 'assets above the global 1 MB limit are allowed');
+  const body = (await res.json()) as { asset: { size: number } };
+  assert.strictEqual(body.asset.size, bytes.byteLength);
+});
+
+test('a non-member cannot upload an asset (403)', async () => {
+  const res = await uploadAsset(
+    bob,
+    'a.png',
+    new File([new Uint8Array([1])], 'a.png', { type: 'image/png' })
+  );
+  assert.strictEqual(res.status, 403);
+});
+
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 400);

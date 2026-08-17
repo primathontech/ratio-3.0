@@ -27,6 +27,9 @@ import {
   layoutOwnsDocument,
   StubResolver,
   DraftConflict,
+  bundleId,
+  readAssetManifest,
+  writeAssetManifest,
 } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
 import { storefrontHead, resolveThemeTokens, tokenCss } from '@ratio/builder-core';
@@ -142,6 +145,15 @@ const bundleThemes = config.bundleStore
   ? new BundleThemeStore(new S3ObjectStore(config.bundleStore))
   : null;
 const mainThemeId = (tenantId: string) => `${tenantId}-main`;
+
+// Binary asset upload limits (OFCE-645). MAX_ASSET_BYTES is the exact per-file cap the upload handler
+// enforces; the request-body limit is a bit higher to leave room for multipart overhead (the boundary
+// + the `path` field). isAssetUploadPath lets the global 1 MB body limit step aside for exactly these
+// two routes — everything else stays at 1 MB.
+const MAX_ASSET_BYTES = 5 * 1024 * 1024;
+const ASSET_UPLOAD_BODY_LIMIT = MAX_ASSET_BYTES + 64 * 1024;
+const isAssetUploadPath = (path: string) =>
+  /\/theme\/bundle\/assets$/.test(path) || /\/themes\/[^/]+\/assets$/.test(path);
 
 // Tenant isolation for the multi-theme routes: a theme id is a global, guessable string, so every
 // theme-scoped route must prove the theme actually belongs to the store in the path — otherwise a
@@ -450,15 +462,20 @@ export function createApp(
   // preflight OPTIONS isn't rejected by the 401 gate.
   const origins = (process.env.ADMIN_CORS_ORIGIN || '*').split(',').map((o) => o.trim());
   app.use('*', cors({ origin: origins.length === 1 ? origins[0] : origins }));
-  // Cap request bodies so a member can't PUT a multi-MB pageConfig (storage/render abuse) or
-  // exhaust memory (L11). 1 MB is generous for a page document.
-  app.use(
-    '*',
-    bodyLimit({
-      maxSize: 1024 * 1024,
-      onError: (c) => c.json({ error: 'request body too large' }, 413),
-    })
-  );
+  // Cap request bodies so a member can't PUT a multi-MB pageConfig (storage/render abuse) or exhaust
+  // memory (L11). 1 MB is generous for a page document. The binary-asset upload routes are the ONE
+  // exception — they carry a file up to MAX_ASSET_BYTES plus multipart overhead — so they get a higher
+  // limit here; the upload handler still enforces the exact per-file cap. Without this, the global 1 MB
+  // limit would 413 every asset over 1 MB before the route is even reached.
+  const smallBody = bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: (c) => c.json({ error: 'request body too large' }, 413),
+  });
+  const assetBody = bodyLimit({
+    maxSize: ASSET_UPLOAD_BODY_LIMIT,
+    onError: (c) => c.json({ error: 'request body too large' }, 413),
+  });
+  app.use('*', (c, next) => (isAssetUploadPath(c.req.path) ? assetBody : smallBody)(c, next));
 
   // /webhooks/commerce is public (gokwik calls it) — verified by HMAC signature, not Clerk.
   app.use(
@@ -979,7 +996,78 @@ export function createApp(
     return c.json({ ok: true, files, revision });
   }
 
+  // Upload a binary theme asset (OFCE-645) into the theme's DRAFT. The bytes go to the content-hash
+  // asset store; the draft's config/assets.json manifest gains an entry (path → hash/type/size), so the
+  // asset ships + freezes with the theme on the next publish. A member edit (like draft-save).
+  //
+  // HARD content-type allowlist — only non-scriptable image/font types. svg/html/js are REJECTED: they
+  // would be served from the storefront origin and, with an attacker-chosen MIME, could execute as
+  // stored XSS. The origin also serves assets with X-Content-Type-Options: nosniff (PR3) as defense in
+  // depth. contentType comes from the multipart part and is the merchant's claim — the allowlist is the
+  // gate; a mislabeled file just renders broken, never runs.
+  const ASSET_CONTENT_TYPES = new Set([
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'image/avif',
+    'image/x-icon',
+    'image/vnd.microsoft.icon',
+    'font/woff2',
+  ]);
+  // A safe relative asset path the theme references: dot/word segments, no leading slash, no traversal.
+  const ASSET_PATH_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
+  // '.'/'..' are path navigation (meaningless + traversal-shaped as asset names); __proto__/constructor
+  // /prototype are prototype-pollution vectors as manifest keys. The regex allows dots (for extensions),
+  // so these must be rejected as whole SEGMENTS explicitly.
+  const RESERVED_SEG = new Set(['.', '..', '__proto__', 'constructor', 'prototype']);
+
+  async function uploadAsset(c: Context<Vars>, themeId: string, ensure?: () => Promise<void>) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
+    const form = await c.req.parseBody().catch(() => null);
+    const file = form?.['file'];
+    const path = String(form?.['path'] ?? '').trim();
+    if (!(file instanceof File))
+      return c.json({ error: 'file is required (multipart form-data)' }, 400);
+    if (!ASSET_PATH_RE.test(path) || path.split('/').some((seg) => RESERVED_SEG.has(seg)))
+      return c.json({ error: 'invalid asset path' }, 400);
+    if (!ASSET_CONTENT_TYPES.has(file.type))
+      return c.json({ error: `unsupported content-type '${file.type}'` }, 415);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    if (bytes.byteLength === 0) return c.json({ error: 'empty file' }, 400);
+    if (bytes.byteLength > MAX_ASSET_BYTES)
+      return c.json({ error: `file exceeds ${MAX_ASSET_BYTES} bytes` }, 413);
+
+    if (ensure) await ensure();
+    const ref = { themeId, tenantId: id };
+    const entry = await themes.putAsset(ref, bytes, file.type);
+    // Read-modify-write the draft manifest under optimistic concurrency: derive the expected revision
+    // from the SAME overrides we read (never a second read that could race), and retry a couple times
+    // if a concurrent draft-save moved it — so an upload can't silently clobber a code edit.
+    for (let attempt = 0; ; attempt++) {
+      const overrides = await themes.readDraft(ref);
+      const manifest = readAssetManifest(overrides);
+      manifest[path] = entry;
+      const next = writeAssetManifest(overrides, manifest);
+      try {
+        await themes.saveDraft(ref, next, { expectedRevision: bundleId(overrides) });
+        break;
+      } catch (e) {
+        if (e instanceof DraftConflict && attempt < 2) continue;
+        if (e instanceof DraftConflict)
+          return c.json({ error: 'conflict', currentRevision: e.actual }, 409);
+        throw e;
+      }
+    }
+    c.set('auditTenant', id);
+    return c.json({ ok: true, path, asset: entry });
+  }
+
   // Legacy one-theme-per-store mounts (back-compat: the current editor + its tests). themeId = default.
+  app.post('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
+    uploadAsset(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
+  );
   app.put('/stores/:id/theme/bundle/draft', requireMembership, (c) =>
     draftPut(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
   );
@@ -1116,6 +1204,10 @@ export function createApp(
   app.post('/stores/:id/themes/:themeId/reset', requireMembership, async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
     return resetBundle(c, c.req.param('themeId'));
+  });
+  app.post('/stores/:id/themes/:themeId/assets', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return uploadAsset(c, c.req.param('themeId'));
   });
   app.post('/stores/:id/themes/:themeId/publish', requireRole('owner'), async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
