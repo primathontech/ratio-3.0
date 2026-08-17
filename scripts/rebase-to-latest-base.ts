@@ -79,25 +79,16 @@ function bundleStoreFromEnv() {
         console.log(label);
         continue;
       }
-      // Bump the base pin, then republish base@latest ⊕ overrides. If publish fails, put the pin BACK
-      // so a re-run RETRIES this store — otherwise it would read as 'already latest' and be skipped
-      // forever, with no new version ever cut (base_version alone is the idempotency marker).
-      await pool.query('UPDATE theme SET base_version = $2 WHERE id = $1', [r.id, latest]);
-      try {
-        // Only flip the live pointer for a theme that IS the store's live one — never switch a store
-        // that has activated a different theme. The rebase still cuts a version either way.
-        const { version } = await store.publish(
-          { themeId: r.id, tenantId: r.tenant_id },
-          { compile: identity, makeLive: isLive }
-        );
-        ok++;
-        console.log(`${label} → v${version} ✓`);
-      } catch (e) {
-        await pool
-          .query('UPDATE theme SET base_version = $2 WHERE id = $1', [r.id, r.base_version])
-          .catch(() => {});
-        throw e;
-      }
+      // Bump the base pin + republish base@latest ⊕ overrides via the tested primitive: it moves the
+      // live pointer only for the store's live theme (never hijack a store that activated another
+      // theme), and restores the pin on failure so a re-run retries this store rather than skipping it
+      // forever as 'already latest' (base_version is the idempotency marker).
+      const { version, madeLive } = await store.rebaseToBase(r.tenant_id, r.id, {
+        compile: identity,
+        toVersion: latest,
+      });
+      ok++;
+      console.log(`${label} → v${version}${madeLive ? ' (live)' : ''} ✓`);
     } catch (e) {
       console.error(`  ${r.name} (${r.id}): FAILED — ${(e as Error).message}`);
     }
