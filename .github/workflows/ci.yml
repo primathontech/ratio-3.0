@@ -166,13 +166,34 @@ jobs:
             --arg GOKWIK_CURRENCY_FORMAT       "${{ vars.GOKWIK_CURRENCY_FORMAT }}" \
             --arg DATABASE_URL                 "${{ secrets.DATABASE_URL }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
+          # admin-api needs the SAME commerce backend URLs — its onboarding collection picker and
+          # theme-preview resolver call the catalogue directly; without them /collections is empty and
+          # the preview falls back to StubResolver sample products. It also needs the Cloudflare SaaS
+          # zone/fallback that cfConfig() fails closed on in prod (edge purge + custom-domain routes).
+          # These come from repo variables like the commerce/gokwik ones and are NOT defaulted here:
+          # an unset CF_SAAS_* is filtered out (select .value != "") so cfConfig() still fails LOUD on
+          # a misconfigured deploy rather than silently using the wrong zone. Re-applied every roll; the
+          # jq merge only REPLACES these names, so admin-api's inherited DATABASE_URL / BUNDLE_S3_* /
+          # taskRoleArn stay untouched.
+          ADMIN_ENV=$(jq -cn \
+            --arg COMMERCE_PRODUCT_API_URL   "${{ vars.COMMERCE_PRODUCT_API_URL }}" \
+            --arg COMMERCE_CART_API_URL      "${{ vars.COMMERCE_CART_API_URL }}" \
+            --arg COMMERCE_ORDER_API_URL     "${{ vars.COMMERCE_ORDER_API_URL }}" \
+            --arg COMMERCE_NAV_API_URL       "${{ vars.COMMERCE_NAV_API_URL }}" \
+            --arg CF_SAAS_ZONE               "${{ vars.CF_SAAS_ZONE }}" \
+            --arg CF_SAAS_FALLBACK           "${{ vars.CF_SAAS_FALLBACK }}" \
+            '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
             CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
               --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
             echo "rolling ${SVC##*/}: $CUR_TD -> $NEW_IMAGE"
-            # Only the origin gets the storefront env; admin-api keeps its own env untouched.
-            case "${SVC##*/}" in *origin*) OV="$ORIGIN_ENV" ;; *) OV='[]' ;; esac
+            # origin gets the storefront env; admin-api gets commerce + CF SaaS; else untouched.
+            case "${SVC##*/}" in
+              *admin*) OV="$ADMIN_ENV" ;;
+              *origin*) OV="$ORIGIN_ENV" ;;
+              *) OV='[]' ;;
+            esac
             aws ecs describe-task-definition --task-definition "$CUR_TD" \
               --query 'taskDefinition' --output json \
             | jq --arg img "$NEW_IMAGE" --argjson ov "$OV" '
