@@ -3,6 +3,7 @@
 
 // Theme bundle system (base ⊕ overrides → S3 → compile)
 export * from './theme/bundle';
+export * from './theme/assets';
 export * from './theme/theme-compose';
 export * from './theme/theme-render';
 export * from './theme/theme-tokens';

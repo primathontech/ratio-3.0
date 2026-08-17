@@ -4,6 +4,7 @@
 // Publish records the version + flips the store's live pointer (Postgres); loadLiveCompiled is the
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
+import { assetHash, isAssetHash, type AssetEntry } from './assets';
 import { composeTheme, diffFromBase } from './theme-compose';
 import { tenantTag } from '../tags';
 import type { ObjectStore } from '@ratio/data-objects';
@@ -77,6 +78,14 @@ const sourceKey = (tenantId: string, themeId: string, hash: string) =>
   `${themeBase(tenantId, themeId)}/published/source/${hash}.gz`;
 const compiledKey = (tenantId: string, themeId: string, hash: string) =>
   `${themeBase(tenantId, themeId)}/published/compiled/${hash}.gz`;
+// Raw immutable asset bytes (NOT gzipped — images/fonts/favicons are already compressed) under the
+// theme's own prefix, content-hash keyed. Shared across a theme's versions (dedup); a publish freezes
+// WHICH hashes it references via the manifest, never the bytes. The hash is validated (it can arrive
+// from a merchant-editable manifest) so it can never traverse out of the theme's asset prefix.
+const assetObjectKey = (tenantId: string, themeId: string, hash: string) => {
+  if (!isAssetHash(hash)) throw new Error(`invalid asset hash '${hash}'`);
+  return `${themeBase(tenantId, themeId)}/assets/${hash}`;
+};
 
 // A tiny insertion-ordered LRU. Compiled bundles are content-addressed (immutable), so caching them
 // by hash is always safe — a repeat load skips the object-store round-trip (LLD BC3). Values are
@@ -113,6 +122,25 @@ export class ThemeStore {
     assertThemeId(ref.themeId);
     const blob = await this.objects.get(draftKey(ref.tenantId, ref.themeId));
     return blob ? unpackBundle(Buffer.from(blob)) : {};
+  }
+
+  // Store a binary theme asset (OFCE-631): content-address the bytes and put them under the theme's
+  // asset prefix, returning the manifest entry the caller records in config/assets.json. Idempotent —
+  // identical bytes hash to the same key, so a re-upload just rewrites the same object. The bytes live
+  // OUTSIDE the text bundle; only the manifest entry (hash + contentType + size) rides the bundle.
+  async putAsset(ref: ThemeRef, bytes: Uint8Array, contentType: string): Promise<AssetEntry> {
+    assertThemeId(ref.themeId);
+    const hash = assetHash(bytes);
+    await this.objects.put(assetObjectKey(ref.tenantId, ref.themeId, hash), bytes, { contentType });
+    return { hash, contentType, size: bytes.byteLength };
+  }
+
+  // Load an asset's raw bytes by content hash (the origin serves them with the manifest's contentType),
+  // or null when absent. The hash is validated in assetObjectKey — a malformed hash throws (a loud
+  // guard) rather than escaping the theme's prefix; the manifest only ever holds valid hashes.
+  async getAsset(ref: ThemeRef, hash: string): Promise<Uint8Array | null> {
+    assertThemeId(ref.themeId);
+    return this.objects.get(assetObjectKey(ref.tenantId, ref.themeId, hash));
   }
 
   // Write the whole editable draft as one source bundle; returns its content hash. With
