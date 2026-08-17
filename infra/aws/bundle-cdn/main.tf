@@ -6,6 +6,17 @@ terraform {
       version = "~> 5.0"
     }
   }
+  # Remote state (created out-of-band): versioned S3 bucket + DynamoDB lock. Backend blocks CANNOT
+  # interpolate var.environment, so the key is a hardcoded literal — a staging/prod stack MUST edit
+  # this key (e.g. bundle-cdn/staging/…) and `terraform init -reconfigure` before applying, or it
+  # would clobber dev's state while creating differently-named resources.
+  backend "s3" {
+    bucket         = "ratio3-tf-state"
+    key            = "bundle-cdn/dev/terraform.tfstate"
+    region         = "ap-south-1"
+    dynamodb_table = "ratio3-tf-lock"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
@@ -21,6 +32,11 @@ locals {
 # via the S3 API using the ECS task role; never public.
 resource "aws_s3_bucket" "bundles" {
   bucket = local.bucket
+
+  # Holds every store's live theme bundles — a destroy/replace would drop all published themes.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "bundles" {
@@ -46,15 +62,17 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "bundles" {
 # through CloudFront — publish is a direct S3 PutObject via the task role.
 resource "aws_cloudfront_origin_access_control" "bundles" {
   name                              = "${local.bucket}-oac"
+  description                       = "OAC for ratio3 bundle themes (${var.environment})"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
 resource "aws_cloudfront_distribution" "bundles" {
-  enabled     = true
-  comment     = "Ratio 3.0 bundle themes (${var.environment})"
-  price_class = "PriceClass_100"
+  enabled         = true
+  is_ipv6_enabled = true
+  comment         = "Ratio 3.0 bundle themes (${var.environment})"
+  price_class     = "PriceClass_100"
 
   origin {
     domain_name              = aws_s3_bucket.bundles.bucket_regional_domain_name
@@ -64,11 +82,11 @@ resource "aws_cloudfront_distribution" "bundles" {
 
   default_cache_behavior {
     target_origin_id       = "bundles-s3"
-    viewer_protocol_policy  = "redirect-to-https"
-    allowed_methods         = ["GET", "HEAD"]
-    cached_methods          = ["GET", "HEAD"]
-    compress                = true
-    cache_policy_id         = "658327ea-f89d-4fab-a63d-7e88639e58f6" # AWS-managed CachingOptimized
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # AWS-managed CachingOptimized
   }
 
   restrictions {
@@ -79,6 +97,11 @@ resource "aws_cloudfront_distribution" "bundles" {
 
   viewer_certificate {
     cloudfront_default_certificate = true
+  }
+
+  # The store CDN domain is baked into origins' BUNDLE_CDN_URL — a replace would change it + break reads.
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -105,23 +128,26 @@ resource "aws_s3_bucket_policy" "bundles" {
   policy = data.aws_iam_policy_document.bucket.json
 }
 
-# ── IAM: the ECS task role(s) read+write the bucket via the S3 API ───────────
-# This is what actually makes onboarding work today (admin-api publish + origin render). Minimal
-# actions — the code only uses Get/Put/Delete (+ Head, covered by Get); it never lists.
+# ── IAM: the ECS task role reads+writes the bucket via the S3 API ────────────
+# This is what makes onboarding work (admin-api publish + origin render). Objects are Get/Put/Delete;
+# ListBucket on the bucket itself is ALSO required — a HeadObject on a not-yet-existing key returns
+# AccessDenied (not 404) without it, which breaks publish. Attached inline to the shared ECS task role
+# (origin + admin-api both run as it).
 data "aws_iam_policy_document" "task" {
   statement {
+    sid       = "BundleStoreObjects"
     actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
     resources = ["${aws_s3_bucket.bundles.arn}/*"]
   }
+  statement {
+    sid       = "BundleStoreListForHead"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.bundles.arn]
+  }
 }
 
-resource "aws_iam_policy" "task" {
+resource "aws_iam_role_policy" "task" {
   name   = "ratio3-bundle-store-${var.environment}"
+  role   = var.task_role_name
   policy = data.aws_iam_policy_document.task.json
-}
-
-resource "aws_iam_role_policy_attachment" "task" {
-  for_each   = toset(var.task_role_names)
-  role       = each.value
-  policy_arn = aws_iam_policy.task.arn
 }
