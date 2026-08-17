@@ -49,7 +49,7 @@ const ASSET_THEME_CSS = 'assets/theme.css';
 // serves it at (`/assets/<hash>` — content-addressed, so immutable + CDN-cacheable). Derived from the
 // theme's own manifest (config/assets.json) and injected into every section + the layout render context,
 // so `{{ 'logo.png' | asset_url }}` resolves to the served URL. Empty when the theme has no assets.
-function assetUrlMap(compiled: ThemeFiles): Record<string, string> {
+export function assetUrlMap(compiled: ThemeFiles): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [path, entry] of Object.entries(readAssetManifest(compiled))) {
     out[path] = `/assets/${entry.hash}`;
