@@ -9,6 +9,7 @@ import {
   renderThemePage,
   type SectionRenderer,
   type PlatformRenderer,
+  type LayoutContext,
 } from '../theme/theme-render';
 import type { BindingResolver } from '../commerce/resolve';
 import type { ThemeFiles } from '../theme/bundle';
@@ -158,4 +159,108 @@ test('no layout → the composed sections are the whole body (origin supplies th
   const compiled = bundle([{ type: 'hero', data: { hero: { heading: 'Bare' } } }]);
   const { html } = await renderThemePage(compiled, 'index', { theme: trusted });
   assert.equal(html, '<section class="hero"><h1>Bare</h1></section>');
+});
+
+// OFCE-630 full theme ownership: the layout owns the WHOLE document — <head> (title, CSS, the
+// content_for_header platform slice) and <body> (chrome + content_for_layout). renderThemePage feeds
+// the layout a richer context: the design-system CSS (assets/base.css) and merchant CSS
+// (assets/theme.css) are auto-read from the bundle; the origin supplies the platform slice
+// (content_for_header), the rendered chrome (header/footer), the brand token overrides (token_css),
+// and page metadata (page_title) via opts.layout.
+test('the layout owns the whole document: assets, chrome, and the platform slice are injected', async () => {
+  const compiled: ThemeFiles = {
+    'assets/base.css': '.hdr{color:red}',
+    'assets/theme.css': '.hero{font-size:3rem}',
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid':
+      '<!doctype html><html><head><title>{{ page_title | escape }}</title>' +
+      '<style>{{ base_css }}{{ token_css }}{{ theme_css }}</style>{{ content_for_header }}</head>' +
+      '<body>{{ header }}{{ content_for_layout }}{{ footer }}</body></html>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Hi' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    {
+      layout: {
+        content_for_header: '<script src="/assets/islands.abc.js"></script>',
+        header: '<header class="hdr">H</header>',
+        footer: '<footer class="ftr">F</footer>',
+        token_css: ':root{--accent:#f00}',
+        page_title: 'Home',
+      },
+    }
+  );
+  assert.match(html, /^<!doctype html>/);
+  assert.match(html, /<title>Home<\/title>/);
+  assert.match(html, /\.hdr\{color:red\}/); // base_css auto-read from the bundle asset
+  assert.match(html, /\.hero\{font-size:3rem\}/); // theme_css auto-read from the bundle asset
+  assert.match(html, /<script src="\/assets\/islands\.abc\.js"><\/script>/); // the platform slice
+  assert.match(html, /<header class="hdr">H<\/header><h1>Hi<\/h1><footer class="ftr">F<\/footer>/);
+  // Cascade order: base CSS, then brand token overrides, then merchant CSS last (each wins the next).
+  assert.ok(html.indexOf('.hdr{color:red}') < html.indexOf(':root{--accent:#f00}'));
+  assert.ok(html.indexOf(':root{--accent:#f00}') < html.indexOf('.hero{font-size:3rem}'));
+});
+
+test('every CSS string inlined into the layout is guarded against a </style> breakout', async () => {
+  const compiled: ThemeFiles = {
+    'assets/base.css': 'a{}</style><script>base(1)</script>',
+    'assets/theme.css': '.x{}</style><script>merchant(1)</script>',
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid':
+      '<head><style>{{ base_css }}{{ token_css }}{{ theme_css }}</style></head><body>{{ content_for_layout }}</body>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Y' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    { layout: { token_css: ':root{}</style><script>token(1)</script>' } }
+  );
+  // base_css, theme_css (bundle assets) AND token_css (origin-supplied) all neutralized — no breakout.
+  assert.doesNotMatch(
+    html,
+    /<\/style><script/i,
+    'no CSS string can close the <style> and inject markup'
+  );
+});
+
+test('a caller cannot override content_for_layout through opts.layout (runtime guard)', async () => {
+  const compiled: ThemeFiles = {
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid': '<main>{{ content_for_layout }}</main>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Real' } } }],
+    }),
+  };
+  // Cast past the type: LayoutContext excludes content_for_layout, but the runtime must ALSO refuse it
+  // (it is spread first, then content_for_layout is set last) so the composed sections always win.
+  const { html } = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    {
+      layout: { content_for_layout: 'HIJACKED' } as unknown as LayoutContext,
+    }
+  );
+  assert.match(html, /<main><h1>Real<\/h1><\/main>/);
+  assert.doesNotMatch(html, /HIJACKED/);
+});
+
+test('layout slots default to empty when the origin supplies no layout context', async () => {
+  const compiled: ThemeFiles = {
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid':
+      '<head>{{ content_for_header }}</head><body>{{ header }}{{ content_for_layout }}{{ footer }}</body>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'X' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(compiled, 'index', { theme: trusted });
+  assert.equal(html, '<head></head><body><h1>X</h1></body>');
 });
