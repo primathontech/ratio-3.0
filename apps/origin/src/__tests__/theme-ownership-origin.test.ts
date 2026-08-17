@@ -45,6 +45,10 @@ const TA = 'themeown_a';
 const THEMEA = 'themeown_a_main';
 const TB = 'themeown_b';
 const THEMEB = 'themeown_b_main';
+const TC = 'themeown_c'; // a store rebased from a body-only base onto a full-document base
+const THEMEC = 'themeown_c_main';
+const BLIB = '_themeown_lib'; // a base-owning library tenant
+const BASEC = 'themeown_c_base';
 const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, ...extra });
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
@@ -62,14 +66,20 @@ before(async () => {
   } catch {
     await admin.send(new CreateBucketCommand({ Bucket: bucket }));
   }
-  for (const id of [THEMEA, THEMEB]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [TA, TB]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEMEA, THEMEB, THEMEC, BASEC])
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [TA, TB, TC, BLIB]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Owned Store', 'active')", [
     TA,
   ]);
   await pool.query("INSERT INTO tenants (id, name, status) VALUES ($1, 'Legacy Store', 'active')", [
     TB,
   ]);
+  await pool.query("INSERT INTO tenants (id, name) VALUES ($1, 'Rebase Lib')", [BLIB]);
+  await pool.query(
+    "INSERT INTO tenants (id, name, status) VALUES ($1, 'Rebased Store', 'active')",
+    [TC]
+  );
 
   const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
 
@@ -104,14 +114,44 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEMEB, tenantId: TB }, { compile: (s) => s });
+
+  // TC — the Phase-1 migration end-to-end. A base library ships v1 (body-only layout); a store adopts
+  // it + overrides its hero + goes live (so it's on the OLD body-only layout). The base then publishes
+  // v2 (full-document layout), and the store is REBASED onto it. After rebase the origin must render the
+  // store via the layout, with the merchant's hero edit preserved and the new base footer live.
+  const baseSections = {
+    'sections/hero.liquid': '<h1>base hero</h1>',
+    'sections/header.liquid': '<header class="hdr">{{ site_name | escape }}</header>',
+    'sections/footer.liquid': '<footer class="ftr">v2 footer</footer>',
+    'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
+  };
+  await store.ensureTheme(BLIB, BASEC, 'Base');
+  await store.saveDraft(
+    { themeId: BASEC, tenantId: BLIB },
+    { 'layout/theme.liquid': '{{ content_for_layout }}', ...baseSections } // v1: body-only
+  );
+  await store.publish({ themeId: BASEC, tenantId: BLIB }, { compile: (s) => s, makeLive: false });
+  await store.ensureTheme(TC, THEMEC, 'Store', { themeId: BASEC, version: 1 });
+  await store.saveDraft(
+    { themeId: THEMEC, tenantId: TC },
+    { 'sections/hero.liquid': '<h1>MY rebased hero</h1>' }
+  );
+  await store.publish({ themeId: THEMEC, tenantId: TC }, { compile: (s) => s }); // live on v1 body-only
+  await store.saveDraft(
+    { themeId: BASEC, tenantId: BLIB },
+    { 'layout/theme.liquid': FULL_DOC_LAYOUT, ...baseSections } // v2: full document
+  );
+  await store.publish({ themeId: BASEC, tenantId: BLIB }, { compile: (s) => s, makeLive: false });
+  await store.rebaseToBase(TC, THEMEC, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
   if (priorFlag === undefined) delete process.env.THEME_OWNS_DOCUMENT;
   else process.env.THEME_OWNS_DOCUMENT = priorFlag;
-  for (const id of [THEMEA, THEMEB]) await pool.query('DELETE FROM theme WHERE id = $1', [id]);
-  for (const id of [TA, TB]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
+  for (const id of [THEMEA, THEMEB, THEMEC, BASEC])
+    await pool.query('DELETE FROM theme WHERE id = $1', [id]);
+  for (const id of [TA, TB, TC, BLIB]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
 });
 
 test(
@@ -155,6 +195,35 @@ test(
       body,
       /<section class="hero"><h1>Owned<\/h1><\/section>/,
       'sections in content_for_layout'
+    );
+  }
+);
+
+test(
+  'e2e: a store rebased from a body-only base onto a full-document base now renders via the layout',
+  { skip },
+  async () => {
+    const res = await call('/', edge({ 'x-ratio-tenant': TC }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
+    assert.equal(
+      res.headers.get('x-theme-render'),
+      'layout',
+      'after rebase the store renders via the full-document layout'
+    );
+    const body = await res.text();
+    assert.match(body, /^<!doctype html>/i, 'a full document');
+    assert.equal((body.match(/<html/gi) ?? []).length, 1, 'not double-wrapped');
+    assert.match(
+      body,
+      /<h1>MY rebased hero<\/h1>/,
+      'the merchant edit is preserved through the rebase'
+    );
+    assert.match(body, /<footer class="ftr">v2 footer<\/footer>/, 'the new base footer is live');
+    assert.match(
+      body,
+      /<header class="hdr">Rebased Store<\/header>/,
+      'chrome from the rebased base, placed by the layout'
     );
   }
 );

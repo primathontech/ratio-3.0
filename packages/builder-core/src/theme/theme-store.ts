@@ -528,6 +528,107 @@ export class ThemeStore {
     }
   }
 
+  // Rebase a store's theme onto a newer version of the base it tracks (OFCE-640): point the theme at
+  // the target base version (default: the base's latest published version), then republish — so the
+  // frozen compiled bundle recomposes base@new ⊕ the store's overrides. Overrides are file-level, so
+  // the merchant's edited files win and every file they DIDN'T touch (e.g. layout/theme.liquid) advances
+  // to the new base. This is how live stores migrate onto a new base — the full-document layout —
+  // without losing customizations. The live pointer moves ONLY if this theme is the store's CURRENT live
+  // theme (never hijack a store that activated a different theme). Refuses a root theme (nothing to
+  // rebase). A failed publish restores the base pin so a retry isn't skipped as 'already latest'.
+  async rebaseToBase(
+    tenantId: string,
+    themeId: string,
+    opts: { compile: CompileFn; toVersion?: number; by?: string }
+  ): Promise<{ version: number; baseVersion: number; madeLive: boolean }> {
+    assertThemeId(themeId);
+    const { rows } = await pool.query<{
+      base_theme_id: string | null;
+      base_version: number | null;
+    }>('SELECT base_theme_id, base_version FROM theme WHERE id = $1 AND tenant_id = $2', [
+      themeId,
+      tenantId,
+    ]);
+    const row = rows[0];
+    if (!row) throw new Error(`unknown theme '${themeId}' in tenant '${tenantId}'`);
+    if (!row.base_theme_id)
+      throw new Error(`theme '${themeId}' tracks no base (nothing to rebase)`);
+    const prevBaseVersion = row.base_version;
+
+    let target = opts.toVersion;
+    if (target == null) {
+      const max = await pool.query<{ v: number | null }>(
+        'SELECT MAX(version) AS v FROM theme_bundle_version WHERE theme_id = $1',
+        [row.base_theme_id]
+      );
+      if (max.rows[0].v == null)
+        throw new Error(`base '${row.base_theme_id}' has no published version`);
+      target = Number(max.rows[0].v);
+    } else {
+      const exists = await pool.query(
+        'SELECT 1 FROM theme_bundle_version WHERE theme_id = $1 AND version = $2',
+        [row.base_theme_id, target]
+      );
+      if (exists.rowCount === 0)
+        throw new Error(`base '${row.base_theme_id}' has no version ${target}`);
+    }
+
+    // Refuse to rebase a theme whose DRAFT has unpublished changes: publish freezes the draft, so
+    // rebasing a mid-edit theme would ship the merchant's in-progress work alongside the base bump —
+    // a side effect the migration never asked for. A theme is "clean" when its draft overrides hash
+    // matches its latest published source. Skip the dirty ones (the bulk script logs + moves on) so
+    // they can be rebased by hand once the merchant publishes or resets. (First-publish themes with no
+    // version yet are always clean — nothing shipped to diverge from.)
+    const latestPub = await pool.query<{ source_hash: string }>(
+      'SELECT source_hash FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC LIMIT 1',
+      [themeId]
+    );
+    if (latestPub.rows[0]) {
+      const draftHash = bundleId(await this.readDraft({ themeId, tenantId }));
+      if (draftHash !== latestPub.rows[0].source_hash)
+        throw new Error(
+          `theme '${themeId}' has unpublished draft changes; publish or reset the draft before rebasing`
+        );
+    }
+
+    // The live pointer moves only if this theme is the store's CURRENT live one. This is read outside
+    // publish's transaction (a precomputed boolean), so a merchant switching their live theme in the
+    // narrow window before publish commits could have it forced back — accepted for a single-operator
+    // migration in this pre-launch env; not worth reshaping the shared publish() primitive for.
+    const liveRow = await pool.query<{ live: string | null }>(
+      'SELECT live_theme_id AS live FROM tenants WHERE id = $1',
+      [tenantId]
+    );
+    const makeLive = liveRow.rows[0]?.live === themeId;
+
+    // Point the theme at the new base version (CAS on the old value: if a concurrent rebase already
+    // moved it, abort rather than fight), then republish (freeze base@new ⊕ overrides).
+    const bumped = await pool.query(
+      'UPDATE theme SET base_version = $3 WHERE id = $1 AND tenant_id = $2 AND base_version = $4',
+      [themeId, tenantId, target, prevBaseVersion]
+    );
+    if (bumped.rowCount === 0)
+      throw new Error(`theme '${themeId}' base_version changed concurrently; rerun the rebase`);
+    try {
+      const { version } = await this.publish(
+        { themeId, tenantId },
+        { compile: opts.compile, makeLive, by: opts.by }
+      );
+      return { version, baseVersion: target, madeLive: makeLive };
+    } catch (e) {
+      // Restore the pin so a re-run RETRIES this store instead of reading it as 'already latest' and
+      // skipping it forever (base_version is the idempotency marker) — no version ever cut otherwise.
+      // CAS on our own target so we never clobber a writer that moved it after our bump.
+      await pool
+        .query(
+          'UPDATE theme SET base_version = $3 WHERE id = $1 AND tenant_id = $2 AND base_version = $4',
+          [themeId, tenantId, prevBaseVersion, target]
+        )
+        .catch(() => {});
+      throw e;
+    }
+  }
+
   // Roll the tenant back to an earlier published version of its current live theme — an instant
   // pointer move (the immutable bundles are all still in S3). Verifies the version exists.
   async rollback(tenantId: string, version: number): Promise<void> {
