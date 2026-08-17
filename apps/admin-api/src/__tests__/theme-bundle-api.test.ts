@@ -419,6 +419,48 @@ test('preview wraps sections in the storefront head with the theme brand tokens 
   );
 });
 
+test('preview (OFCE-630 full ownership): a full-document layout draft renders from the theme layout', async () => {
+  // Flag on + the draft carries a full-document layout → the preview renders THAT layout (no TS shell
+  // double-wrap), mirroring the origin. Env is toggled only for this test and restored in finally.
+  const prior = process.env.THEME_OWNS_DOCUMENT;
+  process.env.THEME_OWNS_DOCUMENT = '1';
+  try {
+    const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
+      files: {
+        'layout/theme.liquid':
+          '<!doctype html><html><head><title>{{ site_name | escape }}</title>' +
+          '<style>{{ base_css }}{{ token_css }}{{ theme_css }}</style></head>' +
+          '<body>{{ header }}{{ content_for_layout }}{{ footer }}</body></html>',
+        'assets/base.css': '.probe{color:#0a0a0a}',
+        'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
+        'templates/index.json': JSON.stringify({
+          sections: [{ type: 'hero', data: { heading: 'Owned' } }],
+        }),
+        'sections/hero.liquid': '<h1>{{ heading }}</h1>',
+      },
+      page: 'index',
+    });
+    assert.strictEqual(res.status, 200);
+    const body = (await res.json()) as { html?: string };
+    assert.ok(body.html?.startsWith('<!doctype html>'), 'a full document');
+    assert.strictEqual((body.html?.match(/<html/gi) ?? []).length, 1, 'not double-wrapped');
+    assert.ok(
+      body.html?.includes('.probe{color:#0a0a0a}'),
+      'the theme base.css is inlined by the layout'
+    );
+    assert.ok(body.html?.includes('--radius:18px'), 'origin token_css is placed by the layout');
+    assert.ok(body.html?.includes('<h1>Owned</h1>'), 'the section renders in content_for_layout');
+    assert.strictEqual(
+      (body.html?.match(/<header class="hdr">/g) ?? []).length,
+      1,
+      'exactly one header (placed by the layout), no shell double-wrap'
+    );
+  } finally {
+    if (prior === undefined) delete process.env.THEME_OWNS_DOCUMENT;
+    else process.env.THEME_OWNS_DOCUMENT = prior;
+  }
+});
+
 test('preview surfaces a render error as { error } (200, not a 500)', async () => {
   const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
     files: { 'layout/theme.liquid': '<html></html>' }, // no templates/index.json → render throws

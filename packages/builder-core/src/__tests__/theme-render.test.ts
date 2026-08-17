@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
 import {
   renderThemePage,
+  layoutOwnsDocument,
   type SectionRenderer,
   type PlatformRenderer,
   type LayoutContext,
@@ -250,6 +251,67 @@ test('a caller cannot override content_for_layout through opts.layout (runtime g
   );
   assert.match(html, /<main><h1>Real<\/h1><\/main>/);
   assert.doesNotMatch(html, /HIJACKED/);
+});
+
+test('layoutOwnsDocument detects a full document by its START, not a stray substring', () => {
+  // Real full documents → true (leading whitespace + case tolerated).
+  assert.equal(layoutOwnsDocument('<!doctype html><html>...'), true);
+  assert.equal(layoutOwnsDocument('\n  <!DOCTYPE HTML>\n<html>'), true);
+  assert.equal(layoutOwnsDocument('<html lang="en">...'), true);
+  // Body-only layouts → false, EVEN when the source mentions <!doctype/<html elsewhere (a comment or a
+  // pasted example) — the check is anchored to the start so a stray substring can't flip the mode.
+  assert.equal(layoutOwnsDocument('{{ content_for_layout }}'), false);
+  assert.equal(
+    layoutOwnsDocument(
+      '{% comment %}wrap me in <!doctype html><html>{% endcomment %}\n{{ content_for_layout }}'
+    ),
+    false,
+    'a <!doctype inside a comment must NOT count as owning the document'
+  );
+  assert.equal(layoutOwnsDocument(''), false);
+  assert.equal(layoutOwnsDocument(undefined), false);
+});
+
+test('applyLayout:false returns sections only, skipping a full-document layout', async () => {
+  // The origin uses this in legacy (flag-off) mode: even a full-document layout must NOT be applied,
+  // so the TS shell never double-wraps it. The sections come back bare, exactly as a no-layout theme.
+  const compiled: ThemeFiles = {
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid': '<!doctype html><html><body>{{ content_for_layout }}</body></html>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Bare' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    { applyLayout: false }
+  );
+  assert.equal(
+    html,
+    '<h1>Bare</h1>',
+    'the layout is skipped; only the composed sections come back'
+  );
+});
+
+test('content_for_body_end is injected before the layout closes the body', async () => {
+  const compiled: ThemeFiles = {
+    'sections/hero.liquid': '<h1>{{ hero.heading | escape }}</h1>',
+    'layout/theme.liquid': '<body>{{ content_for_layout }}{{ content_for_body_end }}</body>',
+    'templates/index.json': JSON.stringify({
+      sections: [{ type: 'hero', data: { hero: { heading: 'Z' } } }],
+    }),
+  };
+  const { html } = await renderThemePage(
+    compiled,
+    'index',
+    { theme: trusted },
+    {
+      layout: { content_for_body_end: '<script src="/gokwik.js"></script>' },
+    }
+  );
+  assert.equal(html, '<body><h1>Z</h1><script src="/gokwik.js"></script></body>');
 });
 
 test('layout slots default to empty when the origin supplies no layout context', async () => {

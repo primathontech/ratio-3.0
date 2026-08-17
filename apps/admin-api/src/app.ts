@@ -23,11 +23,13 @@ import { PgPageStore } from '@ratio/builder-core';
 import {
   ThemeStore as BundleThemeStore,
   renderThemePage,
+  renderThemeLayout,
+  layoutOwnsDocument,
   StubResolver,
   DraftConflict,
 } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
-import { storefrontHead, resolveThemeTokens } from '@ratio/builder-core';
+import { storefrontHead, resolveThemeTokens, tokenCss } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
 import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
@@ -210,25 +212,35 @@ async function renderThemePreview(
           return renderSection(rec, data);
         },
       },
-      { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce } }
+      // Body only — the layout is applied below (or the TS shell wraps it), matching the origin so the
+      // preview is a faithful whole-page view.
+      { resolver, ctx: { tenantId, routeParams: {}, commerce: ctxCommerce }, applyLayout: false }
     ),
     fetchMainMenu(merchantId, navUrl),
     fetchFooter(merchantId, navUrl),
   ]);
-  // Mirror EXACTLY what the origin serves (apps/origin/src/index.ts): doctype + <head> with the
-  // design-system CSS + per-theme brand tokens + the theme's own assets/theme.css, and the header/
-  // footer rendered from the theme's editable sections (renderChrome) around the body. So the preview
-  // is a faithful whole-page view — a merchant's edited header/footer/CSS shows here as it will live.
-  const head = storefrontHead(
-    resolveThemeTokens(files, (theme ?? {}) as ThemeTokens),
-    files['assets/theme.css'] ?? ''
-  );
+  const themeTokens = resolveThemeTokens(files, (theme ?? {}) as ThemeTokens);
   const { header, footer } = await renderChrome(files, (l, d) => renderUntrusted(l, d), {
     menu,
     footer: footerData,
     siteName,
   });
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">${head}</head><body>${header}${sections}${footer}</body></html>`;
+  // Mirror EXACTLY what the origin serves (apps/origin/src/index.ts): full theme ownership (OFCE-630)
+  // when the flag is on AND the draft carries a full-document layout → render that layout (the theme
+  // owns head + chrome + sections); otherwise the legacy TS shell wraps the body (doctype + <head> with
+  // the design-system CSS + per-theme brand tokens + the theme's own assets/theme.css). Either way the
+  // header/footer come from the theme's editable sections, so the preview shows edits as they will live.
+  const themeOwnsDocument =
+    process.env.THEME_OWNS_DOCUMENT === '1' && layoutOwnsDocument(files['layout/theme.liquid']);
+  const html = themeOwnsDocument
+    ? await renderThemeLayout(files, (l, d) => renderUntrusted(l, d), {
+        content_for_layout: sections,
+        header,
+        footer,
+        token_css: tokenCss(themeTokens),
+        site_name: siteName,
+      })
+    : `<!doctype html><html lang="en"><head><meta charset="utf-8">${storefrontHead(themeTokens, files['assets/theme.css'] ?? '')}</head><body>${header}${sections}${footer}</body></html>`;
   return { html, tags, sampleData };
 }
 
