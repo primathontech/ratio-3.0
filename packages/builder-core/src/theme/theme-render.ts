@@ -48,9 +48,11 @@ const ASSET_THEME_CSS = 'assets/theme.css';
 // composed sections) and the auto-injected `base_css`/`theme_css` (read from the bundle's own assets).
 // Everything here is ORIGIN-supplied — under full theme ownership (OFCE-630) the theme owns the whole
 // document and the origin only fills these slots:
-//   - content_for_header: the ONLY platform-owned part of the document (OFCE-634) — the islands
+//   - content_for_header: the platform-owned part of the document <head> (OFCE-634) — the islands
 //     hydration runtime (when the page has one), external-integration head fragments, and security
 //     bits. Trusted, origin-built HTML — never merchant markup.
+//   - content_for_body_end: the platform-owned part just before </body> — external-integration body
+//     scripts (e.g. the GoKwik side-cart bootstrap). Trusted, origin-built, same contract as the header.
 //   - header/footer: the rendered chrome, from the theme's own sections/header.liquid + footer.liquid.
 //   - token_css: the brand-token :root{} overrides the origin computes from the tenant theme
 //     (sanitized), placed by the layout between base_css and theme_css so the cascade resolves.
@@ -59,6 +61,7 @@ const ASSET_THEME_CSS = 'assets/theme.css';
 //     them (they can carry merchant-supplied values), unlike the trusted HTML slots above.
 export interface LayoutContext {
   content_for_header?: string;
+  content_for_body_end?: string;
   header?: string;
   footer?: string;
   token_css?: string;
@@ -75,7 +78,12 @@ export async function renderThemePage(
   compiled: ThemeFiles,
   page: string,
   renderers: SectionRenderers,
-  opts: { resolver?: BindingResolver; ctx?: ResolveContext; layout?: LayoutContext } = {}
+  opts: {
+    resolver?: BindingResolver;
+    ctx?: ResolveContext;
+    layout?: LayoutContext;
+    applyLayout?: boolean;
+  } = {}
 ): Promise<{ html: string; tags: string[] }> {
   const raw = compiled[templatePath(page)];
   if (raw == null) throw new Error(`no template for page '${page}'`);
@@ -121,35 +129,60 @@ export async function renderThemePage(
       throw new Error(`no section '${inst.type}' in the theme`);
     }
   }
-  // The theme's own layout (Shopify's layout/theme.liquid) owns the WHOLE document — <head> (title,
-  // CSS, the platform content_for_header slice) and <body> (header/footer chrome + where the composed
-  // sections go, {{ content_for_layout }}) — rendered like any theme section (isolate at the origin).
-  // The design-system CSS (assets/base.css) and merchant CSS (assets/theme.css) are read straight from
-  // the bundle; the origin fills the rest of LayoutContext. content_for_layout is set LAST so a caller
-  // can never override it. Absent layout → the sections are the whole body and the origin supplies the
-  // document (legacy TS shell, until every store is rebased onto a full-document layout).
+  // The theme's own layout/theme.liquid owns the WHOLE document (see renderThemeLayout). applyLayout:false
+  // forces sections-only output (skip the layout) even when the theme has one — the origin uses it in
+  // legacy (flag-off) mode so a full-document layout is never applied and then double-wrapped by the TS
+  // shell. Absent layout → the sections are the whole body (the origin supplies the document).
   const content = parts.join('\n');
+  if (compiled[LAYOUT_PATH] == null || opts.applyLayout === false)
+    return { html: content, tags: [...new Set(tags)] };
+  const html = await renderThemeLayout(compiled, renderers.theme, {
+    ...(opts.layout ?? {}),
+    content_for_layout: content,
+  });
+  return { html, tags: [...new Set(tags)] };
+}
+
+// Render a theme's layout/theme.liquid into the whole HTML document (full theme ownership, OFCE-630):
+// <head> (title, the CSS layers, the platform {{ content_for_header }} slice) and <body> (header/footer
+// chrome, {{ content_for_layout }} = the composed sections, the platform {{ content_for_body_end }}
+// slice). The design-system CSS (assets/base.css) and merchant CSS (assets/theme.css) are read from the
+// bundle and inlined around the origin's token_css in cascade order; every CSS string is neutralized
+// against a </style> breakout (defense-in-depth; the storefront CSP script-src 'none' is the primary
+// control). content_for_layout is pinned LAST so a caller can never override the composed body. Exported
+// so the origin can apply the layout as a final step AFTER rendering sections + chrome in parallel. No
+// layout in the bundle → the composed sections are returned as the whole body.
+// Does this layout/theme.liquid own the WHOLE document (full theme ownership) rather than just wrap the
+// body? A full-document layout MUST begin with <!doctype (or <html). The check is anchored to the START
+// of the source — a stray <!doctype/<html inside a Liquid comment or a pasted example elsewhere in the
+// file must NOT flip the mode, or the origin would apply the layout to a body-only theme and serve a
+// broken document. The origin + editor preview gate the layout-render path on this (AND the kill-switch
+// env flag); a body-only or absent layout falls back to the legacy TS shell.
+export function layoutOwnsDocument(layoutSource: string | undefined | null): boolean {
+  const s = (layoutSource ?? '').trimStart().toLowerCase();
+  return s.startsWith('<!doctype') || s.startsWith('<html');
+}
+
+export async function renderThemeLayout(
+  compiled: ThemeFiles,
+  render: SectionRenderer,
+  ctx: LayoutContext & { content_for_layout: string }
+): Promise<string> {
   const layout = compiled[LAYOUT_PATH];
-  if (layout == null) return { html: content, tags: [...new Set(tags)] };
-  // Every CSS string inlined into the layout's <style> — base, brand tokens, merchant — is neutralized
-  // against a </style> breakout. Valid CSS never contains </style>, so this only blocks the one way CSS
-  // could close its element early and inject markup. Defense-in-depth; the storefront CSP (script-src
-  // 'none') is the primary control. Same guard the legacy storefrontHead() applied. token_css is guarded
-  // too even though the origin sanitizes it upstream — the boundary stays uniform for all three.
-  const provided = opts.layout ?? {};
-  const neutralizeStyle = (css: string) => css.replace(/<\/style/gi, '<\\/style');
-  const asCss = (v: unknown) => neutralizeStyle(typeof v === 'string' ? v : '');
+  if (layout == null) return ctx.content_for_layout;
+  const asCss = (v: unknown) => (typeof v === 'string' ? v : '').replace(/<\/style/gi, '<\\/style');
+  const { content_for_layout, token_css, ...provided } = ctx;
   const layoutData: Record<string, unknown> = {
     content_for_header: '',
+    content_for_body_end: '',
     header: '',
     footer: '',
     ...provided,
     // Set AFTER the spread so a caller can never override the bundle-derived CSS or content_for_layout.
     base_css: asCss(compiled[ASSET_BASE_CSS]),
     theme_css: asCss(compiled[ASSET_THEME_CSS]),
-    token_css: asCss(provided.token_css),
-    content_for_layout: content,
+    token_css: asCss(token_css),
+    content_for_layout,
   };
-  const html = await renderers.theme(layout, layoutData);
-  return { html, tags: [...new Set(tags)] };
+  return render(layout, layoutData);
 }

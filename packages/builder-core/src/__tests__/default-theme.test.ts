@@ -22,6 +22,45 @@ const renderPage = (page: string, routeParams: Record<string, string> = {}) =>
     }
   );
 
+// OFCE-630: the theme owns the WHOLE document, not just the body sections. The layout is a full
+// <!doctype html> page — it owns <head> (title, the design-system + brand CSS, the platform
+// content_for_header slice) and <body> (header/footer chrome slots + content_for_layout + the platform
+// content_for_body_end slice).
+test('default theme layout owns the whole document (doctype, head, platform slices, chrome slots)', () => {
+  const layout = defaultBundleTheme()['layout/theme.liquid'];
+  assert.match(layout, /<!doctype html>/i, 'the layout is a full HTML document');
+  assert.match(layout, /<html/i);
+  assert.match(layout, /<head>/i);
+  assert.match(layout, /<title>/i, 'the theme owns its <title> (SEO)');
+  assert.match(
+    layout,
+    /\{\{\s*content_for_header\s*\}\}/,
+    'the head platform slice placeholder is present'
+  );
+  assert.match(
+    layout,
+    /\{\{\s*content_for_body_end\s*\}\}/,
+    'the body-end platform slice placeholder is present'
+  );
+  assert.match(layout, /\{\{\s*content_for_layout\s*\}\}/, 'the sections slot is present');
+  assert.match(layout, /\{\{\s*header\s*\}\}/, 'the header chrome slot is present');
+  assert.match(layout, /\{\{\s*footer\s*\}\}/, 'the footer chrome slot is present');
+  assert.match(layout, /\{\{\s*base_css\s*\}\}/, 'the theme inlines its design-system CSS');
+  // page_title/site_name are merchant/store text → must be escaped in the layout.
+  assert.match(layout, /page_title[\s\S]*\|\s*escape/, 'the title is escaped');
+});
+
+test('default theme ships the design-system CSS as an editable asset (assets/base.css)', () => {
+  const files = defaultBundleTheme();
+  assert.ok('assets/base.css' in files, 'the theme ships assets/base.css');
+  assert.match(
+    files['assets/base.css'],
+    /\.hdr\b/,
+    'carries the component classes sections depend on'
+  );
+  assert.match(files['assets/base.css'], /:root\{/, 'carries the base brand-token defaults');
+});
+
 test('default theme: layout holds content_for_layout and templates reference existing sections', () => {
   const files = defaultBundleTheme();
 

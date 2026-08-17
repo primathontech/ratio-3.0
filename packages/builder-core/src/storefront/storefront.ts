@@ -189,6 +189,21 @@ a{color:inherit;text-decoration:none}
 .order-row span:first-child{color:var(--muted)}
 `;
 
+// The design-system CSS (the .hdr/.hero/.grid/.card/.pdp/.ftr classes the theme sections are built on).
+// Exported so the base theme can ship it as an editable asset (assets/base.css) and own it — under full
+// theme ownership the theme's layout inlines this itself (as {{ base_css }}) instead of the origin
+// injecting it. Same string storefrontHead() uses, so the theme-owned head stays byte-for-byte identical
+// to the legacy TS shell.
+export const STOREFRONT_BASE_CSS = BASE;
+
+// The brand-token :root{} overrides for a store's chosen tokens — the MIDDLE CSS layer, between the base
+// defaults and the merchant's own CSS. The origin computes this from the live theme + tenant tokens
+// (resolveThemeTokens) and passes it to the layout as {{ token_css }}, exactly what storefrontHead()
+// splices between BASE and the custom CSS. Values are sanitized here (rootVars) before they touch CSS.
+export function tokenCss(tokens: ThemeTokens = {}): string {
+  return rootVars(tokens);
+}
+
 // The full <style> block to drop into <head>: the base rules (with their default :root tokens) FIRST,
 // then the store's per-theme token overrides (rootVars re-declares the same :root vars → these win the
 // cascade), then the theme's own editable CSS LAST so a merchant's rules beat everything. Order is

@@ -37,7 +37,13 @@ import {
 import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore, CdnReadObjectStore } from '@ratio/data-objects';
-import { ThemeStore, renderThemePage } from '@ratio/builder-core';
+import {
+  ThemeStore,
+  renderThemePage,
+  renderThemeLayout,
+  layoutOwnsDocument,
+  tokenCss,
+} from '@ratio/builder-core';
 import { config } from './config';
 import { canonicalPath } from '@ratio/builder-core';
 import { pageTag, tenantTag } from '@ratio/builder-core';
@@ -610,11 +616,19 @@ app.all('*', async (c) => {
         themeStore.loadLiveCompiled(tenantId as string)
       );
       if (compiled && compiled[`templates/${page}.json`] != null) {
+        // Full theme ownership (OFCE-630): when the flag is on AND this theme carries a full-document
+        // layout/theme.liquid, the THEME owns the whole page (head + chrome + sections); otherwise the
+        // legacy TS shell wraps the sections (the default until stores are rebased onto a full-document
+        // base). The flag is a kill-switch; the layout check is what self-migrates a store the moment
+        // its rebased theme publishes.
+        const themeOwnsDocument =
+          process.env.THEME_OWNS_DOCUMENT === '1' &&
+          layoutOwnsDocument(compiled['layout/theme.liquid']);
         // Render the theme body AND fetch the store's real nav (header menu + footer) in parallel —
         // the nav overlaps the slow isolate render, not the S3 load, and isn't fetched at all on a
-        // bundle-miss fall-through. The header/footer are then rendered by the ORIGIN shell from the
-        // THEME's editable header/footer sections (renderChrome) for EVERY page — the same real store
-        // name + nav the cart/order pages use — so all pages share ONE header/footer.
+        // bundle-miss fall-through. The body is rendered WITHOUT its layout (applyLayout:false); the
+        // layout is applied as a final step below, once the chrome is ready — so header/footer flow
+        // INTO the layout (full ownership) or wrap AROUND the sections (legacy shell) from one nav read.
         const [{ html: sections, tags: dataTags }, [menu, footerData]] = await Promise.all([
           timed(c, 'compose', () =>
             renderThemePage(
@@ -648,6 +662,7 @@ app.all('*', async (c) => {
                   routeParams: matched?.params,
                   commerce: tenant.commerce,
                 },
+                applyLayout: false,
               }
             )
           ),
@@ -655,6 +670,9 @@ app.all('*', async (c) => {
             Promise.all([fetchMainMenu(merchantId, navUrl), fetchFooter(merchantId, navUrl)])
           ),
         ]);
+        // Header/footer are rendered from the THEME's editable header/footer sections (renderChrome)
+        // with the store's real name + nav — the same header/footer the cart/order pages use — so all
+        // pages share ONE header/footer whether the theme owns the document or the legacy shell wraps it.
         const { header, footer: footerHtml } = await timed(c, 'chrome', () =>
           renderChrome(compiled, (l, d) => renderUntrusted(l, d), {
             menu,
@@ -667,9 +685,26 @@ app.all('*', async (c) => {
         // so its widget must load on home/collection/product too. The fragments are store-level
         // (merchantInfo + a runtime cookie-token bridge), so the page stays edge-cacheable.
         const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
-        const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens), compiled['assets/theme.css'] ?? '')}${ix.head}</head><body>${header}${sections}${footerHtml}${ix.bodyEnd}</body></html>`;
+        const themeTokens = resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens);
+        // The theme owns the whole document → render its layout with the chrome + sections + the
+        // platform-only slices (content_for_header/body_end) + brand tokens. Else the legacy shell
+        // assembles the document in TS (identical head to storefrontHead: base + tokens + merchant CSS).
+        const html = themeOwnsDocument
+          ? await timed(c, 'layout', () =>
+              renderThemeLayout(compiled, (l, d) => renderUntrusted(l, d), {
+                content_for_layout: sections,
+                header,
+                footer: footerHtml,
+                content_for_header: ix.head,
+                content_for_body_end: ix.bodyEnd,
+                token_css: tokenCss(themeTokens),
+                site_name: tenant.name,
+              })
+            )
+          : `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(tenant.name)}</title>${storefrontHead(themeTokens, compiled['assets/theme.css'] ?? '')}${ix.head}</head><body>${header}${sections}${footerHtml}${ix.bodyEnd}</body></html>`;
         c.header('x-tenant', tenantId as string);
         c.header('x-handler', 'theme-bundle');
+        c.header('x-theme-render', themeOwnsDocument ? 'layout' : 'shell');
         c.header('x-theme-version', String(tenant.liveThemeVersion ?? ''));
         // Cacheable at the edge, invalidated by tag (D2): the tenant tag (a theme publish purges
         // every page of the store), the page tag (this URL), and the data-source tags (a

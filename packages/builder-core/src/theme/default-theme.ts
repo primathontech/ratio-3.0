@@ -1,5 +1,6 @@
 import type { ThemeFiles } from './bundle';
 import type { DataSource } from '../page-builder/doc';
+import { STOREFRONT_BASE_CSS } from '../storefront/storefront';
 
 // The starter theme a brand-new store adopts (base ⊕ overrides). A real, editable e-commerce home —
 // hero, promo posters, two product rows bound to collections (New Arrivals / Trending), and a brand
@@ -11,12 +12,15 @@ import type { DataSource } from '../page-builder/doc';
 // the whole storefront shares one header/footer. The sanitized menu/footer link tree arrives as the
 // `menu` / `footer` context (each item: title, href, external, items, grouped).
 //
-// Render contract (theme-render.ts): `layout/theme.liquid` wraps the composed sections at
-// {{ content_for_layout }}; each `templates/<page>.json` lists section instances; a section `type`
-// resolves to `sections/<type>.liquid`. The ORIGIN supplies <!doctype html><head> (with the storefront
-// design-system CSS + the store's brand tokens as CSS vars) and <body> — so the layout emits only body
-// chrome, and sections use the platform CSS classes (.rt/.hdr/.hero/.grid/.card/.slideshow/.pdp/.ftr,
-// see storefront.ts) to look styled out of the box and follow the merchant's brand colour/font.
+// Render contract (theme-render.ts): the theme owns the WHOLE document (OFCE-630). `layout/theme.liquid`
+// is a full <!doctype html> page — its <head> owns the title, the design-system CSS (assets/base.css,
+// inlined as {{ base_css }}), the brand-token overrides ({{ token_css }}), and the merchant's own CSS
+// ({{ theme_css }}); its <body> owns the header/footer chrome ({{ header }}/{{ footer }}) and the composed
+// sections ({{ content_for_layout }}). The ORIGIN injects only {{ content_for_header }} (islands runtime,
+// integration head, security) and {{ content_for_body_end }} (integration body scripts). Each
+// `templates/<page>.json` lists section instances; a section `type` resolves to `sections/<type>.liquid`.
+// Sections use the platform CSS classes (.rt/.hdr/.hero/.grid/.card/.slideshow/.pdp/.ftr, shipped in
+// assets/base.css) so they look styled out of the box and follow the merchant's brand colour/font.
 //
 // Data: collection/product templates + the home's two product rows declare `dataSources` and bind a
 // section via `dataSourceKey`; the resolver injects the fetched data FLAT into the bound section's
@@ -46,17 +50,43 @@ export function defaultBundleTheme(): ThemeFiles {
       2
     )}\n`,
 
-    // The merchant's own CSS, editable in the code editor. The origin appends it to the storefront
-    // <head> AFTER the design-system base + brand tokens, so these rules win. Scope changes to the
-    // platform classes (.hdr/.hero/.grid/.card/.ftr, see storefront.ts) or your own section markup.
+    // The design-system CSS (the .hdr/.hero/.grid/.card/.pdp/.ftr classes the sections are built on).
+    // Editable in the code editor — the theme owns its whole look. The layout inlines it FIRST (as
+    // {{ base_css }}), before the brand tokens and the merchant's own CSS, so both override it.
+    'assets/base.css': STOREFRONT_BASE_CSS,
+
+    // The merchant's own CSS, editable in the code editor. The layout inlines it LAST (as {{ theme_css }}),
+    // AFTER the design-system base + brand tokens, so these rules win. Scope changes to the platform
+    // classes (.hdr/.hero/.grid/.card/.ftr, see assets/base.css) or your own section markup.
     'assets/theme.css': `/* Your store's custom CSS — overrides the theme defaults. Example:
    .hdr-brand { letter-spacing: .04em; }
    .hero h1 { font-size: 3rem; }
 */
 `,
 
-    // Body chrome only — the origin provides <!doctype html><head>(design-system CSS + brand tokens)</head><body>.
-    'layout/theme.liquid': `{{ content_for_layout }}
+    // The whole page. The theme owns the entire document (OFCE-630): <head> (title + all CSS layers +
+    // the platform {{ content_for_header }} slice) and <body> (header, sections, footer, and the platform
+    // {{ content_for_body_end }} slice). base_css / token_css / theme_css are inlined in that cascade
+    // order. content_for_header / content_for_body_end are the ONLY parts the platform fills (islands
+    // runtime, integration head/body, security). header/footer are the store's real nav, rendered from
+    // the theme's own sections/header.liquid + sections/footer.liquid. page_title/site_name are escaped
+    // (they can carry merchant/store text).
+    'layout/theme.liquid': `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title | default: site_name | default: 'Store' | escape }}</title>
+  <style>{{ base_css }}{{ token_css }}{{ theme_css }}</style>
+  {{ content_for_header }}
+</head>
+<body>
+{{ header }}
+{{ content_for_layout }}
+{{ footer }}
+{{ content_for_body_end }}
+</body>
+</html>
 `,
 
     // ── Home ────────────────────────────────────────────────────────────────
