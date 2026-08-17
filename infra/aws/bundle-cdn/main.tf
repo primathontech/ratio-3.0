@@ -128,29 +128,6 @@ resource "aws_s3_bucket_policy" "bundles" {
   policy = data.aws_iam_policy_document.bucket.json
 }
 
-# ── IAM (LEGACY, retiring in OFCE-620 Phase 3): shared inline policy on the execution role ───
-# The bundle S3 grant was attached inline to ecsTaskExecutionRole (reused as both execution AND task
-# role by origin + admin-api). Kept ONLY until both services cut over to their own task roles below;
-# removed once they have. ListBucket is required — a HeadObject on a missing key 403s without it.
-data "aws_iam_policy_document" "task" {
-  statement {
-    sid       = "BundleStoreObjects"
-    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.bundles.arn}/*"]
-  }
-  statement {
-    sid       = "BundleStoreListForHead"
-    actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.bundles.arn]
-  }
-}
-
-resource "aws_iam_role_policy" "task" {
-  name   = "ratio3-bundle-store-${var.environment}"
-  role   = var.task_role_name
-  policy = data.aws_iam_policy_document.task.json
-}
-
 # ── Dedicated per-app task roles (OFCE-620): least-privilege, split off the shared exec role ──
 # origin only READS bundles (render); admin-api also WRITES (publish). Each service runs as its OWN
 # task role so the S3 grant is scoped to exactly what it needs, and ecsTaskExecutionRole goes back to
