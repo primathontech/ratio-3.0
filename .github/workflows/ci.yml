@@ -194,12 +194,12 @@ jobs:
             CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
               --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
             echo "rolling ${SVC##*/}: $CUR_TD -> $NEW_IMAGE"
-            # origin gets the storefront env; admin-api gets commerce + CF SaaS; else untouched. ROLE
-            # is scoped the SAME way (only our two services get the shared task role) so a future
-            # unrelated service in the cluster doesn't silently inherit S3 access.
+            # origin gets the storefront env; admin-api gets commerce + CF SaaS; else untouched. Each
+            # service runs as its OWN dedicated task role (OFCE-620): origin read-only, admin-api
+            # read-write on the bundle bucket. A future unrelated service gets no role (ROLE='').
             case "${SVC##*/}" in
-              *admin*) OV="$ADMIN_ENV"; ROLE="${{ vars.ECS_TASK_ROLE_ARN }}" ;;
-              *origin*) OV="$ORIGIN_ENV"; ROLE="${{ vars.ECS_TASK_ROLE_ARN }}" ;;
+              *admin*) OV="$ADMIN_ENV"; ROLE="${{ vars.ADMIN_TASK_ROLE_ARN }}" ;;
+              *origin*) OV="$ORIGIN_ENV"; ROLE="${{ vars.ORIGIN_TASK_ROLE_ARN }}" ;;
               *) OV='[]'; ROLE='' ;;
             esac
             aws ecs describe-task-definition --task-definition "$CUR_TD" \
