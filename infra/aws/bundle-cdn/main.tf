@@ -128,11 +128,10 @@ resource "aws_s3_bucket_policy" "bundles" {
   policy = data.aws_iam_policy_document.bucket.json
 }
 
-# ── IAM: the ECS task role reads+writes the bucket via the S3 API ────────────
-# This is what makes onboarding work (admin-api publish + origin render). Objects are Get/Put/Delete;
-# ListBucket on the bucket itself is ALSO required — a HeadObject on a not-yet-existing key returns
-# AccessDenied (not 404) without it, which breaks publish. Attached inline to the shared ECS task role
-# (origin + admin-api both run as it).
+# ── IAM (LEGACY, retiring in OFCE-620 Phase 3): shared inline policy on the execution role ───
+# The bundle S3 grant was attached inline to ecsTaskExecutionRole (reused as both execution AND task
+# role by origin + admin-api). Kept ONLY until both services cut over to their own task roles below;
+# removed once they have. ListBucket is required — a HeadObject on a missing key 403s without it.
 data "aws_iam_policy_document" "task" {
   statement {
     sid       = "BundleStoreObjects"
@@ -150,4 +149,75 @@ resource "aws_iam_role_policy" "task" {
   name   = "ratio3-bundle-store-${var.environment}"
   role   = var.task_role_name
   policy = data.aws_iam_policy_document.task.json
+}
+
+# ── Dedicated per-app task roles (OFCE-620): least-privilege, split off the shared exec role ──
+# origin only READS bundles (render); admin-api also WRITES (publish). Each service runs as its OWN
+# task role so the S3 grant is scoped to exactly what it needs, and ecsTaskExecutionRole goes back to
+# execution-only (image pull + logs). Trust is scoped to this account (confused-deputy guard).
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "ecs_tasks_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+}
+
+# origin: READ-only (Get + List)
+data "aws_iam_policy_document" "origin_task" {
+  statement {
+    sid       = "BundleStoreRead"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.bundles.arn}/*"]
+  }
+  statement {
+    sid       = "BundleStoreList"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.bundles.arn]
+  }
+}
+
+resource "aws_iam_role" "origin_task" {
+  name               = "ratio3-origin-task-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
+}
+
+resource "aws_iam_role_policy" "origin_task" {
+  name   = "bundle-store-read"
+  role   = aws_iam_role.origin_task.id
+  policy = data.aws_iam_policy_document.origin_task.json
+}
+
+# admin-api: READ-WRITE (Get/Put/Delete + List)
+data "aws_iam_policy_document" "admin_api_task" {
+  statement {
+    sid       = "BundleStoreObjects"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.bundles.arn}/*"]
+  }
+  statement {
+    sid       = "BundleStoreList"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.bundles.arn]
+  }
+}
+
+resource "aws_iam_role" "admin_api_task" {
+  name               = "ratio3-admin-api-task-${var.environment}"
+  assume_role_policy = data.aws_iam_policy_document.ecs_tasks_assume.json
+}
+
+resource "aws_iam_role_policy" "admin_api_task" {
+  name   = "bundle-store-rw"
+  role   = aws_iam_role.admin_api_task.id
+  policy = data.aws_iam_policy_document.admin_api_task.json
 }
