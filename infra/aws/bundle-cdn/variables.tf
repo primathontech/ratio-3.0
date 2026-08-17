@@ -5,13 +5,19 @@ variable "region" {
 
 variable "environment" {
   type    = string
-  default = "staging"
+  default = "dev"
+  # Names every resource; a typo would create a parallel stack. Also remember the backend key is NOT
+  # parameterized (see main.tf) — changing this alone does not repoint state.
+  validation {
+    condition     = contains(["dev", "staging", "prod"], var.environment)
+    error_message = "environment must be one of: dev, staging, prod."
+  }
 }
 
-# ECS task role NAMES (not ARNs) for the admin-api + origin tasks, granted S3 read/write on the
-# bucket. Find them on each task definition's taskRoleArn. Leave empty to skip the attachment and
-# wire IAM yourself.
-variable "task_role_names" {
-  type    = list(string)
-  default = []
+# ECS task role NAME (not ARN) granted S3 read/write on the bucket via an inline policy. The origin +
+# admin-api tasks share one role (ecsTaskExecutionRole reused as the task role). Find it on a task
+# definition's taskRoleArn.
+variable "task_role_name" {
+  type    = string
+  default = "ecsTaskExecutionRole"
 }

@@ -1,0 +1,7 @@
+# Terraform: provider plugins + backend cache (machine-local), and any local state.
+# The provider lock file (.terraform.lock.hcl) IS committed for reproducible provider versions.
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
