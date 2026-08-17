@@ -25,9 +25,12 @@ function buildEngine({ limits, allowlist }) {
     parseLimit: limits.parseLimit,
     dynamicPartials: false,
   });
+  // MUST match engine.ts money exactly: the backend returns prices in PAISE, so paise→rupees is /100.
+  // (This worker is a hand-written second engine copy — a drift here shows every price 100× wrong on
+  // storefront sections, which render through this isolate. Guarded by an engine↔isolate parity test.)
   engine.registerFilter('money', (v) => {
     const n = typeof v === 'number' ? v : Number(v);
-    return Number.isFinite(n) ? '₹' + n.toFixed(2) : '';
+    return Number.isFinite(n) ? '₹' + (n / 100).toFixed(2) : '';
   });
   // untrusted: strip every filter not on the allowlist so strictFilters rejects it.
   const registered = engine.filters;
