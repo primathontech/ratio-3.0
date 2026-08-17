@@ -32,6 +32,24 @@ function buildEngine({ limits, allowlist }) {
     const n = typeof v === 'number' ? v : Number(v);
     return Number.isFinite(n) ? '₹' + (n / 100).toFixed(2) : '';
   });
+  // asset_url (OFCE-647): must mirror engine.ts — this worker rebuilds the engine independently (kept
+  // TS-loader-free on purpose), so a filter added there must be registered here too or the isolate
+  // rejects it ("undefined filter"). Resolves a theme asset path → its served URL via the asset_urls
+  // map injected into the render context; unknown paths fall back HTML-escaped (no attribute injection).
+  engine.registerFilter('asset_url', function (v) {
+    const key = String(v ?? '');
+    const map = this.context.getSync(['asset_urls']);
+    if (map && typeof map === 'object') {
+      const url = map[key];
+      if (typeof url === 'string') return url;
+    }
+    return key
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  });
   // untrusted: strip every filter not on the allowlist so strictFilters rejects it.
   const registered = engine.filters;
   if (registered && typeof registered.forEach === 'function') {

@@ -6,7 +6,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ThemeStore, assetHash } from '@ratio/builder-core';
+import { ThemeStore, assetHash, readAssetManifest } from '@ratio/builder-core';
 import { pool } from '@ratio/data-db';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { app } from '../index';
@@ -29,6 +29,7 @@ const call = (path: string, headers: Record<string, string> = {}) =>
   app.fetch(
     new Request('http://origin' + path, { headers: { 'x-edge-auth': SECRET, ...headers } })
   );
+let store: ThemeStore;
 
 before(async () => {
   if (skip) return;
@@ -44,7 +45,7 @@ before(async () => {
     T,
   ]);
 
-  const store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
+  store = new ThemeStore(new S3ObjectStore({ bucket, ...common }));
   await store.ensureTheme(T, THEME);
   // Store two assets; only the first is referenced by the manifest.
   const logo = await store.putAsset({ themeId: THEME, tenantId: T }, PNG, 'image/png');
@@ -53,7 +54,8 @@ before(async () => {
     { themeId: THEME, tenantId: T },
     {
       'config/assets.json': JSON.stringify({ 'images/logo.png': logo }),
-      'sections/hero.liquid': '<h1>hi</h1>',
+      // The section REFERENCES the asset via asset_url (OFCE-647) — the page must render /assets/<hash>.
+      'sections/hero.liquid': `<h1>hi</h1><img src="{{ 'images/logo.png' | asset_url }}">`,
       'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
     }
   );
@@ -109,5 +111,42 @@ test(
     const res = await call('/assets/not-a-hash.png', { 'x-ratio-tenant': T });
     assert.equal(res.status, 404);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  }
+);
+
+test(
+  'e2e (OFCE-649): a page referencing asset_url renders /assets/<hash>, which the origin serves',
+  { skip },
+  async () => {
+    // The home section uses {{ 'images/logo.png' | asset_url }} — rendered through the real isolate,
+    // asset_url resolves to /assets/<hash> in the page, and that URL serves the bytes. Full chain:
+    // upload (store) -> reference (asset_url) -> render (page) -> serve (origin).
+    const home = await call('/', { 'x-ratio-tenant': T });
+    assert.equal(home.status, 200);
+    assert.equal(home.headers.get('x-handler'), 'theme-bundle');
+    const hash = assetHash(PNG);
+    assert.match(
+      await home.text(),
+      new RegExp(`<img src="/assets/${hash}">`),
+      'asset_url resolved in the rendered page (through the worker isolate)'
+    );
+    const asset = await call(`/assets/${hash}`, { 'x-ratio-tenant': T });
+    assert.equal(asset.status, 200);
+    assert.equal(asset.headers.get('content-type'), 'image/png');
+  }
+);
+
+test(
+  'the asset manifest freezes immutably into the published version (OFCE-648)',
+  { skip },
+  async () => {
+    // The store published v1 with the logo in config/assets.json. Its frozen compiled bundle carries that
+    // manifest, content-addressed — so the version is immutable and a later upload cuts a NEW version.
+    const live = readAssetManifest((await store.loadLiveCompiled(T)) ?? {});
+    assert.equal(
+      live['images/logo.png']?.hash,
+      assetHash(PNG),
+      'the published version froze the manifest'
+    );
   }
 );

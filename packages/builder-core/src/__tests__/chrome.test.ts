@@ -93,3 +93,27 @@ test('chromeLinks sanitizes hrefs (safe schemes only) and maps resource types to
   assert.equal(links[2].external, true, 'external flag set for http(s)');
   assert.equal(links[0].external, false, 'internal links are not external');
 });
+
+// OFCE-647: the header/footer sections resolve {{ path | asset_url }} too — a header logo is the most
+// common use, and renderChrome is the shared chrome path on every page, so it must inject asset_urls.
+test('header + footer sections resolve asset_url from the theme manifest', async () => {
+  const h = 'c'.repeat(64);
+  const compiled = {
+    'config/assets.json': JSON.stringify({
+      'logo.png': { hash: h, contentType: 'image/png', size: 1 },
+    }),
+    'sections/header.liquid': `<header><img src="{{ 'logo.png' | asset_url }}"></header>`,
+    'sections/footer.liquid': `<footer><img src="{{ 'logo.png' | asset_url }}"></footer>`,
+  };
+  const { header, footer } = await renderChrome(compiled, renderer, {
+    menu: null,
+    footer: null,
+    siteName: 'S',
+  });
+  assert.match(
+    header,
+    new RegExp(`<img src="/assets/${h}">`),
+    'header logo resolves to /assets/<hash>'
+  );
+  assert.match(footer, new RegExp(`<img src="/assets/${h}">`), 'footer resolves too');
+});

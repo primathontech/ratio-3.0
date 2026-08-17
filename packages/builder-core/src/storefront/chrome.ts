@@ -8,6 +8,7 @@
 // markup — merchants own it. A theme that carries no header/footer section (older themes, the bare
 // base) falls back to the built-in renderHeader/renderFooter so the header never disappears.
 import type { ThemeFiles } from '../theme/bundle';
+import { assetUrlMap } from '../theme/theme-render';
 import { renderHeader, navHref, type NavMenu, type NavItem } from './nav';
 import { renderFooter, type FooterMenu } from './footer';
 
@@ -61,12 +62,16 @@ export async function renderChrome(
   const siteName = opts.siteName || 'Store';
   const headerLiquid = compiled[HEADER_PATH];
   const footerLiquid = compiled[FOOTER_PATH];
+  // The header/footer sections resolve {{ 'logo.png' | asset_url }} too (a header logo is the most
+  // common use), so inject the theme's asset_urls map here as well — the same map the page sections
+  // and the layout get.
+  const asset_urls = assetUrlMap(compiled);
   const [header, footer] = await Promise.all([
     headerLiquid != null
-      ? render(headerLiquid, { site_name: siteName, menu: chromeLinks(opts.menu) })
+      ? render(headerLiquid, { site_name: siteName, menu: chromeLinks(opts.menu), asset_urls })
       : Promise.resolve(renderHeader({ menu: opts.menu, siteName })),
     footerLiquid != null
-      ? render(footerLiquid, { site_name: siteName, footer: chromeLinks(opts.footer) })
+      ? render(footerLiquid, { site_name: siteName, footer: chromeLinks(opts.footer), asset_urls })
       : Promise.resolve(renderFooter({ footer: opts.footer, siteName })),
   ]);
   return { header, footer };
