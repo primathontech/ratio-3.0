@@ -114,7 +114,15 @@ async function purgeEdgeTags(tags: string[]): Promise<void> {
 // this so a failed purge is VISIBLE to the operator instead of being silently swallowed. Fine-grained
 // product/collection purge (the webhook's prod:*/col:*) needs a tag→URL index and is deferred.
 async function purgeStoreUrls(id: string, paths: string[]): Promise<boolean | null> {
-  const cfg = cfConfig();
+  // cfConfig() fails closed in prod (throws) when a CF token is present but CF_SAAS_ZONE isn't. This
+  // purge is best-effort, so a missing/partial CF config must degrade to "didn't purge" (null), never
+  // 500 the caller (commerce save, theme save, page publish) — same fail-open intent as the `!cfg` case.
+  let cfg;
+  try {
+    cfg = cfConfig();
+  } catch {
+    return null;
+  }
   if (!cfg) return null;
   const urls = storeCacheUrls(await listDomains(id), paths);
   if (urls.length === 0) return null;
