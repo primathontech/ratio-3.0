@@ -162,6 +162,36 @@ test('no layout → the composed sections are the whole body (origin supplies th
   assert.equal(html, '<section class="hero"><h1>Bare</h1></section>');
 });
 
+// OFCE-647: renderThemePage injects asset_urls (path → /assets/<hash>, from the theme's manifest) into
+// every section + the layout, so {{ 'logo.png' | asset_url }} resolves. Rendered UNTRUSTED to also prove
+// asset_url survives the filter allowlist.
+test('a section resolves {{ path | asset_url }} to /assets/<hash> from the manifest', async () => {
+  const h = 'a'.repeat(64);
+  const compiled: ThemeFiles = {
+    'config/assets.json': JSON.stringify({
+      'logo.png': { hash: h, contentType: 'image/png', size: 1 },
+    }),
+    'sections/hero.liquid': `<img src="{{ 'logo.png' | asset_url }}">`,
+    'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
+  };
+  const { html } = await renderThemePage(compiled, 'index', { theme: untrusted });
+  assert.match(html, new RegExp(`<img src="/assets/${h}">`));
+});
+
+test('the layout resolves asset_url too (e.g. a favicon in the head)', async () => {
+  const h = 'b'.repeat(64);
+  const compiled: ThemeFiles = {
+    'config/assets.json': JSON.stringify({
+      'favicon.ico': { hash: h, contentType: 'image/x-icon', size: 1 },
+    }),
+    'layout/theme.liquid': `<head><link rel="icon" href="{{ 'favicon.ico' | asset_url }}"></head><body>{{ content_for_layout }}</body>`,
+    'sections/hero.liquid': '<h1>hi</h1>',
+    'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
+  };
+  const { html } = await renderThemePage(compiled, 'index', { theme: untrusted });
+  assert.match(html, new RegExp(`href="/assets/${h}"`));
+});
+
 // OFCE-630 full theme ownership: the layout owns the WHOLE document — <head> (title, CSS, the
 // content_for_header platform slice) and <body> (chrome + content_for_layout). renderThemePage feeds
 // the layout a richer context: the design-system CSS (assets/base.css) and merchant CSS

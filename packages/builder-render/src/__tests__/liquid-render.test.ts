@@ -23,6 +23,43 @@ test('engine: hero section renders with escaping', async () => {
   assert.match(html, /<h1>Hi &lt;b&gt;<\/h1>/, 'heading is escaped');
 });
 
+// ─── asset_url filter (OFCE-647): resolve a theme asset path → its served URL ─────────────────────
+test('asset_url resolves a path via the injected asset_urls map', async () => {
+  const html = await render(
+    `<img src="{{ 'images/logo.png' | asset_url }}">`,
+    { asset_urls: { 'images/logo.png': '/assets/deadbeef' } },
+    trusted
+  );
+  assert.match(html, /<img src="\/assets\/deadbeef">/);
+});
+
+test('asset_url survives the untrusted allowlist (not stripped)', async () => {
+  const html = await render(
+    `{{ 'logo.png' | asset_url }}`,
+    { asset_urls: { 'logo.png': '/assets/abc123' } },
+    untrusted
+  );
+  assert.equal(html, '/assets/abc123');
+});
+
+test('asset_url falls back to the raw path when unknown or no map present', async () => {
+  assert.equal(
+    await render(`{{ 'missing.png' | asset_url }}`, { asset_urls: {} }, trusted),
+    'missing.png'
+  );
+  assert.equal(await render(`{{ 'x.png' | asset_url }}`, {}, trusted), 'x.png'); // no asset_urls at all
+});
+
+test('asset_url HTML-escapes an unknown (fallback) value — no attribute injection', async () => {
+  const html = await render(
+    `<img src="{{ '"><img src=x onerror=alert(1)>' | asset_url }}">`,
+    { asset_urls: {} },
+    untrusted
+  );
+  assert.doesNotMatch(html, /"><img src=x/, 'the raw injection payload does not survive');
+  assert.match(html, /&quot;&gt;&lt;img/, 'it is HTML-escaped instead');
+});
+
 test('engine: productGrid renders prices via money filter', async () => {
   const html = await render(
     FIRST_PARTY_SECTIONS.productGrid.template,

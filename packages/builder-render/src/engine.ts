@@ -61,6 +61,8 @@ export const FILTER_ALLOWLIST: Record<string, FilterTier> = {
   append: 'static',
   prepend: 'static',
   replace: 'static',
+  // asset URL resolution — a pure map lookup (theme manifest → served URL), no ambient state → static
+  asset_url: 'static',
   // locale/currency formatting — output varies by locale/currency dimension
   money: 'per-locale',
   // time — per-request, breaks purity; allowed but forces dynamic tier
@@ -95,6 +97,32 @@ function buildEngine(opts: EngineOptions): Liquid {
     if (!Number.isFinite(n)) return '';
     return '₹' + (n / 100).toFixed(2);
   });
+
+  // `asset_url`: resolve a theme asset reference to its served URL — `{{ 'logo.png' | asset_url }}` →
+  // `/assets/<hash>`. The path→url map (`asset_urls`) is injected into the render context by
+  // theme-render from the theme's manifest; a regular function (not an arrow) so `this.context` is
+  // bound. An unknown path falls back to itself, so a typo renders visibly rather than breaking.
+  engine.registerFilter(
+    'asset_url',
+    function (this: { context: { getSync(paths: string[]): unknown } }, v: unknown) {
+      const key = String(v ?? '');
+      const map = this.context.getSync(['asset_urls']);
+      if (map && typeof map === 'object') {
+        const url = (map as Record<string, unknown>)[key];
+        if (typeof url === 'string') return url; // server-built /assets/<64hex> — safe chars only
+      }
+      // Unknown asset → fall back to the input so a typo renders visibly (not a silent empty src). The
+      // engine has NO autoescape and asset_url sits bare inside HTML attributes, so HTML-escape the
+      // fallback: a merchant piping data-bound input through asset_url can never turn a miss into an
+      // attribute-injection sink. (The storefront CSP script-src 'none' is the backstop regardless.)
+      return key
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  );
 
   // For untrusted templates, strip every filter that is not on the allowlist. LiquidJS registers
   // its built-ins on construction; we remove the rest so strictFilters rejects them.

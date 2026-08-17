@@ -7,6 +7,7 @@
 // renderer (@ratio/builder-render/isolate) for merchant sections; a first-party/trusted path may pass
 // an in-process one. This module is pure composition and never renders in-process itself.
 import type { ThemeFiles } from './bundle';
+import { readAssetManifest } from './assets';
 import type { DataSource } from '../page-builder/doc';
 import type { BindingResolver, ResolveContext } from '../commerce/resolve';
 import { interpolateParams } from '../commerce/resolve';
@@ -43,6 +44,18 @@ const sectionPath = (type: string) => `sections/${type}.liquid`;
 const LAYOUT_PATH = 'layout/theme.liquid';
 const ASSET_BASE_CSS = 'assets/base.css';
 const ASSET_THEME_CSS = 'assets/theme.css';
+
+// The map the `asset_url` Liquid filter reads: each asset PATH the theme references → the URL the origin
+// serves it at (`/assets/<hash>` — content-addressed, so immutable + CDN-cacheable). Derived from the
+// theme's own manifest (config/assets.json) and injected into every section + the layout render context,
+// so `{{ 'logo.png' | asset_url }}` resolves to the served URL. Empty when the theme has no assets.
+function assetUrlMap(compiled: ThemeFiles): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [path, entry] of Object.entries(readAssetManifest(compiled))) {
+    out[path] = `/assets/${entry.hash}`;
+  }
+  return out;
+}
 
 // The render context the theme's `layout/theme.liquid` receives, ON TOP OF `content_for_layout` (the
 // composed sections) and the auto-injected `base_css`/`theme_css` (read from the bundle's own assets).
@@ -113,6 +126,10 @@ export async function renderThemePage(
     });
   }
 
+  // The map the `asset_url` filter reads (path → /assets/<hash>), from the theme's own manifest —
+  // injected into every section + the layout so `{{ 'logo.png' | asset_url }}` resolves. Built once.
+  const asset_urls = assetUrlMap(compiled);
+
   const parts: string[] = [];
   for (const inst of tpl.sections) {
     const bound = inst.dataSourceKey ? (resolved[inst.dataSourceKey] ?? {}) : {};
@@ -120,7 +137,8 @@ export async function renderThemePage(
     // Bound live data fills the context; an authored setting of the same name WINS, so resolved data
     // can never silently overwrite what the merchant set. (Per-binding namespacing — Shopify-style
     // collection.* / product.* kept apart from settings — is a later slice; this is the safe interim.)
-    const data = { ...bound, ...(inst.data ?? {}) };
+    // asset_urls is pinned LAST — a reserved key a section can't shadow.
+    const data = { ...bound, ...(inst.data ?? {}), asset_urls };
     if (liquid != null) {
       parts.push(await renderers.theme(liquid, data));
     } else if (renderers.platform) {
@@ -182,6 +200,7 @@ export async function renderThemeLayout(
     base_css: asCss(compiled[ASSET_BASE_CSS]),
     theme_css: asCss(compiled[ASSET_THEME_CSS]),
     token_css: asCss(token_css),
+    asset_urls: assetUrlMap(compiled),
     content_for_layout,
   };
   return render(layout, layoutData);
