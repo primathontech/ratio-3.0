@@ -165,6 +165,9 @@ jobs:
             --arg GOKWIK_CURRENCY              "${{ vars.GOKWIK_CURRENCY }}" \
             --arg GOKWIK_CURRENCY_FORMAT       "${{ vars.GOKWIK_CURRENCY_FORMAT }}" \
             --arg DATABASE_URL                 "${{ secrets.DATABASE_URL }}" \
+            --arg BUNDLE_S3_BUCKET             "${{ vars.BUNDLE_S3_BUCKET }}" \
+            --arg BUNDLE_S3_REGION             "${{ vars.BUNDLE_S3_REGION }}" \
+            --arg BUNDLE_CDN_URL               "${{ vars.BUNDLE_CDN_URL }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # admin-api needs the SAME commerce backend URLs — its onboarding collection picker and
           # theme-preview resolver call the catalogue directly; without them /collections is empty and
@@ -172,9 +175,10 @@ jobs:
           # zone/fallback that cfConfig() fails closed on in prod (edge purge + custom-domain routes).
           # These come from repo variables like the commerce/gokwik ones and are NOT defaulted here:
           # an unset CF_SAAS_* is filtered out (select .value != "") so cfConfig() still fails LOUD on
-          # a misconfigured deploy rather than silently using the wrong zone. Re-applied every roll; the
-          # jq merge only REPLACES these names, so admin-api's inherited DATABASE_URL / BUNDLE_S3_* /
-          # taskRoleArn stay untouched.
+          # a misconfigured deploy rather than silently using the wrong zone. BUNDLE_S3_* are here too
+          # (admin-api writes bundles on publish) so a from-scratch service recreate self-heals on the
+          # next deploy instead of losing S3 config. Re-applied every roll; the jq merge only REPLACES
+          # these names, so admin-api's inherited DATABASE_URL / secrets stay untouched.
           ADMIN_ENV=$(jq -cn \
             --arg COMMERCE_PRODUCT_API_URL   "${{ vars.COMMERCE_PRODUCT_API_URL }}" \
             --arg COMMERCE_CART_API_URL      "${{ vars.COMMERCE_CART_API_URL }}" \
@@ -182,26 +186,33 @@ jobs:
             --arg COMMERCE_NAV_API_URL       "${{ vars.COMMERCE_NAV_API_URL }}" \
             --arg CF_SAAS_ZONE               "${{ vars.CF_SAAS_ZONE }}" \
             --arg CF_SAAS_FALLBACK           "${{ vars.CF_SAAS_FALLBACK }}" \
+            --arg BUNDLE_S3_BUCKET           "${{ vars.BUNDLE_S3_BUCKET }}" \
+            --arg BUNDLE_S3_REGION           "${{ vars.BUNDLE_S3_REGION }}" \
             '$ARGS.named | to_entries | map(select(.value != "") | {name: .key, value: .value})')
           # origin + admin-api both run this one image with their own task-def command/env.
           for SVC in $(aws ecs list-services --cluster "$CLUSTER" --query 'serviceArns[]' --output text); do
             CUR_TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SVC" \
               --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' --output text)
             echo "rolling ${SVC##*/}: $CUR_TD -> $NEW_IMAGE"
-            # origin gets the storefront env; admin-api gets commerce + CF SaaS; else untouched.
+            # origin gets the storefront env; admin-api gets commerce + CF SaaS; else untouched. ROLE
+            # is scoped the SAME way (only our two services get the shared task role) so a future
+            # unrelated service in the cluster doesn't silently inherit S3 access.
             case "${SVC##*/}" in
-              *admin*) OV="$ADMIN_ENV" ;;
-              *origin*) OV="$ORIGIN_ENV" ;;
-              *) OV='[]' ;;
+              *admin*) OV="$ADMIN_ENV"; ROLE="${{ vars.ECS_TASK_ROLE_ARN }}" ;;
+              *origin*) OV="$ORIGIN_ENV"; ROLE="${{ vars.ECS_TASK_ROLE_ARN }}" ;;
+              *) OV='[]'; ROLE='' ;;
             esac
             aws ecs describe-task-definition --task-definition "$CUR_TD" \
               --query 'taskDefinition' --output json \
-            | jq --arg img "$NEW_IMAGE" --argjson ov "$OV" '
+            | jq --arg img "$NEW_IMAGE" --argjson ov "$OV" --arg role "$ROLE" '
                 .containerDefinitions[0].image = $img
                 | .containerDefinitions[0].environment =
                     (((.containerDefinitions[0].environment // [])
                        | map(select(.name as $n | ($ov | map(.name) | index($n)) | not)))
                      + $ov)
+                # taskRoleArn is a top-level field (not env), so the app gets S3 creds via the task
+                # role. Re-assert it every roll so a from-scratch recreate self-heals; skip if unset.
+                | (if $role != "" then .taskRoleArn = $role else . end)
                 | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,
                       .compatibilities,.registeredAt,.registeredBy)' > /tmp/td.json
             NEW_TD=$(aws ecs register-task-definition --cli-input-json file:///tmp/td.json \
