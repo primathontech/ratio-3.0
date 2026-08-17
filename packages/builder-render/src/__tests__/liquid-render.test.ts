@@ -112,6 +112,30 @@ test('sandbox: output/memory limit aborts a pathological expansion', async () =>
   );
 });
 
+// ─── Engine ↔ isolate parity (the two engine copies must NOT drift) ──────────
+// Regression: worker.mjs is a hand-written second copy of the engine (kept TS-loader-free), and its
+// `money` filter had drifted — it never divided paise→rupees, so the origin (which renders merchant
+// sections through the isolate) showed every price 100× too high. Uncaught because the money tests
+// only exercised the in-process engine, not the isolate the origin actually uses.
+test('isolate money matches the in-process engine (paise → rupees, not 100×)', async () => {
+  assert.equal(await renderUntrusted('{{ 49900 | money }}', {}, { timeoutMs: 2000 }), '₹499.00');
+});
+
+test('isolate and in-process engine render allowlisted filters identically (no drift)', async () => {
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['{{ 49900 | money }}', {}],
+    ['{{ 0 | money }}', {}],
+    ['{{ name | upcase }}', { name: 'shoe' }],
+    ['{{ x | escape }}', { x: '<b>&"' }],
+    [`{{ missing | default: 'n/a' }}`, {}],
+  ];
+  for (const [src, data] of cases) {
+    const inProcess = await render(src, data, untrusted);
+    const isolate = await renderUntrusted(src, data, { timeoutMs: 2000 });
+    assert.equal(isolate, inProcess, `isolate/engine drift for: ${src}`);
+  }
+});
+
 // ─── Isolate: hard wall-clock kill ───────────────────────────────────────────
 test('isolate: a legit render returns HTML', async () => {
   const html = await renderUntrusted(
