@@ -10,7 +10,7 @@ import {
   expireCartCookie,
   renderOrderPage,
   type CartBackend,
-} from '../cart';
+} from '../storefront/cart';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const ok = (data: unknown) => ({ success: true, message: 'ok', data }) as any;

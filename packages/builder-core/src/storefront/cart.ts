@@ -5,7 +5,7 @@
 // @shopkit/cart + the GoKwik side-cart; R3 reuses the same service contract, server-side.)
 
 import type { IResponse } from '@shopkit/data-layer';
-import { esc } from './html';
+import { esc } from '../page-builder/html';
 
 // Canonical cart shapes (mapped from the backend response, which varies by adapter).
 export interface CartLine {

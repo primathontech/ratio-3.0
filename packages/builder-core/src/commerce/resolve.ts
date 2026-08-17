@@ -5,8 +5,8 @@
 // composePage stays pure. Each resolved source also yields cache tags (col:*/prod:*) so a CMS
 // change can purge exactly the pages that showed it.
 
-import type { PageDoc, DataSource } from './doc';
-import { DATA_SOURCE_TYPES } from './doc';
+import type { PageDoc, DataSource } from '../page-builder/doc';
+import { DATA_SOURCE_TYPES } from '../page-builder/doc';
 import type { SectionRegistry } from '@ratio/builder-registry';
 
 // Per-tenant data-layer config (from the tenant record). storeId defaults to merchantId.

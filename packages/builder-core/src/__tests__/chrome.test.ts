@@ -5,9 +5,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { renderChrome, chromeLinks } from '../chrome';
-import { defaultBundleTheme } from '../default-theme';
-import type { NavMenu, NavItem } from '../nav';
+import { renderChrome, chromeLinks } from '../storefront/chrome';
+import { defaultBundleTheme } from '../theme/default-theme';
+import type { NavMenu, NavItem } from '../storefront/nav';
 
 // The untrusted renderer the origin uses; here the trusted engine is fine — the chrome sections only
 // use allowlisted filters (escape/default), so output is identical.

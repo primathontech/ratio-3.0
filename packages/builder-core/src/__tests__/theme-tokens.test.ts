@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseThemeTokens, resolveThemeTokens, TOKENS_PATH } from '../theme-tokens';
+import { parseThemeTokens, resolveThemeTokens, TOKENS_PATH } from '../theme/theme-tokens';
 
 test('parseThemeTokens keeps only known string token keys', () => {
   const raw = JSON.stringify({

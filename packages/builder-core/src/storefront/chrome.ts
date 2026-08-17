@@ -7,7 +7,7 @@
 // sections/header.liquid + sections/footer.liquid as `menu` / `footer`. The section Liquid does the
 // markup — merchants own it. A theme that carries no header/footer section (older themes, the bare
 // base) falls back to the built-in renderHeader/renderFooter so the header never disappears.
-import type { ThemeFiles } from './bundle';
+import type { ThemeFiles } from '../theme/bundle';
 import { renderHeader, navHref, type NavMenu, type NavItem } from './nav';
 import { renderFooter, type FooterMenu } from './footer';
 

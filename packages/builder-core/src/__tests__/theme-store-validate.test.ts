@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ObjectStore } from '@ratio/data-objects';
-import { ThemeStore } from '../theme-store';
+import { ThemeStore } from '../theme/theme-store';
 
 const unreachable: ObjectStore = {
   put: async () => {

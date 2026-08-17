@@ -4,11 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { defaultBundleTheme } from '../default-theme';
-import { storefrontHead } from '../storefront';
-import { renderThemePage } from '../theme-render';
-import { StubResolver } from '../resolve';
-import type { SectionRenderer } from '../theme-render';
+import { defaultBundleTheme } from '../theme/default-theme';
+import { storefrontHead } from '../storefront/storefront';
+import { renderThemePage } from '../theme/theme-render';
+import { StubResolver } from '../commerce/resolve';
+import type { SectionRenderer } from '../theme/theme-render';
 
 const theme: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
 const renderPage = (page: string, routeParams: Record<string, string> = {}) =>

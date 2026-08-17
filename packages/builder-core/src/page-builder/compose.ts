@@ -9,9 +9,9 @@ import type { SectionRegistry } from '@ratio/builder-registry';
 import { renderSection } from '@ratio/builder-registry';
 import { islandPlaceholder } from '@ratio/builder-registry';
 import type { Tier } from '@ratio/builder-render';
-import { storefrontHead, type ThemeTokens } from './storefront';
-import { renderHeader, type NavMenu } from './nav';
-import { renderFooter, type FooterMenu } from './footer';
+import { storefrontHead, type ThemeTokens } from '../storefront/storefront';
+import { renderHeader, type NavMenu } from '../storefront/nav';
+import { renderFooter, type FooterMenu } from '../storefront/footer';
 
 const ORDER: Tier[] = ['static', 'shared-volatile', 'per-segment', 'per-user'];
 const maxTier = (a: Tier, b: Tier): Tier => (ORDER.indexOf(a) >= ORDER.indexOf(b) ? a : b);

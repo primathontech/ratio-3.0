@@ -5,7 +5,7 @@
 // theme omits (the seed a store starts from). Untrusted input: the values are still sanitized where
 // they touch CSS by `storefrontHead`/`rootVars`, so this layer only shapes and never trusts.
 import type { ThemeFiles } from './bundle';
-import type { ThemeTokens } from './storefront';
+import type { ThemeTokens } from '../storefront/storefront';
 
 export const TOKENS_PATH = 'config/tokens.json';
 

@@ -2,7 +2,7 @@
 // builder applies to authored HTML (builder-core doc.ts). Pure, deterministic.
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { safeRichText } from '../html';
+import { safeRichText } from '../page-builder/html';
 
 test('richText: <script> and attributed tags are neutralised', () => {
   const html = safeRichText('<script>alert(1)</script><p onclick="x()">hi</p>');

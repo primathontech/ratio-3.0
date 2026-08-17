@@ -2,7 +2,7 @@
 // EMPTY-response case (legal line only) and href/text safety. Mirrors the header (nav) contract.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchFooter, renderFooter, FALLBACK_FOOTER, type FooterMenu } from '../footer';
+import { fetchFooter, renderFooter, FALLBACK_FOOTER, type FooterMenu } from '../storefront/footer';
 
 const item = (o: Partial<FooterMenu['items'][number]> & { title: string }) => ({
   id: o.id ?? o.title,

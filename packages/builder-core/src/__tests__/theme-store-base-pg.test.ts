@@ -7,8 +7,8 @@ import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
-import { ThemeStore, type CompileFn } from '../theme-store';
-import { DELETES_MANIFEST } from '../theme-compose';
+import { ThemeStore, type CompileFn } from '../theme/theme-store';
+import { DELETES_MANIFEST } from '../theme/theme-compose';
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const bucket = process.env.S3_TEST_BUCKET ?? 's2poc-test';

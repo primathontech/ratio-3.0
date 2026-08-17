@@ -6,13 +6,13 @@ import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
-import { ThemeStore, type CompileFn } from '../theme-store';
+import { ThemeStore, type CompileFn } from '../theme/theme-store';
 import {
   ensureDefaultBaseTheme,
   adoptAndPublishDefaultTheme,
   DEFAULT_BASE_THEME_ID,
-} from '../base-library';
-import { defaultBundleTheme } from '../default-theme';
+} from '../theme/base-library';
+import { defaultBundleTheme } from '../theme/default-theme';
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const bucket = process.env.S3_TEST_BUCKET ?? 's2poc-test';

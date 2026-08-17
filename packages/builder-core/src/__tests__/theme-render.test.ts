@@ -5,9 +5,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { renderThemePage, type SectionRenderer, type PlatformRenderer } from '../theme-render';
-import type { BindingResolver } from '../resolve';
-import type { ThemeFiles } from '../bundle';
+import {
+  renderThemePage,
+  type SectionRenderer,
+  type PlatformRenderer,
+} from '../theme/theme-render';
+import type { BindingResolver } from '../commerce/resolve';
+import type { ThemeFiles } from '../theme/bundle';
 
 const trusted: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
 const untrusted: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: false });

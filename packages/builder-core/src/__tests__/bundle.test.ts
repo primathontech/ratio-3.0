@@ -3,7 +3,7 @@
 // per file. These are pure functions (gzip + sha256), no I/O.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { packBundle, unpackBundle, bundleId, type ThemeFiles } from '../bundle';
+import { packBundle, unpackBundle, bundleId, type ThemeFiles } from '../theme/bundle';
 
 const theme: ThemeFiles = {
   'sections/hero.liquid': '<section>{{ hero.heading }}</section>',

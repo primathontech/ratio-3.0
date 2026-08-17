@@ -2,8 +2,8 @@
 // (only their changed files). composeTheme flattens the two into the full theme the compiler renders.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { composeTheme, diffFromBase, DELETES_MANIFEST } from '../theme-compose';
-import type { ThemeFiles } from '../bundle';
+import { composeTheme, diffFromBase, DELETES_MANIFEST } from '../theme/theme-compose';
+import type { ThemeFiles } from '../theme/bundle';
 
 test('override replaces a base file; a new override adds; untouched base files pass through', () => {
   const base: ThemeFiles = { 'a.liquid': 'BASE-A', 'b.liquid': 'BASE-B' };

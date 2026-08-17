@@ -2,7 +2,13 @@
 // rendered header — including the brand-only fallback and href/text safety.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchMainMenu, renderHeader, navHref, FALLBACK_MENU, type NavMenu } from '../nav';
+import {
+  fetchMainMenu,
+  renderHeader,
+  navHref,
+  FALLBACK_MENU,
+  type NavMenu,
+} from '../storefront/nav';
 
 const item = (o: Partial<NavMenu['items'][number]> & { title: string }) => ({
   id: o.id ?? o.title,

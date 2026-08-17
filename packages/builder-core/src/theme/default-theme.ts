@@ -1,5 +1,5 @@
 import type { ThemeFiles } from './bundle';
-import type { DataSource } from './doc';
+import type { DataSource } from '../page-builder/doc';
 
 // The starter theme a brand-new store adopts (base ⊕ overrides). A real, editable e-commerce home —
 // hero, promo posters, two product rows bound to collections (New Arrivals / Trending), and a brand

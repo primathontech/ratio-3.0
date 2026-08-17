@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { matchRoute } from '../router';
+import { matchRoute } from '../page-builder/router';
 
 test('home → self-keyed home doc', () => {
   assert.deepStrictEqual(matchRoute('/'), {

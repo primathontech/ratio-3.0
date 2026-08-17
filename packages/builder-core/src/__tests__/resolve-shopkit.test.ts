@@ -1,8 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { ShopkitResolver, commerceResolverFromEnv, storefrontResolver } from '../resolve-shopkit';
-import { StubResolver } from '../resolve';
-import { DATA_SOURCE_TYPES } from '../doc';
+import {
+  ShopkitResolver,
+  commerceResolverFromEnv,
+  storefrontResolver,
+} from '../commerce/resolve-shopkit';
+import { StubResolver } from '../commerce/resolve';
+import { DATA_SOURCE_TYPES } from '../page-builder/doc';
 import type { ICommerceClient } from '@shopkit/data-layer';
 
 // A canned custom-backend response in the real 2.0 shape: COLLECTION_BY_HANDLES → entries of
