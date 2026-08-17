@@ -8,8 +8,8 @@ import { createCommerceClient } from '@shopkit/data-layer';
 import type { ICommerceClient, ICustomConfig, IResponse } from '@shopkit/data-layer';
 import { StubResolver } from './resolve';
 import type { BindingResolver, ResolveContext, ResolvedSource } from './resolve';
-import type { DataSource } from './doc';
-import { DATA_SOURCE_TYPES } from './doc';
+import type { DataSource } from '../page-builder/doc';
+import { DATA_SOURCE_TYPES } from '../page-builder/doc';
 
 type RawProduct = Record<string, unknown> & { id?: string | number };
 

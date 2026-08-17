@@ -7,9 +7,9 @@
 // renderer (@ratio/builder-render/isolate) for merchant sections; a first-party/trusted path may pass
 // an in-process one. This module is pure composition and never renders in-process itself.
 import type { ThemeFiles } from './bundle';
-import type { DataSource } from './doc';
-import type { BindingResolver, ResolveContext } from './resolve';
-import { interpolateParams } from './resolve';
+import type { DataSource } from '../page-builder/doc';
+import type { BindingResolver, ResolveContext } from '../commerce/resolve';
+import { interpolateParams } from '../commerce/resolve';
 
 // Renders one THEME section's Liquid with its data context to HTML. Theme sections (base or merchant)
 // carry their Liquid in the bundle; for untrusted merchant sections this MUST run inside the

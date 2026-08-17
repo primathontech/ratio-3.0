@@ -7,9 +7,9 @@ import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
 import { S3ObjectStore, type ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
-import { ThemeStore, type CompileFn } from '../theme-store';
+import { ThemeStore, type CompileFn } from '../theme/theme-store';
 import { tenantTag } from '../tags';
-import type { ThemeFiles } from '../bundle';
+import type { ThemeFiles } from '../theme/bundle';
 
 // Wraps a real store to count writes — used to prove a doomed publish never touches S3.
 class CountingStore implements ObjectStore {

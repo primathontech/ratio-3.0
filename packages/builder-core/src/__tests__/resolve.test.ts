@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { resolvePage, interpolateParams, StubResolver } from '../resolve';
-import type { BindingResolver, ResolvedSource } from '../resolve';
+import { resolvePage, interpolateParams, StubResolver } from '../commerce/resolve';
+import type { BindingResolver, ResolvedSource } from '../commerce/resolve';
 import { defaultRegistry } from '@ratio/builder-registry';
-import type { PageDoc, DataSource } from '../doc';
+import type { PageDoc, DataSource } from '../page-builder/doc';
 
 const registry = defaultRegistry();
 const resolver = new StubResolver();

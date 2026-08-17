@@ -3,7 +3,7 @@
 // (`@ratio/builder-core/edge`); the Node origin keeps using the main barrel. Together with the
 // edge-safe @ratio/builder-render barrel + the injected untrusted renderer, the whole render path
 // runs on Workers unchanged.
-export { composePage, type ComposedPage } from './compose';
+export { composePage, type ComposedPage } from './page-builder/compose';
 export {
   resolvePage,
   interpolateParams,
@@ -12,7 +12,7 @@ export {
   type ResolveContext,
   type ResolvedSource,
   type TenantCommerce,
-} from './resolve';
+} from './commerce/resolve';
 export {
   renderHeader,
   navHref,
@@ -20,7 +20,7 @@ export {
   FALLBACK_MENU,
   type NavMenu,
   type NavItem,
-} from './nav';
-export { renderFooter, fetchFooter, FALLBACK_FOOTER, type FooterMenu } from './footer';
-export { storefrontHead, type ThemeTokens } from './storefront';
-export * from './doc';
+} from './storefront/nav';
+export { renderFooter, fetchFooter, FALLBACK_FOOTER, type FooterMenu } from './storefront/footer';
+export { storefrontHead, type ThemeTokens } from './storefront/storefront';
+export * from './page-builder/doc';

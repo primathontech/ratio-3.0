@@ -5,7 +5,7 @@
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
 import { composeTheme, diffFromBase } from './theme-compose';
-import { tenantTag } from './tags';
+import { tenantTag } from '../tags';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 

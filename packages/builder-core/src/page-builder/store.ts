@@ -11,7 +11,7 @@ import type { PageDoc } from './doc';
 import { validatePageDoc } from './doc';
 import { canonicalPath } from './path';
 import type { SectionRegistry } from '@ratio/builder-registry';
-import { pageTag, tenantTag } from './tags';
+import { pageTag, tenantTag } from '../tags';
 
 // The edge purge seam (D2): CF tag-purge now, Akamai Fast Purge later — same interface.
 export interface PurgeLike {
