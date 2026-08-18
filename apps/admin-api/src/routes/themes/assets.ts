@@ -135,6 +135,36 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
     return c.json({ ok: true, path });
   }
 
+  // Serve a DRAFT asset's raw bytes (OFCE-632): the editor's Assets view can't preview an unpublished
+  // asset via the storefront origin (that serves only the LIVE theme's referenced hashes), so the editor
+  // fetches the bytes here (auth'd) to render a thumbnail. Member read. The content-type is the manifest
+  // entry's — allowlisted at upload — served with nosniff; no-store since these are per-draft + uncacheable.
+  async function serveAsset(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
+    const path = String(c.req.query('path') ?? '').trim();
+    if (!path) return c.json({ error: 'path is required (?path=)' }, 400);
+    const ref = { themeId, tenantId: id };
+    const manifest = readAssetManifest(await themes.readDraft(ref));
+    if (!Object.hasOwn(manifest, path)) return c.json({ error: 'no such asset' }, 404);
+    const entry = manifest[path];
+    const bytes = await themes.getAsset(ref, entry.hash);
+    if (!bytes) return c.json({ error: 'asset bytes missing' }, 404);
+    // The manifest's contentType is validated against the allowlist at UPLOAD, but the manifest is a
+    // merchant-editable file (the generic draft-save writes it), so it's UNTRUSTED at serve time — a
+    // hand-edited entry could claim text/html to smuggle stored HTML/JS onto this origin. Only echo an
+    // allowlisted image/font type; anything else serves as octet-stream, which the browser never renders
+    // or executes (nosniff keeps it from being sniffed back into an active type).
+    const contentType = ASSET_CONTENT_TYPES.has(entry.contentType)
+      ? entry.contentType
+      : 'application/octet-stream';
+    c.header('content-type', contentType);
+    c.header('x-content-type-options', 'nosniff');
+    c.header('cache-control', 'no-store');
+    // c.body wants an ArrayBuffer, not a Uint8Array view — slice() gives a right-sized copy.
+    return c.body(bytes.slice().buffer as ArrayBuffer);
+  }
+
   // Legacy one-theme-per-store mounts (back-compat: the current editor + its tests). themeId = default.
   app.post('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
     uploadAsset(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
@@ -144,6 +174,9 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
   );
   app.delete('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
     deleteAsset(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
+  );
+  app.get('/stores/:id/theme/bundle/assets/raw', requireMembership, (c) =>
+    serveAsset(c, mainThemeId(c.req.param('id')))
   );
 
   // Theme-scoped asset mounts (multi-theme). assertThemeInStore enforces ownership on each.
@@ -158,5 +191,9 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
   app.delete('/stores/:id/themes/:themeId/assets', requireMembership, async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
     return deleteAsset(c, c.req.param('themeId'));
+  });
+  app.get('/stores/:id/themes/:themeId/assets/raw', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return serveAsset(c, c.req.param('themeId'));
   });
 }

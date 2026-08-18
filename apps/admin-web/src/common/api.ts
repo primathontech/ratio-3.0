@@ -188,6 +188,15 @@ function pickArray<T>(obj: unknown, key: string): T[] {
   return v as T[];
 }
 
+// A binary theme asset as the editor's Assets view sees it: the path the theme references + the
+// content address / type / size from the draft manifest (OFCE-632).
+export interface ThemeAsset {
+  path: string;
+  hash: string;
+  contentType: string;
+  size: number;
+}
+
 export function createApi(
   baseUrl: string,
   getToken: GetToken,
@@ -206,14 +215,17 @@ export function createApi(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutOverrideMs ?? timeoutMs);
     let res: Response;
+    // A FormData body (asset upload) must NOT carry an explicit content-type — the browser sets the
+    // multipart boundary itself; and it's sent as-is, not JSON-stringified.
+    const isForm = body instanceof FormData;
     try {
       res = await fetchImpl(baseUrl + path, {
         method,
         headers: {
-          'content-type': 'application/json',
+          ...(isForm ? {} : { 'content-type': 'application/json' }),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
         signal: controller.signal,
       });
     } catch (e) {
@@ -332,6 +344,40 @@ export function createApi(
         files,
         page,
       }),
+    // Binary theme assets (OFCE-632). listAssets → the draft manifest entries; uploadAsset posts a File
+    // as multipart (the browser sets the boundary); deleteAsset drops the manifest entry; getAssetBytes
+    // fetches the raw bytes (auth'd) so the view can thumbnail an unpublished asset — an <img src> can't
+    // carry the bearer token, so we fetch a Blob and the caller object-URLs it.
+    listAssets: (id: string, themeId: string) =>
+      req<{ assets: ThemeAsset[] }>('GET', `/stores/${id}/themes/${themeId}/assets`).then(
+        (d) => d.assets ?? []
+      ),
+    uploadAsset: (id: string, themeId: string, path: string, file: File) => {
+      const fd = new FormData();
+      fd.append('path', path);
+      fd.append('file', file);
+      return req<{ ok: boolean; path: string; asset: Omit<ThemeAsset, 'path'> }>(
+        'POST',
+        `/stores/${id}/themes/${themeId}/assets`,
+        fd,
+        30_000 // assets are up to 5 MB — allow more than the 15s default
+      );
+    },
+    deleteAsset: (id: string, themeId: string, path: string) =>
+      req<{ ok: boolean; path: string }>(
+        'DELETE',
+        `/stores/${id}/themes/${themeId}/assets?path=${encodeURIComponent(path)}`
+      ),
+    getAssetBytes: async (id: string, themeId: string, path: string): Promise<Blob> => {
+      const token = await getToken();
+      const res = await fetchImpl(
+        `${baseUrl}/stores/${id}/themes/${themeId}/assets/raw?path=${encodeURIComponent(path)}`,
+        { headers: token ? { authorization: `Bearer ${token}` } : {} }
+      );
+      if (!res.ok)
+        throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText);
+      return res.blob();
+    },
     listDomains: (id: string) =>
       req<Record<string, unknown>>('GET', `/stores/${id}/domains`).then((d) =>
         pickArray<DomainInfo>(d, 'domains')
