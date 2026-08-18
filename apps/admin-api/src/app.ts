@@ -937,15 +937,59 @@ export function createApp(
   }
 
   // Publish: freeze compile(base ⊕ overrides), cut an immutable version, flip the live pointer.
+  // Full theme ownership invariant: a store's live theme MUST own the whole document — the origin
+  // renders the theme's layout/theme.liquid with no TS-shell fallback. The live pointer moves three ways
+  // (publish, activate, rollback); all three must refuse a theme whose layout is not a full HTML
+  // document, or the origin could be handed a body-only theme once the shell is gone. This checks an
+  // already-published version's FROZEN layout (activate/rollback); publishBundle checks the draft.
+  // Returns a 400 Response to short-circuit the route, or null to proceed.
+  async function assertVersionOwnsDocument(
+    c: Context<Vars>,
+    tenantId: string,
+    themeId: string,
+    version?: number
+  ): Promise<Response | null> {
+    if (!themes) return null;
+    // Dormant until full theme ownership is switched on (THEME_OWNS_DOCUMENT) — the same flag the origin
+    // render path gates on. Enforcing it before go-live (while the TS shell still renders body-only
+    // themes) would prematurely block a store on an old base that hasn't been rebased yet; the flag flips
+    // AFTER the rebase migration runs, so publish/activate/rollback start enforcing exactly when the
+    // origin stops falling back to the shell.
+    if (process.env.THEME_OWNS_DOCUMENT !== '1') return null;
+    const { rows } = await pool.query<{ compiled_hash: string }>(
+      version != null
+        ? 'SELECT compiled_hash FROM theme_bundle_version WHERE theme_id = $1 AND version = $2'
+        : 'SELECT compiled_hash FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC LIMIT 1',
+      version != null ? [themeId, version] : [themeId]
+    );
+    const hash = rows[0]?.compiled_hash;
+    if (!hash) return null; // no such version — setLive/rollback raises the precise 400/404
+    const compiled = await themes.loadCompiled(tenantId, themeId, hash);
+    if (!layoutOwnsDocument(compiled?.['layout/theme.liquid']))
+      return c.json(
+        {
+          error:
+            'that version’s layout/theme.liquid is not a full HTML document — it cannot be made live under full theme ownership',
+        },
+        400
+      );
+    return null;
+  }
+
   async function publishBundle(c: Context<Vars>, themeId: string) {
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
-    // Full theme ownership: a store's live theme MUST own the whole document — the origin renders the
-    // theme's layout/theme.liquid with no TS-shell fallback. Enforce the invariant at this boundary
-    // (untrusted merchant/AI layout): refuse to publish a composed theme whose layout is not a full HTML
-    // document. The base is a full document, so this only trips a merchant who broke their own layout.
+    // Enforce the full-document invariant at this boundary (untrusted merchant/AI layout): refuse to
+    // publish a composed theme whose layout is not a full HTML document. Gated on THEME_OWNS_DOCUMENT so
+    // it activates at go-live together with the origin's layout rendering (after the rebase migration),
+    // never before. The base is a full document, so it only trips a merchant who broke their own layout.
+    // Skip an empty compose (no base + no draft) — a "nothing to publish" case publish() reports itself.
     const composed = await themes.readComposed({ themeId, tenantId: id });
-    if (!layoutOwnsDocument(composed['layout/theme.liquid']))
+    if (
+      process.env.THEME_OWNS_DOCUMENT === '1' &&
+      Object.keys(composed).length > 0 &&
+      !layoutOwnsDocument(composed['layout/theme.liquid'])
+    )
       return c.json(
         {
           error:
@@ -979,6 +1023,18 @@ export function createApp(
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
     if (typeof body.version !== 'number')
       return c.json({ error: 'version (number) is required' }, 400);
+    // Rolls the tenant's LIVE theme back to body.version — guard that version's layout (full theme
+    // ownership) before repointing. Resolve the live theme id the rollback will move.
+    const live = (
+      await pool.query<{ live_theme_id: string | null }>(
+        'SELECT live_theme_id FROM tenants WHERE id = $1',
+        [id]
+      )
+    ).rows[0]?.live_theme_id;
+    if (live) {
+      const bad = await assertVersionOwnsDocument(c, id, live, body.version);
+      if (bad) return bad;
+    }
     try {
       await themes.rollback(id, body.version);
     } catch (e) {
@@ -1167,6 +1223,8 @@ export function createApp(
     const themeId = c.req.param('themeId');
     await assertThemeInStore(themeId, id);
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
+    const bad = await assertVersionOwnsDocument(c, id, themeId, body.version);
+    if (bad) return bad;
     let version: number;
     try {
       ({ version } = await themes.setLive(id, themeId, body.version));
@@ -1236,6 +1294,8 @@ export function createApp(
     await assertThemeInStore(themeId, id);
     const body = (await c.req.json().catch(() => ({}))) as { version?: number };
     if (typeof body.version !== 'number') return c.json({ error: 'version required' }, 400);
+    const bad = await assertVersionOwnsDocument(c, id, themeId, body.version);
+    if (bad) return bad;
     try {
       await themes.setLive(id, themeId, body.version);
     } catch (e) {

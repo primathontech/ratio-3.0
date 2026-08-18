@@ -216,26 +216,66 @@ test('activate requires a published version (400 when none)', async () => {
   assert.strictEqual(res.status, 400);
 });
 
+// The full-document invariant is gated on THEME_OWNS_DOCUMENT — it activates at go-live together with
+// the origin's layout rendering (after the rebase migration), never before. These tests turn it on.
 test('publish rejects a theme whose layout is not a full HTML document (full theme ownership invariant)', async () => {
-  // Full theme ownership: the store's live theme MUST own the whole document (no TS-shell fallback), so
-  // a publish whose composed layout/theme.liquid is not a full HTML document is refused at the boundary.
-  const { id } = await createTheme({ name: 'Layout store' });
-  // Untouched layout composes in the full-document base → publishes fine.
-  const okPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
-  assert.strictEqual(okPub.status, 200);
+  process.env.THEME_OWNS_DOCUMENT = '1';
+  try {
+    const { id } = await createTheme({ name: 'Layout store' });
+    // Untouched layout composes in the full-document base → publishes fine.
+    const okPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
+    assert.strictEqual(okPub.status, 200);
 
-  // Override the layout with a body-only fragment (no <!doctype/<html) → publish must 400, not serve it.
-  const got = (await (await call(app, 'GET', `/stores/${A}/themes/${id}/draft`, alice)).json()) as {
-    files: Record<string, string>;
-    revision: string;
-  };
-  const save = await call(app, 'PUT', `/stores/${A}/themes/${id}/draft`, alice, {
-    files: { ...got.files, 'layout/theme.liquid': '<div>no doctype here</div>' },
-    revision: got.revision,
-  });
-  assert.strictEqual(save.status, 200);
-  const badPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
-  assert.strictEqual(badPub.status, 400);
+    // Override the layout with a body-only fragment (no <!doctype/<html) → publish must 400.
+    const got = (await (
+      await call(app, 'GET', `/stores/${A}/themes/${id}/draft`, alice)
+    ).json()) as { files: Record<string, string>; revision: string };
+    const save = await call(app, 'PUT', `/stores/${A}/themes/${id}/draft`, alice, {
+      files: { ...got.files, 'layout/theme.liquid': '<div>no doctype here</div>' },
+      revision: got.revision,
+    });
+    assert.strictEqual(save.status, 200);
+    const badPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
+    assert.strictEqual(badPub.status, 400);
+  } finally {
+    delete process.env.THEME_OWNS_DOCUMENT;
+  }
+});
+
+test('activate + rollback also refuse a version whose layout is not a full document (invariant across every live-pointer move)', async () => {
+  process.env.THEME_OWNS_DOCUMENT = '1';
+  try {
+    // The publish route rejects a body-only theme, so seed one DIRECTLY through the store to prove the
+    // other two ways the live pointer moves — activate and rollback — enforce the same invariant.
+    const themeId = `${A}-bodyonly`;
+    await store.ensureTheme(A, themeId, 'Body-only');
+    await store.saveDraft(
+      { themeId, tenantId: A },
+      {
+        'sections/hero.liquid': '<section>x</section>',
+        'templates/index.json': '{"sections":[{"type":"hero"}]}',
+      }
+    );
+    await store.publish({ themeId, tenantId: A }, { compile: (s) => s, makeLive: false }); // v1, no layout
+
+    const act = await call(app, 'POST', `/stores/${A}/themes/${themeId}/activate`, alice, {
+      version: 1,
+    });
+    assert.strictEqual(act.status, 400, 'activate refuses a body-only version');
+    const rb = await call(app, 'POST', `/stores/${A}/themes/${themeId}/rollback`, alice, {
+      version: 1,
+    });
+    assert.strictEqual(rb.status, 400, 'rollback refuses a body-only version');
+
+    // The store's live pointer was never moved to the body-only theme.
+    const { rows } = await pool.query<{ live_theme_id: string | null }>(
+      'SELECT live_theme_id FROM tenants WHERE id = $1',
+      [A]
+    );
+    assert.notStrictEqual(rows[0].live_theme_id, themeId, 'the body-only theme never became live');
+  } finally {
+    delete process.env.THEME_OWNS_DOCUMENT;
+  }
 });
 
 test('activate makes a theme live, and switching between themes repoints the store', async () => {
