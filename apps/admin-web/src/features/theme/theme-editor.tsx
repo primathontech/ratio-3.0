@@ -13,6 +13,7 @@ import { CodeEditor } from './code-editor';
 import { groupByFolder, languageLabel, THEME_FOLDERS } from './editor-helpers';
 import { EditorTitleBar } from './editor-titlebar';
 import { EditorExplorer } from './editor-explorer';
+import { AssetsPanel } from './assets-panel';
 import { EditorTabs } from './editor-tabs';
 import { EditorPreview } from './editor-preview';
 import { EditorVersions } from './editor-versions';
@@ -63,7 +64,7 @@ export function ThemeCodeEditor({
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set(THEME_FOLDERS));
   const [filter, setFilter] = useState('');
   // Activity bar: one view active at a time, or none — which collapses the sidebar (VS Code-style).
-  const [activeView, setActiveView] = useState<'explorer' | 'search' | null>('explorer');
+  const [activeView, setActiveView] = useState<'explorer' | 'search' | 'assets' | null>('explorer');
   const [showPreview, setShowPreview] = useState(false);
   // Published version history + which version is live (the title-bar indicator + the versions drawer).
   const [versions, setVersions] = useState<ThemeVersion[]>([]);
@@ -445,9 +446,22 @@ export function ThemeCodeEditor({
               >
                 <Icon.search size={22} />
               </button>
+              <button
+                className={activeView === 'assets' ? 'active' : ''}
+                title="Assets"
+                aria-label="Assets"
+                aria-pressed={activeView === 'assets'}
+                onClick={() => setActiveView((v) => (v === 'assets' ? null : 'assets'))}
+              >
+                <Icon.image size={22} />
+              </button>
             </div>
 
-            {activeView && (
+            {activeView === 'assets' && (
+              <AssetsPanel storeId={store.id} themeId={themeId} api={api} />
+            )}
+
+            {(activeView === 'explorer' || activeView === 'search') && (
               <EditorExplorer
                 storeName={store.name}
                 groups={groups}

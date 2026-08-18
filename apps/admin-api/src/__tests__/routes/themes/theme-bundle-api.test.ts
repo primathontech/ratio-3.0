@@ -643,6 +643,79 @@ test('a non-member cannot list or delete assets (403)', async () => {
   assert.strictEqual((await deleteAsset(bob, 'images/logo.png')).status, 403);
 });
 
+// OFCE-632: serve a draft asset's raw bytes so the editor's Assets view can thumbnail an unpublished
+// upload (the storefront origin only serves the LIVE theme's assets).
+const rawAsset = (
+  headers: Record<string, string>,
+  path: string,
+  route = `/stores/${ID}/theme/bundle/assets/raw`
+) =>
+  app.fetch(
+    new Request('http://cp' + route + `?path=${encodeURIComponent(path)}`, {
+      method: 'GET',
+      headers,
+    })
+  );
+
+test('raw-serve returns the draft asset bytes with its content-type + nosniff', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {});
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7, 7, 7]);
+  await uploadAsset(alice, 'images/pic.png', new File([bytes], 'pic.png', { type: 'image/png' }));
+  const res = await rawAsset(alice, 'images/pic.png');
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(res.headers.get('content-type'), 'image/png');
+  assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.strictEqual(res.headers.get('cache-control'), 'no-store');
+  const back = new Uint8Array(await res.arrayBuffer());
+  assert.deepStrictEqual(back, bytes, 'the exact uploaded bytes come back');
+});
+
+test('raw-serve neutralizes a tampered manifest content-type (never serves text/html)', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {});
+  // Upload a real (allowlisted) PNG, then hand-edit the draft manifest to claim text/html for it —
+  // simulating a member editing config/assets.json in the code editor to smuggle stored HTML.
+  const up = (await (
+    await uploadAsset(
+      alice,
+      'images/x.png',
+      new File([new Uint8Array([1, 2, 3])], 'x.png', { type: 'image/png' })
+    )
+  ).json()) as { asset: { hash: string; size: number } };
+  const draft = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    files: Record<string, string>;
+    revision: string;
+  };
+  const tampered = {
+    ...draft.files,
+    'config/assets.json': JSON.stringify({
+      'images/x.png': { hash: up.asset.hash, contentType: 'text/html', size: up.asset.size },
+    }),
+  };
+  await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: tampered,
+    revision: draft.revision,
+  });
+  const res = await rawAsset(alice, 'images/x.png');
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(
+    res.headers.get('content-type'),
+    'application/octet-stream',
+    'the tampered text/html type is neutralized, not served as active content'
+  );
+  assert.strictEqual(res.headers.get('x-content-type-options'), 'nosniff');
+});
+
+test('raw-serve 404s an unknown path, 400s a missing ?path, 403s a non-member', async () => {
+  assert.strictEqual((await rawAsset(alice, 'nope/missing.png')).status, 404);
+  const noPath = await app.fetch(
+    new Request(`http://cp/stores/${ID}/theme/bundle/assets/raw`, { method: 'GET', headers: alice })
+  );
+  assert.strictEqual(noPath.status, 400);
+  assert.strictEqual((await rawAsset(bob, 'images/pic.png')).status, 403);
+});
+
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 400);
