@@ -173,9 +173,9 @@ export async function renderThemePage(
 // Does this layout/theme.liquid own the WHOLE document (full theme ownership) rather than just wrap the
 // body? A full-document layout MUST begin with <!doctype (or <html). The check is anchored to the START
 // of the source — a stray <!doctype/<html inside a Liquid comment or a pasted example elsewhere in the
-// file must NOT flip the mode, or the origin would apply the layout to a body-only theme and serve a
-// broken document. The origin + editor preview gate the layout-render path on this (AND the kill-switch
-// env flag); a body-only or absent layout falls back to the legacy TS shell.
+// file must NOT flip the mode. Under full theme ownership (OFCE-641) there is no TS-shell fallback: the
+// publish/activate/rollback invariant refuses to make a non-full-document theme live, and the origin
+// fails LOUD (500) if one ever reaches render rather than serving a headless document.
 export function layoutOwnsDocument(layoutSource: string | undefined | null): boolean {
   const s = (layoutSource ?? '').trimStart().toLowerCase();
   return s.startsWith('<!doctype') || s.startsWith('<html');

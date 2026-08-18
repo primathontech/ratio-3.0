@@ -53,6 +53,9 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME, tenantId: T },
     {
+      // Full theme ownership (OFCE-641): the origin renders the theme's own layout — no shell fallback.
+      'layout/theme.liquid':
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title></head><body>{{ content_for_layout }}</body></html>',
       'config/assets.json': JSON.stringify({ 'images/logo.png': logo }),
       // The section REFERENCES the asset via asset_url (OFCE-647) — the page must render /assets/<hash>.
       'sections/hero.liquid': `<h1>hi</h1><img src="{{ 'images/logo.png' | asset_url }}">`,

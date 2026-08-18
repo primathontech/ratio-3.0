@@ -26,6 +26,10 @@ const credentials = {
 const common = { endpoint, forcePathStyle: true, credentials, region: 'us-east-1' };
 const skip = endpoint ? false : 'set BUNDLE_S3_ENDPOINT (MinIO) + a migrated DATABASE_URL';
 
+// Full theme ownership (OFCE-641): the origin renders the theme's own layout/theme.liquid (no shell
+// fallback), so every non-base test theme carries a full-document layout with the CSS layers + slots.
+const LAYOUT = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{ page_title | default: site_name | default: 'Store' | escape }}</title><style>{{ base_css }}{{ token_css }}{{ theme_css }}</style>{{ content_for_header }}</head><body>{{ header }}{{ content_for_layout }}{{ footer }}{{ content_for_body_end }}</body></html>`;
+
 const T = 'themebundle_o1';
 const THEME = 'themebundle_o1_main';
 const T2 = 'themebundle_o2';
@@ -99,6 +103,7 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME, tenantId: T },
     {
+      'layout/theme.liquid': LAYOUT,
       'sections/hero.liquid': '<section class="hero"><h1>{{ heading }}</h1></section>',
       'templates/index.json': JSON.stringify({
         sections: [{ type: 'hero', data: { heading: 'Welcome to bundles' } }],
@@ -109,7 +114,12 @@ before(async () => {
 
   // A live bundle whose template is malformed JSON — the render must throw and DEGRADE to legacy.
   await store.ensureTheme(T3, THEME3);
-  await store.saveDraft({ themeId: THEME3, tenantId: T3 }, { 'templates/index.json': 'NOT JSON' });
+  // Full-document layout (passes the ownership check) but a malformed TEMPLATE → the render throws a
+  // JSON error (NOT a full-document violation), so it degrades to legacy, not a fail-loud 500.
+  await store.saveDraft(
+    { themeId: THEME3, tenantId: T3 },
+    { 'layout/theme.liquid': LAYOUT, 'templates/index.json': 'NOT JSON' }
+  );
   await store.publish({ themeId: THEME3, tenantId: T3 }, { compile: (s) => s });
 
   // A bundle mixing a PLATFORM section (heading — first-party code, no Liquid in the bundle) and a
@@ -118,6 +128,7 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME4, tenantId: T4 },
     {
+      'layout/theme.liquid': LAYOUT,
       'sections/promo.liquid': '<p class="promo">{{ msg }}</p>',
       'templates/index.json': JSON.stringify({
         sections: [
@@ -135,6 +146,7 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME5, tenantId: T5 },
     {
+      'layout/theme.liquid': LAYOUT,
       'sections/collmark.liquid': '<div class="coll">Collection template</div>',
       'sections/prodmark.liquid': '<div class="prod">Product template</div>',
       'templates/collection.json': JSON.stringify({ sections: [{ type: 'collmark', data: {} }] }),
@@ -149,6 +161,7 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME6, tenantId: T6 },
     {
+      'layout/theme.liquid': LAYOUT,
       'sections/plist.liquid':
         '<ul>{% for p in products %}<li>{{ p.title | escape }}</li>{% endfor %}</ul>',
       'templates/index.json': JSON.stringify({
@@ -174,6 +187,7 @@ before(async () => {
   await store.saveDraft(
     { themeId: THEME8, tenantId: T8 },
     {
+      'layout/theme.liquid': LAYOUT,
       'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
       'sections/hero.liquid': '<section class="hero"><h1>{{ heading }}</h1></section>',
       'templates/index.json': JSON.stringify({

@@ -32,7 +32,7 @@ import {
   writeAssetManifest,
 } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
-import { storefrontHead, resolveThemeTokens, tokenCss } from '@ratio/builder-core';
+import { resolveThemeTokens, tokenCss } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
 import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
@@ -237,22 +237,18 @@ async function renderThemePreview(
     footer: footerData,
     siteName,
   });
-  // Mirror EXACTLY what the origin serves (apps/origin/src/index.ts): full theme ownership (OFCE-630)
-  // when the flag is on AND the draft carries a full-document layout → render that layout (the theme
-  // owns head + chrome + sections); otherwise the legacy TS shell wraps the body (doctype + <head> with
-  // the design-system CSS + per-theme brand tokens + the theme's own assets/theme.css). Either way the
-  // header/footer come from the theme's editable sections, so the preview shows edits as they will live.
-  const themeOwnsDocument =
-    process.env.THEME_OWNS_DOCUMENT === '1' && layoutOwnsDocument(files['layout/theme.liquid']);
-  const html = themeOwnsDocument
-    ? await renderThemeLayout(files, (l, d) => renderUntrusted(l, d), {
-        content_for_layout: sections,
-        header,
-        footer,
-        token_css: tokenCss(themeTokens),
-        site_name: siteName,
-      })
-    : `<!doctype html><html lang="en"><head><meta charset="utf-8">${storefrontHead(themeTokens, files['assets/theme.css'] ?? '')}</head><body>${header}${sections}${footer}</body></html>`;
+  // Mirror what the origin serves (apps/origin/src/index.ts): the theme's layout/theme.liquid owns the
+  // whole document — render it with the chrome + sections + brand tokens. Preview is LENIENT (unlike the
+  // live origin, which fails loud on a non-full-document theme): a merchant mid-edit may have an
+  // incomplete layout, and renderThemeLayout renders whatever the draft carries so they can see their
+  // work — the publish invariant is what blocks going live with a broken layout.
+  const html = await renderThemeLayout(files, (l, d) => renderUntrusted(l, d), {
+    content_for_layout: sections,
+    header,
+    footer,
+    token_css: tokenCss(themeTokens),
+    site_name: siteName,
+  });
   return { html, tags, sampleData };
 }
 
@@ -950,12 +946,10 @@ export function createApp(
     version?: number
   ): Promise<Response | null> {
     if (!themes) return null;
-    // Dormant until full theme ownership is switched on (THEME_OWNS_DOCUMENT) — the same flag the origin
-    // render path gates on. Enforcing it before go-live (while the TS shell still renders body-only
-    // themes) would prematurely block a store on an old base that hasn't been rebased yet; the flag flips
-    // AFTER the rebase migration runs, so publish/activate/rollback start enforcing exactly when the
-    // origin stops falling back to the shell.
-    if (process.env.THEME_OWNS_DOCUMENT !== '1') return null;
+    // Full theme ownership (OFCE-641): the origin renders the live theme's layout with no shell fallback,
+    // so the live theme MUST own the whole document. Enforce it on every path that can move the live
+    // pointer (activate/rollback here; publish in publishBundle) — refuse to point live at a version
+    // whose frozen layout is not a full HTML document.
     const { rows } = await pool.query<{ compiled_hash: string }>(
       version != null
         ? 'SELECT compiled_hash FROM theme_bundle_version WHERE theme_id = $1 AND version = $2'
@@ -986,16 +980,11 @@ export function createApp(
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
     // Enforce the full-document invariant at this boundary (untrusted merchant/AI layout): refuse to
-    // publish a composed theme whose layout is not a full HTML document. Gated on THEME_OWNS_DOCUMENT so
-    // it activates at go-live together with the origin's layout rendering (after the rebase migration),
-    // never before. The base is a full document, so it only trips a merchant who broke their own layout.
-    // Skip an empty compose (no base + no draft) — a "nothing to publish" case publish() reports itself.
+    // publish a composed theme whose layout is not a full HTML document — the origin renders it with no
+    // shell fallback. The base is a full document, so this only trips a merchant who broke their own
+    // layout. Skip an empty compose (no base + no draft) — a "nothing to publish" case publish() reports.
     const composed = await themes.readComposed({ themeId, tenantId: id });
-    if (
-      process.env.THEME_OWNS_DOCUMENT === '1' &&
-      Object.keys(composed).length > 0 &&
-      !layoutOwnsDocument(composed['layout/theme.liquid'])
-    )
+    if (Object.keys(composed).length > 0 && !layoutOwnsDocument(composed['layout/theme.liquid']))
       return c.json(
         {
           error:

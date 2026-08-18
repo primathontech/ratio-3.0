@@ -389,9 +389,15 @@ test('preview renders a page to HTML through the theme render path (layout + sec
   assert.ok(body.html?.includes('<body>'), 'wraps the content in the layout');
 });
 
-test('preview wraps sections in the storefront head with the theme brand tokens (OFCE-618)', async () => {
+const PREVIEW_LAYOUT =
+  '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{ site_name | escape }}</title>' +
+  '<style>{{ base_css }}{{ token_css }}{{ theme_css }}</style></head>' +
+  '<body>{{ header }}{{ content_for_layout }}{{ footer }}</body></html>';
+
+test('preview renders a full styled document with the theme brand tokens + chrome (OFCE-618)', async () => {
   const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
     files: {
+      'layout/theme.liquid': PREVIEW_LAYOUT,
       'config/tokens.json': JSON.stringify({ color: '#ff0000', radius: 'rounded' }),
       'templates/index.json': JSON.stringify({
         sections: [{ type: 'hero', data: { heading: 'Hi' } }],
@@ -402,67 +408,55 @@ test('preview wraps sections in the storefront head with the theme brand tokens 
   });
   assert.strictEqual(res.status, 200);
   const body = (await res.json()) as { html?: string };
-  // The preview must be a full, STYLED document that mirrors what the origin serves — otherwise the
-  // wizard/editor preview is bare body HTML and never reflects the merchant's brand colour/font.
+  // The preview mirrors what the origin serves: the theme's own layout renders a full, STYLED document
+  // so the wizard/editor preview reflects the merchant's brand colour/font — not bare body HTML.
   assert.ok(body.html?.startsWith('<!doctype html>'), 'a full document, not bare body HTML');
   assert.ok(body.html?.includes('--accent:#ff0000'), 'the theme brand colour reaches the head');
   assert.ok(body.html?.includes('--radius:18px'), 'the theme radius token reaches the head');
-  assert.ok(body.html?.includes('<h1>Hi</h1>'), 'the section still renders in the body');
-  // Preview parity: the preview wraps the body in the SAME origin shell header/footer (the store's
-  // real name), so the editor/wizard preview matches what the storefront serves — not a bare body.
+  assert.ok(body.html?.includes('<h1>Hi</h1>'), 'the section renders in content_for_layout');
+  // The chrome (renderChrome → the layout's {{ header }}/{{ footer }} slots) shows the real store name,
+  // via the built-in header fallback since the draft ships no header section.
   assert.match(
     body.html ?? '',
     /<header class="hdr">[\s\S]*hdr-brand[^>]*>ThemeBundle</,
-    'the shell header shows the real store name (matches the origin)'
+    'the chrome header shows the real store name (matches the origin)'
   );
-  assert.match(body.html ?? '', /<footer class="ftr">/, 'the shell footer renders');
+  assert.match(body.html ?? '', /<footer class="ftr">/, 'the chrome footer renders');
   assert.strictEqual(
     (body.html?.match(/<header class="hdr">/g) ?? []).length,
     1,
-    'exactly one header (the shell), no theme placeholder'
+    'exactly one header, no double-wrap'
   );
 });
 
-test('preview (OFCE-630 full ownership): a full-document layout draft renders from the theme layout', async () => {
-  // Flag on + the draft carries a full-document layout → the preview renders THAT layout (no TS shell
-  // double-wrap), mirroring the origin. Env is toggled only for this test and restored in finally.
-  const prior = process.env.THEME_OWNS_DOCUMENT;
-  process.env.THEME_OWNS_DOCUMENT = '1';
-  try {
-    const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
-      files: {
-        'layout/theme.liquid':
-          '<!doctype html><html><head><title>{{ site_name | escape }}</title>' +
-          '<style>{{ base_css }}{{ token_css }}{{ theme_css }}</style></head>' +
-          '<body>{{ header }}{{ content_for_layout }}{{ footer }}</body></html>',
-        'assets/base.css': '.probe{color:#0a0a0a}',
-        'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
-        'templates/index.json': JSON.stringify({
-          sections: [{ type: 'hero', data: { heading: 'Owned' } }],
-        }),
-        'sections/hero.liquid': '<h1>{{ heading }}</h1>',
-      },
-      page: 'index',
-    });
-    assert.strictEqual(res.status, 200);
-    const body = (await res.json()) as { html?: string };
-    assert.ok(body.html?.startsWith('<!doctype html>'), 'a full document');
-    assert.strictEqual((body.html?.match(/<html/gi) ?? []).length, 1, 'not double-wrapped');
-    assert.ok(
-      body.html?.includes('.probe{color:#0a0a0a}'),
-      'the theme base.css is inlined by the layout'
-    );
-    assert.ok(body.html?.includes('--radius:18px'), 'origin token_css is placed by the layout');
-    assert.ok(body.html?.includes('<h1>Owned</h1>'), 'the section renders in content_for_layout');
-    assert.strictEqual(
-      (body.html?.match(/<header class="hdr">/g) ?? []).length,
-      1,
-      'exactly one header (placed by the layout), no shell double-wrap'
-    );
-  } finally {
-    if (prior === undefined) delete process.env.THEME_OWNS_DOCUMENT;
-    else process.env.THEME_OWNS_DOCUMENT = prior;
-  }
+test('preview: a full-document layout draft renders from the theme layout (no double-wrap)', async () => {
+  const res = await call(app, 'POST', `/stores/${ID}/theme/bundle/preview`, alice, {
+    files: {
+      'layout/theme.liquid': PREVIEW_LAYOUT,
+      'assets/base.css': '.probe{color:#0a0a0a}',
+      'config/tokens.json': JSON.stringify({ radius: 'rounded' }),
+      'templates/index.json': JSON.stringify({
+        sections: [{ type: 'hero', data: { heading: 'Owned' } }],
+      }),
+      'sections/hero.liquid': '<h1>{{ heading }}</h1>',
+    },
+    page: 'index',
+  });
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as { html?: string };
+  assert.ok(body.html?.startsWith('<!doctype html>'), 'a full document');
+  assert.strictEqual((body.html?.match(/<html/gi) ?? []).length, 1, 'not double-wrapped');
+  assert.ok(
+    body.html?.includes('.probe{color:#0a0a0a}'),
+    'the theme base.css is inlined by the layout'
+  );
+  assert.ok(body.html?.includes('--radius:18px'), 'origin token_css is placed by the layout');
+  assert.ok(body.html?.includes('<h1>Owned</h1>'), 'the section renders in content_for_layout');
+  assert.strictEqual(
+    (body.html?.match(/<header class="hdr">/g) ?? []).length,
+    1,
+    'exactly one header (placed by the layout), no double-wrap'
+  );
 });
 
 test('preview surfaces a render error as { error } (200, not a 500)', async () => {
