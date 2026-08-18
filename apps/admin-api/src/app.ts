@@ -1128,9 +1128,62 @@ export function createApp(
     return c.json({ ok: true, path, asset: entry });
   }
 
+  // List the theme's binary assets (OFCE-632): the draft manifest entries the editor's Assets view shows.
+  // Member read, like draftGet. Reads the DRAFT's manifest (where uploadAsset writes) — the base ships no
+  // binary assets, so this is the full set. Sorted by path for a stable UI.
+  async function listAssets(c: Context<Vars>, themeId: string) {
+    if (!themes) return bundle503(c);
+    const manifest = readAssetManifest(
+      await themes.readDraft({ themeId, tenantId: c.req.param('id')! })
+    );
+    const assets = Object.keys(manifest)
+      .sort()
+      .map((path) => ({ path, ...manifest[path] }));
+    return c.json({ assets });
+  }
+
+  // Delete a binary asset (OFCE-632): drop its manifest entry from the DRAFT so it stops shipping on the
+  // next publish. The content-addressed BYTES are intentionally KEPT — they are immutable and still
+  // referenced by any already-published version's frozen manifest (and possibly another path via dedup);
+  // deleting them would break old live/rolled-back versions. Same read-modify-write + CAS retry as upload.
+  async function deleteAsset(c: Context<Vars>, themeId: string, ensure?: () => Promise<void>) {
+    if (!themes) return bundle503(c);
+    const id = c.req.param('id')!;
+    const path = String(c.req.query('path') ?? '').trim();
+    if (!path) return c.json({ error: 'path is required (?path=)' }, 400);
+    if (ensure) await ensure();
+    const ref = { themeId, tenantId: id };
+    for (let attempt = 0; ; attempt++) {
+      const overrides = await themes.readDraft(ref);
+      const manifest = readAssetManifest(overrides);
+      // Object.hasOwn (not `manifest[path]` truthiness): a path like '__proto__' would read the prototype
+      // and skip the 404 — an own-key check is both correct and prototype-safe.
+      if (!Object.hasOwn(manifest, path)) return c.json({ error: 'no such asset' }, 404);
+      delete manifest[path];
+      const next = writeAssetManifest(overrides, manifest);
+      try {
+        await themes.saveDraft(ref, next, { expectedRevision: bundleId(overrides) });
+        break;
+      } catch (e) {
+        if (e instanceof DraftConflict && attempt < 2) continue;
+        if (e instanceof DraftConflict)
+          return c.json({ error: 'conflict', currentRevision: e.actual }, 409);
+        throw e;
+      }
+    }
+    c.set('auditTenant', id);
+    return c.json({ ok: true, path });
+  }
+
   // Legacy one-theme-per-store mounts (back-compat: the current editor + its tests). themeId = default.
   app.post('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
     uploadAsset(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
+  );
+  app.get('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
+    listAssets(c, mainThemeId(c.req.param('id')))
+  );
+  app.delete('/stores/:id/theme/bundle/assets', requireMembership, (c) =>
+    deleteAsset(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
   );
   app.put('/stores/:id/theme/bundle/draft', requireMembership, (c) =>
     draftPut(c, mainThemeId(c.req.param('id')), () => ensureStoreTheme(c.req.param('id')))
@@ -1274,6 +1327,14 @@ export function createApp(
   app.post('/stores/:id/themes/:themeId/assets', requireMembership, async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
     return uploadAsset(c, c.req.param('themeId'));
+  });
+  app.get('/stores/:id/themes/:themeId/assets', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return listAssets(c, c.req.param('themeId'));
+  });
+  app.delete('/stores/:id/themes/:themeId/assets', requireMembership, async (c) => {
+    await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));
+    return deleteAsset(c, c.req.param('themeId'));
   });
   app.post('/stores/:id/themes/:themeId/publish', requireRole('owner'), async (c) => {
     await assertThemeInStore(c.req.param('themeId'), c.req.param('id'));

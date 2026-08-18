@@ -562,6 +562,87 @@ test('a non-member cannot upload an asset (403)', async () => {
   assert.strictEqual(res.status, 403);
 });
 
+// OFCE-632 asset manager: list + delete the theme's binary assets. Upload already exists (above);
+// these complete the manage surface the editor's Assets view needs.
+const listAssets = (headers: Record<string, string>, route = `/stores/${ID}/theme/bundle/assets`) =>
+  app.fetch(new Request('http://cp' + route, { method: 'GET', headers }));
+const deleteAsset = (
+  headers: Record<string, string>,
+  path: string,
+  route = `/stores/${ID}/theme/bundle/assets`
+) =>
+  app.fetch(
+    new Request('http://cp' + route + `?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+      headers,
+    })
+  );
+
+test('list assets returns the draft manifest entries (path + hash/type/size), sorted', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {}); // clean slate (drops manifest)
+  await uploadAsset(
+    alice,
+    'images/logo.png',
+    new File([new Uint8Array([1, 2, 3])], 'logo.png', { type: 'image/png' })
+  );
+  await uploadAsset(
+    alice,
+    'favicon.ico',
+    new File([new Uint8Array([4, 5])], 'favicon.ico', { type: 'image/x-icon' })
+  );
+  const res = await listAssets(alice);
+  assert.strictEqual(res.status, 200);
+  const body = (await res.json()) as {
+    assets: { path: string; hash: string; contentType: string; size: number }[];
+  };
+  assert.deepStrictEqual(
+    body.assets.map((a) => a.path),
+    ['favicon.ico', 'images/logo.png'],
+    'both assets, sorted by path'
+  );
+  const logo = body.assets.find((a) => a.path === 'images/logo.png')!;
+  assert.strictEqual(logo.contentType, 'image/png');
+  assert.strictEqual(logo.size, 3);
+  assert.ok(/^[a-f0-9]{64}$/.test(logo.hash), 'the content hash');
+});
+
+test('delete an asset removes its manifest entry but KEEPS the content-hash bytes', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/reset`, alice, {});
+  const bytes = new Uint8Array([9, 8, 7, 6]);
+  const up = (await (
+    await uploadAsset(alice, 'images/x.png', new File([bytes], 'x.png', { type: 'image/png' }))
+  ).json()) as { asset: { hash: string } };
+
+  const del = await deleteAsset(alice, 'images/x.png');
+  assert.strictEqual(del.status, 200);
+  // Gone from the manifest / list.
+  const list = (await (await listAssets(alice)).json()) as { assets: { path: string }[] };
+  assert.ok(!list.assets.some((a) => a.path === 'images/x.png'), 'entry removed from the manifest');
+  // The bytes are NOT deleted — content-addressed + immutable, still referenced by any published
+  // version's frozen manifest (and possibly another path via dedup).
+  const back = await store.getAsset({ themeId: MAIN, tenantId: ID }, up.asset.hash);
+  assert.ok(back && Buffer.from(back).equals(Buffer.from(bytes)), 'bytes retained after delete');
+});
+
+test('delete a non-existent asset path → 404; missing path → 400', async () => {
+  assert.strictEqual((await deleteAsset(alice, 'nope/missing.png')).status, 404);
+  assert.strictEqual(
+    (await deleteAsset(alice, '__proto__')).status,
+    404,
+    'prototype key is not an asset'
+  );
+  assert.strictEqual((await listAssets(alice, `/stores/${ID}/theme/bundle/assets`)).status, 200);
+  const noPath = await app.fetch(
+    new Request(`http://cp/stores/${ID}/theme/bundle/assets`, { method: 'DELETE', headers: alice })
+  );
+  assert.strictEqual(noPath.status, 400);
+});
+
+test('a non-member cannot list or delete assets (403)', async () => {
+  assert.strictEqual((await listAssets(bob)).status, 403);
+  assert.strictEqual((await deleteAsset(bob, 'images/logo.png')).status, 403);
+});
+
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 400);
