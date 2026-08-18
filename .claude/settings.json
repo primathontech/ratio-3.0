@@ -1,0 +1,76 @@
+{
+  "enabledPlugins": {
+    "gokwik-dev-context-generators@gokwik-ops-hub": true,
+    "gokwik-code-search@gokwik-ops-hub": true,
+    "gokwik-eng-standards@gokwik-ops-hub": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(bun run typecheck)",
+      "Bash(bun run lint)",
+      "Bash(bun run lint:*)",
+      "Bash(bun run format:check)",
+      "Bash(bun run test)",
+      "Bash(bun run test:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
+    ],
+    "deny": ["Read(.env)", "Read(.env.*)", "Edit(.env)", "Edit(.env.*)"]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/load-context.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/format-on-edit.sh\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/debug-check.sh\""
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/knowledge-nudge.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
