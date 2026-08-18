@@ -6,7 +6,11 @@ import { resolveEdgeSecret } from '@ratio/edge-core';
 
 process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
-import { purgeUrls, storeCacheUrls, deleteCustomHostname } from '../../apps/admin-api/src/domains';
+import {
+  purgeUrls,
+  storeCacheUrls,
+  deleteCustomHostname,
+} from '../../apps/admin-api/src/services/domains';
 import { app as origin } from '../../apps/origin/src/index';
 import { pool } from '@ratio/data-db';
 

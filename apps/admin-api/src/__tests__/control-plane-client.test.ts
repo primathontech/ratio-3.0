@@ -8,7 +8,7 @@ process.env.AGENT_TOKEN_SECRET = 'test-sdk-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp } from '../app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../auth';
+import { composeVerifiers, agentVerifier, type Verifier } from '../middleware/auth';
 import { RatioControlPlane, ControlPlaneError } from '@ratio/control-plane-client';
 import { pool } from '@ratio/data-db';
 
