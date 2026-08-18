@@ -121,10 +121,12 @@ export function defaultBundleTheme(): ThemeFiles {
         // home empty for a real connected merchant (StubResolver hid it by faking collection products).
         // A merchant can rebind a row to one of their real collections (COLLECTION_BY_HANDLES) in the
         // editor. `latest` sorts by newest so the two rows differ out of the box.
-        featured: { type: 'PRODUCTS', params: { productLimit: 8 } },
+        // `first` is the page-size getProducts honours; productLimit is a COLLECTION-only field that
+        // getProducts silently ignores (it would then fall back to the backend default of 20).
+        featured: { type: 'PRODUCTS', params: { first: 8 } },
         latest: {
           type: 'PRODUCTS',
-          params: { productLimit: 8, sortKey: 'CREATED_AT', reverse: true },
+          params: { first: 8, sortKey: 'CREATED_AT', reverse: true },
         },
       }
     ),

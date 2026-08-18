@@ -72,10 +72,15 @@ export function mapFeaturedCollections(files: ThemeFiles, sel: Partial<Featured>
     if (handle && ds) {
       // The default home rows are a handle-INDEPENDENT product listing (type PRODUCTS), so a fresh
       // store is never empty. Selecting a collection binds this row to it: switch the row to a
-      // collection source (full catalogue, matching the collection page) and set the chosen handle.
+      // collection source (full catalogue, matching the collection page) with the chosen handle. Write
+      // a clean collection param set — carry over productLimit if present (default 8) and drop the
+      // listing-only params (first/sortKey/reverse) that a collection source doesn't use.
+      const productLimit = typeof ds.params?.productLimit === 'number' ? ds.params.productLimit : 8;
+      const filters = Array.isArray(ds.params?.filters)
+        ? ds.params.filters
+        : [{ available: false }];
       ds.type = 'COLLECTION_BY_HANDLES';
-      ds.params = { ...(ds.params ?? {}), handles: [handle] };
-      if (!Array.isArray(ds.params.filters)) ds.params.filters = [{ available: false }];
+      ds.params = { handles: [handle], productLimit, filters };
       changed = true;
     }
   }

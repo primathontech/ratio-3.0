@@ -38,10 +38,10 @@ const productListingIndex = () =>
       { type: 'brand-story' },
     ],
     dataSources: {
-      featured: { type: 'PRODUCTS', params: { productLimit: 8 } },
+      featured: { type: 'PRODUCTS', params: { first: 8 } },
       latest: {
         type: 'PRODUCTS',
-        params: { productLimit: 8, sortKey: 'CREATED_AT', reverse: true },
+        params: { first: 8, sortKey: 'CREATED_AT', reverse: true },
       },
     },
   });
@@ -97,7 +97,11 @@ describe('mapFeaturedCollections', () => {
     expect(doc.dataSources.featured.type).toBe('COLLECTION_BY_HANDLES');
     expect(doc.dataSources.featured.params.handles).toEqual(['summer']);
     expect(doc.dataSources.featured.params.filters).toEqual([{ available: false }]); // full catalogue
-    expect(doc.dataSources.featured.params.productLimit).toBe(8); // preserved
+    expect(doc.dataSources.featured.params.productLimit).toBe(8); // collection page-size
+    // Listing-only params don't belong on a collection source and must not linger.
+    expect(doc.dataSources.latest.params.first).toBeUndefined();
+    expect(doc.dataSources.latest.params.sortKey).toBeUndefined();
+    expect(doc.dataSources.latest.params.reverse).toBeUndefined();
     expect(doc.dataSources.latest.type).toBe('COLLECTION_BY_HANDLES');
     expect(readFeatured(out)).toEqual({ newArrivals: 'summer', trending: 'winter' });
   });

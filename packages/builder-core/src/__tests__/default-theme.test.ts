@@ -186,15 +186,18 @@ test('default theme home fills product rows for a connected store that lacks the
   // products out of the box — so its product rows bind a handle-independent listing, not specific
   // collection handles a fresh store may not have. (StubResolver hides this: it fakes products for
   // COLLECTION too, so the older stub-only test passes even when the real home would be empty.)
+  const listingParams: Record<string, unknown>[] = [];
   const catalogOnly = {
-    async fetch(source: { type: string }) {
-      if (source.type === 'PRODUCTS' || source.type === 'PRODUCTS_BY_HANDLES')
+    async fetch(source: { type: string; params?: Record<string, unknown> }) {
+      if (source.type === 'PRODUCTS' || source.type === 'PRODUCTS_BY_HANDLES') {
+        listingParams.push(source.params ?? {});
         return {
           value: {
             products: [{ id: 'p1', title: 'Real Catalog Tee', handle: 'real-tee', price: 12345 }],
           },
           tags: [],
         };
+      }
       return { value: { products: [] }, tags: [] }; // no collection matches this merchant's handles
     },
   };
@@ -213,6 +216,18 @@ test('default theme home fills product rows for a connected store that lacks the
     'the home shows real products without an all/new-launches collection'
   );
   assert.match(html, /₹123\.45/, 'listing prices render in rupees');
+  // The rows must cap results via `first` — the field getProducts honours. `productLimit` is a
+  // COLLECTION-only field getProducts ignores (it would default to 20), so a bad param name would
+  // silently over-fetch. Guard the exact field the backend reads.
+  assert.ok(listingParams.length >= 1, 'the home issued at least one PRODUCTS listing');
+  for (const p of listingParams) {
+    assert.equal(
+      p.first,
+      8,
+      'the listing caps page-size via `first` (not the ignored productLimit)'
+    );
+    assert.equal(p.productLimit, undefined, 'no productLimit — getProducts would ignore it');
+  }
 });
 
 test('default theme home shows product rows (New arrivals + Trending) out of the box', async () => {
