@@ -26,6 +26,26 @@ const baseIndex = () =>
     },
   });
 
+// The default theme's home: two product-listing rows (handle-independent), so a fresh store is never
+// empty. Selecting a collection during onboarding must switch a row to a collection source.
+const productListingIndex = () =>
+  JSON.stringify({
+    sections: [
+      { type: 'hero' },
+      { type: 'promo' },
+      { type: 'collection-row', dataSourceKey: 'featured' },
+      { type: 'collection-row', dataSourceKey: 'latest' },
+      { type: 'brand-story' },
+    ],
+    dataSources: {
+      featured: { type: 'PRODUCTS', params: { first: 8 } },
+      latest: {
+        type: 'PRODUCTS',
+        params: { first: 8, sortKey: 'CREATED_AT', reverse: true },
+      },
+    },
+  });
+
 describe('readFeatured', () => {
   test('reads the current featured-row handles (by section position, any key names)', () => {
     expect(readFeatured({ [INDEX]: baseIndex() })).toEqual({
@@ -36,6 +56,13 @@ describe('readFeatured', () => {
   test('empty when the template is missing or malformed', () => {
     expect(readFeatured({})).toEqual({ newArrivals: '', trending: '' });
     expect(readFeatured({ [INDEX]: '{bad' })).toEqual({ newArrivals: '', trending: '' });
+  });
+  test('empty for the default product-listing home (rows have no preselected collection)', () => {
+    // The default theme's home rows are a handle-independent PRODUCTS listing — nothing to preselect.
+    expect(readFeatured({ [INDEX]: productListingIndex() })).toEqual({
+      newArrivals: '',
+      trending: '',
+    });
   });
 });
 
@@ -59,6 +86,24 @@ describe('mapFeaturedCollections', () => {
       { newArrivals: 'my-featured', trending: 'my-trending' }
     );
     expect(readFeatured(out)).toEqual({ newArrivals: 'my-featured', trending: 'my-trending' });
+  });
+
+  test('switches a default product-listing row to a collection source when a handle is chosen', () => {
+    const out = mapFeaturedCollections(
+      { [INDEX]: productListingIndex() },
+      { newArrivals: 'summer', trending: 'winter' }
+    );
+    const doc = JSON.parse(out[INDEX]);
+    expect(doc.dataSources.featured.type).toBe('COLLECTION_BY_HANDLES');
+    expect(doc.dataSources.featured.params.handles).toEqual(['summer']);
+    expect(doc.dataSources.featured.params.filters).toEqual([{ available: false }]); // full catalogue
+    expect(doc.dataSources.featured.params.productLimit).toBe(8); // collection page-size
+    // Listing-only params don't belong on a collection source and must not linger.
+    expect(doc.dataSources.latest.params.first).toBeUndefined();
+    expect(doc.dataSources.latest.params.sortKey).toBeUndefined();
+    expect(doc.dataSources.latest.params.reverse).toBeUndefined();
+    expect(doc.dataSources.latest.type).toBe('COLLECTION_BY_HANDLES');
+    expect(readFeatured(out)).toEqual({ newArrivals: 'summer', trending: 'winter' });
   });
 
   test('only patches the rows given a handle', () => {

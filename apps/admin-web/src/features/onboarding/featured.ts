@@ -17,7 +17,10 @@ export interface Featured {
 }
 
 interface IndexDoc {
-  dataSources?: Record<string, { params?: { handles?: string[] } }>;
+  dataSources?: Record<
+    string,
+    { type?: string; params?: { handles?: string[]; filters?: unknown[]; [k: string]: unknown } }
+  >;
   sections?: { type?: string; dataSourceKey?: string }[];
 }
 
@@ -65,9 +68,19 @@ export function mapFeaturedCollections(files: ThemeFiles, sel: Partial<Featured>
     [newArrivalsKey, sel.newArrivals],
     [trendingKey, sel.trending],
   ] as const) {
-    const params = key ? doc.dataSources[key]?.params : undefined;
-    if (handle && params) {
-      params.handles = [handle];
+    const ds = key ? doc.dataSources[key] : undefined;
+    if (handle && ds) {
+      // The default home rows are a handle-INDEPENDENT product listing (type PRODUCTS), so a fresh
+      // store is never empty. Selecting a collection binds this row to it: switch the row to a
+      // collection source (full catalogue, matching the collection page) with the chosen handle. Write
+      // a clean collection param set — carry over productLimit if present (default 8) and drop the
+      // listing-only params (first/sortKey/reverse) that a collection source doesn't use.
+      const productLimit = typeof ds.params?.productLimit === 'number' ? ds.params.productLimit : 8;
+      const filters = Array.isArray(ds.params?.filters)
+        ? ds.params.filters
+        : [{ available: false }];
+      ds.type = 'COLLECTION_BY_HANDLES';
+      ds.params = { handles: [handle], productLimit, filters };
       changed = true;
     }
   }
