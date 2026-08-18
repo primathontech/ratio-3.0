@@ -54,5 +54,5 @@ via `aws logs tail` (no redeploy needed).
 
 The origin + admin-api get `COMMERCE_*`, `GOKWIK_*`, `EDGE_SECRET`, `DATABASE_URL`, `BUNDLE_S3_*`,
 etc. **injected by CI from GitHub repo variables** into the ECS task definitions — they are **not**
-committed. `THEME_OWNS_DOCUMENT` is **not** in any committed/deployed config today (so it's off
-everywhere until go-live sets it). GitHub repo `primathontech/ratio-3.0`; PRs target `main`.
+committed. (`THEME_OWNS_DOCUMENT` was removed entirely in #280 — full theme ownership is now the
+unconditional default; don't reintroduce it.) GitHub repo `primathontech/ratio-3.0`; PRs target `main`.

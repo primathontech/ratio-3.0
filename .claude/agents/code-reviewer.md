@@ -48,8 +48,9 @@ verification, say so plainly.
   has no MinIO. `node:test` runs need the `tests/bootstrap.ts` import.
 - **admin-web**: touched? Root `typecheck` **excludes** `apps/admin-web`, so it's not covered by the root
   run (separate `admin-ui` CI job) — call it out if types look risky.
-- **Theme-ownership invariant**: publish/activate/rollback must all enforce the full-document rule when
-  `THEME_OWNS_DOCUMENT` is on; guarding only one live-pointer path is a gap.
+- **Theme-ownership invariant**: publish/activate/rollback must all enforce the full-document rule
+  (unconditional since #280 — there is no `THEME_OWNS_DOCUMENT` flag); guarding only one live-pointer
+  path is a gap. The origin fails loud (500) on a non-full-document live theme — no shell fallback.
 - **Rollout/migration risk**: a new hard constraint that could block an existing store before a
   migration runs — should it be gated by a flag / preceded by a backfill?
 - **Tenant isolation**: `theme` is keyed by `id` alone; every query must be `... AND tenant_id = $x`.

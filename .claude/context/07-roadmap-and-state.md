@@ -10,14 +10,14 @@ origin just renders it — the substrate for AI editing the whole store. Design 
 
 Stories:
 
-| Story        | Scope                                                                     | State                                                            |
-| ------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| **OFCE-630** | Phase 1 — render consolidation: `layout/theme.liquid` owns the whole page | Built behind `THEME_OWNS_DOCUMENT`; **go-live pending**          |
-| **OFCE-631** | Phase 2 — binary asset store (favicon, images, fonts, JS)                 | **Done** (assets, `asset_url`, `/assets/<hash>` serving shipped) |
-| **OFCE-632** | Phase 3 — Edit Code surface: full file tree + asset manager (developer)   | Not started                                                      |
-| **OFCE-633** | Phase 4 — create/update the core base theme, propagate via rebase         | Not started (backend `rebaseToBase` exists)                      |
-| **OFCE-661** | Author the base theme as real files (build-time codegen, no runtime `fs`) | Not started (DX)                                                 |
-| **OFCE-664** | **AI-native theme editing** — the AI reads & rewrites the whole theme     | **Deferred** (parked; all AI work consolidated here)             |
+| Story        | Scope                                                                     | State                                                                                          |
+| ------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| **OFCE-630** | Phase 1 — render consolidation: `layout/theme.liquid` owns the whole page | Shipped — shell retired, flag removed (#280); **staging migration + order-page still pending** |
+| **OFCE-631** | Phase 2 — binary asset store (favicon, images, fonts, JS)                 | **Done** (assets, `asset_url`, `/assets/<hash>` serving shipped)                               |
+| **OFCE-632** | Phase 3 — Edit Code surface: full file tree + asset manager (developer)   | Not started                                                                                    |
+| **OFCE-633** | Phase 4 — create/update the core base theme, propagate via rebase         | Not started (backend `rebaseToBase` exists)                                                    |
+| **OFCE-661** | Author the base theme as real files (build-time codegen, no runtime `fs`) | Not started (DX)                                                                               |
+| **OFCE-664** | **AI-native theme editing** — the AI reads & rewrites the whole theme     | **Deferred** (parked; all AI work consolidated here)                                           |
 
 ## What shipped recently (merged to `main`)
 
@@ -30,23 +30,27 @@ Stories:
 - **Storefront-lifecycle regression test**: origin render tracks the live pointer across publish v2 +
   rollback. (#275)
 - **Full-document publish invariant** (go-live step 2): publish/activate/rollback refuse a theme whose
-  layout isn't a full document, **gated on `THEME_OWNS_DOCUMENT`**; infra faults surface as 500. (#278)
+  layout isn't a full document; infra faults surface as 500. (#278; made unconditional in #280.)
+- **Retired the storefront TS shell** (go-live step 3, OFCE-641): origin always renders the theme layout,
+  `THEME_OWNS_DOCUMENT` removed from all code, a non-full-document live theme fails loud (500). (#280)
 
-## Where we paused: Full Theme Ownership go-live
+## Full Theme Ownership go-live — remaining
 
-The plan is a safe 3-step sequence (never serve a broken store):
+The safe sequence (never serve a broken store):
 
-1. **Migrate** — `rebase-to-latest-base.ts --apply` so every live store is on the full-document base.
-   _(script verified in dry-run; the `--apply` is a staging ops step.)_
-2. **Enforce the invariant** — **DONE** (#278), dormant until the flag flips.
-3. **Retire the shell (OFCE-641, next pick)** — run the migration on staging → flip
-   `THEME_OWNS_DOCUMENT` on (invariant + layout rendering activate together) → delete the OFF branch +
-   `layoutOwnsDocument` gate + flag; migrate the **order/thank-you page** and **page-builder degrade
-   renderer** off `storefrontHead`; **decouple `renderChrome`** into the layout; remove `storefrontHead`.
-   Then close OFCE-630/631/641.
+1. **Migrate (ops, NOT yet run on staging)** — `rebase-to-latest-base.ts --apply` so every live store
+   is on the full-document base. **This is now a hard deploy prerequisite**: with the shell gone (#280),
+   an un-rebased body-only live store **fails loud (500)**. The script reports stores it can't rebase
+   (e.g. a dirty/unpublished draft — publish or discard, then re-run) so none are missed.
+2. **Enforce the invariant** — DONE (#278), unconditional since #280.
+3. **Retire the shell** — DONE (#280): OFF branch + flag + gate removed; origin fails loud.
+4. **Remaining**: migrate the **order/thank-you page** onto the theme layout (the last `storefrontHead`
+   user in the origin); the **page-builder degrade renderer** keeps `storefrontHead` on purpose. Then
+   close OFCE-630/631/641. Follow-up: move the full-document check into `ThemeStore.publish()` so direct
+   callers can't bypass it.
 
-**Resume point:** scope OFCE-641 the same way — map the render path, plan the safe order, confirm, then
-execute. Don't delete the shell before the migration has run on staging and the flag is flipped.
+**Resume point:** the shell is retired in code (#280). Next: run the base-rebase migration on staging
+(the hard deploy prereq above), then migrate the order/thank-you page onto the theme layout.
 
 ## Other context
 

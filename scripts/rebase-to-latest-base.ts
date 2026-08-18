@@ -67,6 +67,7 @@ function bundleStoreFromEnv() {
   );
 
   let ok = 0;
+  const failures: { id: string; name: string; isLive: boolean; reason: string }[] = [];
   for (const r of rows) {
     // Whole iteration guarded so one store's failure (an S3 read, a publish error) never aborts the
     // run — including dry-run, where a readDraft error would otherwise kill the loop.
@@ -90,10 +91,31 @@ function bundleStoreFromEnv() {
       ok++;
       console.log(`${label} → v${version}${madeLive ? ' (live)' : ''} ✓`);
     } catch (e) {
-      console.error(`  ${r.name} (${r.id}): FAILED — ${(e as Error).message}`);
+      const reason = (e as Error).message;
+      failures.push({ id: r.id, name: r.name, isLive: r.live_theme_id === r.id, reason });
+      console.error(`  ${r.name} (${r.id}): FAILED — ${reason}`);
     }
   }
-  if (APPLY) console.log(`rebased ${ok}/${rows.length}`);
+  if (APPLY) {
+    console.log(`rebased ${ok}/${rows.length}`);
+    if (failures.length) {
+      console.error(`\n${failures.length} store(s) could NOT be rebased:`);
+      for (const f of failures) {
+        const dirty = /unpublished draft/i.test(f.reason);
+        const tags =
+          (f.isLive ? ' [LIVE]' : '') +
+          (dirty ? ' [dirty draft → publish or reset the draft, then re-run]' : '');
+        console.error(`  - ${f.name} (${f.id})${tags}: ${f.reason}`);
+      }
+      const liveFails = failures.filter((f) => f.isLive).length;
+      if (liveFails)
+        console.error(
+          `\n⚠️  ${liveFails} of these are LIVE. Under full theme ownership (OFCE-641) an un-rebased ` +
+            `body-only store FAILS LOUD (500) after deploy — resolve these BEFORE the cutover.`
+        );
+      process.exitCode = 1; // non-zero so ops/CI notices unfinished migration
+    }
+  }
   await pool.end();
 })().catch((e: unknown) => {
   console.error('rebase failed:', (e as Error).message);
