@@ -1,8 +1,10 @@
 import type { Context, Hono } from 'hono';
 import {
+  ALLOWED_ASSET_CONTENT_TYPES,
   DraftConflict,
   bundleId,
   readAssetManifest,
+  safeAssetContentType,
   writeAssetManifest,
 } from '@ratio/builder-core';
 import { requireMembership } from '../../middleware/auth';
@@ -24,21 +26,11 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
   // asset store; the draft's config/assets.json manifest gains an entry (path → hash/type/size), so the
   // asset ships + freezes with the theme on the next publish. A member edit (like draft-save).
   //
-  // HARD content-type allowlist — only non-scriptable image/font types. svg/html/js are REJECTED: they
-  // would be served from the storefront origin and, with an attacker-chosen MIME, could execute as
-  // stored XSS. The origin also serves assets with X-Content-Type-Options: nosniff (PR3) as defense in
-  // depth. contentType comes from the multipart part and is the merchant's claim — the allowlist is the
-  // gate; a mislabeled file just renders broken, never runs.
-  const ASSET_CONTENT_TYPES = new Set([
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/gif',
-    'image/avif',
-    'image/x-icon',
-    'image/vnd.microsoft.icon',
-    'font/woff2',
-  ]);
+  // HARD content-type allowlist (ALLOWED_ASSET_CONTENT_TYPES, shared with the origin's asset serve) —
+  // only non-scriptable image/font types. svg/html/js are REJECTED: they'd be served from the storefront
+  // origin and, with an attacker-chosen MIME, could execute as stored XSS. contentType comes from the
+  // multipart part and is the merchant's claim — the allowlist is the gate; a mislabeled file just
+  // renders broken, never runs.
   // A safe relative asset path the theme references: dot/word segments, no leading slash, no traversal.
   const ASSET_PATH_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/;
   // '.'/'..' are path navigation (meaningless + traversal-shaped as asset names); __proto__/constructor
@@ -56,7 +48,7 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
       return c.json({ error: 'file is required (multipart form-data)' }, 400);
     if (!ASSET_PATH_RE.test(path) || path.split('/').some((seg) => RESERVED_SEG.has(seg)))
       return c.json({ error: 'invalid asset path' }, 400);
-    if (!ASSET_CONTENT_TYPES.has(file.type))
+    if (!ALLOWED_ASSET_CONTENT_TYPES.has(file.type))
       return c.json({ error: `unsupported content-type '${file.type}'` }, 415);
     const bytes = new Uint8Array(await file.arrayBuffer());
     if (bytes.byteLength === 0) return c.json({ error: 'empty file' }, 400);
@@ -152,13 +144,9 @@ export function registerThemeAssetsRoutes(app: Hono<Vars>, deps: RouteDeps) {
     if (!bytes) return c.json({ error: 'asset bytes missing' }, 404);
     // The manifest's contentType is validated against the allowlist at UPLOAD, but the manifest is a
     // merchant-editable file (the generic draft-save writes it), so it's UNTRUSTED at serve time — a
-    // hand-edited entry could claim text/html to smuggle stored HTML/JS onto this origin. Only echo an
-    // allowlisted image/font type; anything else serves as octet-stream, which the browser never renders
-    // or executes (nosniff keeps it from being sniffed back into an active type).
-    const contentType = ASSET_CONTENT_TYPES.has(entry.contentType)
-      ? entry.contentType
-      : 'application/octet-stream';
-    c.header('content-type', contentType);
+    // hand-edited entry could claim text/html to smuggle stored HTML/JS onto this origin. Neutralize a
+    // non-allowlisted type to octet-stream (same helper the origin uses); nosniff keeps it inert.
+    c.header('content-type', safeAssetContentType(entry.contentType));
     c.header('x-content-type-options', 'nosniff');
     c.header('cache-control', 'no-store');
     // c.body wants an ArrayBuffer, not a Uint8Array view — slice() gives a right-sized copy.

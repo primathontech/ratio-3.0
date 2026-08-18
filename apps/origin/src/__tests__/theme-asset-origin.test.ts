@@ -25,6 +25,7 @@ const T = 'themeasset_o1';
 const THEME = 'themeasset_o1_main';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 1, 2, 3, 4]);
 const ORPHAN = new Uint8Array([9, 9, 9, 9]); // stored but NOT referenced by the live manifest
+const EVIL = new Uint8Array([60, 115, 99, 114, 105, 112, 116, 62]); // "<script>" — referenced with a lying content-type
 const call = (path: string, headers: Record<string, string> = {}) =>
   app.fetch(
     new Request('http://origin' + path, { headers: { 'x-edge-auth': SECRET, ...headers } })
@@ -50,13 +51,19 @@ before(async () => {
   // Store two assets; only the first is referenced by the manifest.
   const logo = await store.putAsset({ themeId: THEME, tenantId: T }, PNG, 'image/png');
   await store.putAsset({ themeId: THEME, tenantId: T }, ORPHAN, 'image/png');
+  await store.putAsset({ themeId: THEME, tenantId: T }, EVIL, 'image/png');
   await store.saveDraft(
     { themeId: THEME, tenantId: T },
     {
       // Full theme ownership (OFCE-641): the origin renders the theme's own layout — no shell fallback.
       'layout/theme.liquid':
         '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title></head><body>{{ content_for_layout }}</body></html>',
-      'config/assets.json': JSON.stringify({ 'images/logo.png': logo }),
+      // The manifest is merchant-editable — the second entry is a TAMPERED one claiming text/html for
+      // referenced bytes, simulating a hand-edited config/assets.json trying to smuggle stored HTML.
+      'config/assets.json': JSON.stringify({
+        'images/logo.png': logo,
+        'evil.html': { hash: assetHash(EVIL), contentType: 'text/html', size: EVIL.byteLength },
+      }),
       // The section REFERENCES the asset via asset_url (OFCE-647) — the page must render /assets/<hash>.
       'sections/hero.liquid': `<h1>hi</h1><img src="{{ 'images/logo.png' | asset_url }}">`,
       'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
@@ -94,6 +101,24 @@ test(
     const res = await call(`/assets/${assetHash(PNG)}.png`, { 'x-ratio-tenant': T });
     assert.equal(res.status, 200);
     assert.equal(res.headers.get('content-type'), 'image/png');
+  }
+);
+
+test(
+  'neutralizes a tampered manifest content-type — serves text/html-claiming bytes as octet-stream',
+  { skip },
+  async () => {
+    // The live manifest references EVIL with a lying contentType: 'text/html'. The bytes are served (the
+    // hash IS referenced), but as application/octet-stream — never active HTML the browser would execute
+    // (and would otherwise CDN-cache immutably). This is the public-storefront stored-XSS guard.
+    const res = await call(`/assets/${assetHash(EVIL)}`, { 'x-ratio-tenant': T });
+    assert.equal(res.status, 200);
+    assert.equal(
+      res.headers.get('content-type'),
+      'application/octet-stream',
+      'the tampered text/html type is neutralized'
+    );
+    assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   }
 );
 

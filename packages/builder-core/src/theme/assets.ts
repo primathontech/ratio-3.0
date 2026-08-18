@@ -24,6 +24,29 @@ export interface AssetEntry {
 }
 export type AssetManifest = Record<string, AssetEntry>;
 
+// The content-types a theme asset may be SERVED as — non-scriptable images + web fonts. Enforced at
+// upload (the admin-api rejects anything else) AND at serve, because the manifest is a merchant-editable
+// file (the code editor's draft-save writes config/assets.json), so its content-type is UNTRUSTED at
+// serve time: a hand-edited entry claiming text/html or application/javascript would otherwise be served
+// as active content — stored XSS on the (public, CDN-cached) storefront. svg is excluded (it can script).
+export const ALLOWED_ASSET_CONTENT_TYPES: ReadonlySet<string> = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+  'image/x-icon',
+  'image/vnd.microsoft.icon',
+  'font/woff2',
+]);
+
+// The safe content-type to SERVE an asset with: the manifest's type if it's allowlisted, else
+// application/octet-stream — which the browser downloads/ignores, never renders or executes. Both the
+// origin (live assets) and the admin-api (draft raw-serve) neutralize through this.
+export function safeAssetContentType(contentType: string): string {
+  return ALLOWED_ASSET_CONTENT_TYPES.has(contentType) ? contentType : 'application/octet-stream';
+}
+
 // The content address of asset bytes: sha256 hex. Identical bytes → identical hash → dedup + immutable
 // + safe to cache forever on a CDN.
 export function assetHash(bytes: Uint8Array): string {
