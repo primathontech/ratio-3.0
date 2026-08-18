@@ -1,9 +1,9 @@
-// OFCE-630 full theme ownership at the ORIGIN: with THEME_OWNS_DOCUMENT=1, a store whose published
-// theme carries a full-document layout/theme.liquid renders ENTIRELY from that layout — the origin
-// injects only the platform slice (content_for_header) and wraps nothing. A store whose theme is NOT a
-// full document (old body-only layout, not yet rebased) still uses the legacy TS shell even with the
-// flag on — the flag is a kill-switch, the layout shape is what self-migrates a store. In-process via
-// app.fetch(), real Postgres + MinIO. Gated on BUNDLE_S3_ENDPOINT.
+// OFCE-630/641 full theme ownership at the ORIGIN: a store's published theme renders ENTIRELY from its
+// own full-document layout/theme.liquid — the origin injects only the platform slice (content_for_header)
+// and wraps nothing. There is NO TS-shell fallback (OFCE-641): a live theme that is not a full document
+// is a bug (the publish/activate/rollback invariant + base rebase prevent it), so the origin refuses to
+// serve it and degrades rather than emitting a headless document. In-process via app.fetch(), real
+// Postgres + MinIO. Gated on BUNDLE_S3_ENDPOINT.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/client-s3';
@@ -53,13 +53,8 @@ const edge = (extra: Record<string, string> = {}) => ({ 'x-edge-auth': SECRET, .
 const call = (path: string, headers: Record<string, string>) =>
   app.fetch(new Request('http://origin' + path, { headers }));
 
-let priorFlag: string | undefined;
-
 before(async () => {
   if (skip) return;
-  priorFlag = process.env.THEME_OWNS_DOCUMENT;
-  process.env.THEME_OWNS_DOCUMENT = '1';
-
   const admin = new S3Client(common);
   try {
     await admin.send(new HeadBucketCommand({ Bucket: bucket }));
@@ -101,7 +96,8 @@ before(async () => {
   );
   await store.publish({ themeId: THEMEA, tenantId: TA }, { compile: (s) => s });
 
-  // TB — an old body-only layout (a store not yet rebased): flag on, but NOT a full document.
+  // TB — an old body-only layout (a store not yet rebased): NOT a full document. With no shell fallback
+  // (OFCE-641), the origin must refuse to serve it (degrade), never emit a headless page.
   await store.ensureTheme(TB, THEMEB);
   await store.saveDraft(
     { themeId: THEMEB, tenantId: TB },
@@ -147,8 +143,6 @@ before(async () => {
 
 after(async () => {
   if (skip) return;
-  if (priorFlag === undefined) delete process.env.THEME_OWNS_DOCUMENT;
-  else process.env.THEME_OWNS_DOCUMENT = priorFlag;
   for (const id of [THEMEA, THEMEB, THEMEC, BASEC])
     await pool.query('DELETE FROM theme WHERE id = $1', [id]);
   for (const id of [TA, TB, TC, BLIB]) await pool.query('DELETE FROM tenants WHERE id = $1', [id]);
@@ -229,15 +223,16 @@ test(
 );
 
 test(
-  'flag on + a body-only (un-rebased) theme: still the legacy TS shell, not the layout',
+  'a body-only (un-rebased) live theme has NO shell fallback — the origin fails LOUD (500), not degrade',
   { skip },
   async () => {
     const res = await call('/', edge({ 'x-ratio-tenant': TB }));
-    assert.equal(res.status, 200);
-    assert.equal(res.headers.get('x-handler'), 'theme-bundle');
-    assert.equal(res.headers.get('x-theme-render'), 'shell', 'not a full document → legacy shell');
+    // No full-document layout and no TS shell → the bundle path throws a full-document violation, which
+    // is RETHROWN past the degrade catch → app.onError → 500. A broken live theme must surface loudly,
+    // NOT silently degrade to a 404 or stale page-builder content, and must NEVER serve a headless page.
+    assert.equal(res.status, 500, 'a broken live theme fails loud (500), not a silent degrade');
+    assert.notEqual(res.headers.get('x-handler'), 'theme-bundle', 'not served via the bundle path');
     const body = await res.text();
-    assert.match(body, /^<!doctype html>/i, 'the legacy shell still produces a document');
-    assert.match(body, /<h1>Legacy<\/h1>/, 'the section renders inside the shell');
+    assert.doesNotMatch(body, /<h1>Legacy<\/h1>/, 'the body-only theme content is not served');
   }
 );

@@ -30,8 +30,13 @@ const THEME = 'themelife_o1_main';
 const MARK = (v: string) => `LIFECYCLE_MARK_${v}`;
 const identity = (s: Record<string, string>) => s;
 
-// A root theme (no base) whose home page is a single section carrying a version marker.
+// A root theme (no base) whose home page is a single section carrying a version marker. Full theme
+// ownership (OFCE-641): the origin renders the theme's own layout/theme.liquid (no shell fallback), so
+// the theme carries a full-document layout that slots in the composed sections.
+const LAYOUT =
+  '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title></head><body>{{ header }}{{ content_for_layout }}{{ footer }}</body></html>';
 const themeAt = (v: string) => ({
+  'layout/theme.liquid': LAYOUT,
   'sections/hero.liquid': `<section id="hero">${MARK(v)}</section>`,
   'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
 });
