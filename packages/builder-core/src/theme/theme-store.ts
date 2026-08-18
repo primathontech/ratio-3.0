@@ -6,6 +6,7 @@
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
 import { assetHash, isAssetHash, type AssetEntry } from './assets';
 import { composeTheme, diffFromBase } from './theme-compose';
+import { layoutOwnsDocument } from './theme-render';
 import { tenantTag } from '../tags';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
@@ -638,6 +639,20 @@ export class ThemeStore {
     if (bumped.rowCount === 0)
       throw new Error(`theme '${themeId}' base_version changed concurrently; rerun the rebase`);
     try {
+      // Full theme ownership (OFCE-641): if this rebase will move the live pointer, the recomposed
+      // theme MUST still own the whole document — the origin serves the live theme's layout with no
+      // shell. The route enforces this on publish/activate/rollback; rebaseToBase is a direct primitive
+      // caller (the bulk migration script), so it enforces it here too — otherwise a merchant override
+      // that broke layout/theme.liquid would be silently republished live (the storefront then 500s).
+      // Thrown inside the try so the catch below restores the base pin (the script logs + skips it, and
+      // a re-run retries once the merchant fixes their layout) rather than stranding it as 'latest'.
+      if (
+        makeLive &&
+        !layoutOwnsDocument((await this.readComposed({ themeId, tenantId }))['layout/theme.liquid'])
+      )
+        throw new Error(
+          `theme '${themeId}' layout/theme.liquid is not a full HTML document after rebase onto base v${target}; refusing to republish it live under full theme ownership`
+        );
       const { version } = await this.publish(
         { themeId, tenantId },
         { compile: opts.compile, makeLive, by: opts.by }
