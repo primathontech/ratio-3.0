@@ -12,8 +12,9 @@ first. Then respect these invariants.
 
 - Understand `base ⊕ overrides`: a store's theme tracks a shared `library-default` base at a pinned
   version and stores only changed files. `readComposed = base source ⊕ overrides`.
-- Understand the render gate: the origin renders `layout/theme.liquid` as the whole document when
-  `THEME_OWNS_DOCUMENT` is on AND `layoutOwnsDocument()` is true; else the legacy TS shell wraps the body.
+- Understand the render: the origin ALWAYS renders `layout/theme.liquid` as the whole document (full
+  theme ownership, #280 — no `THEME_OWNS_DOCUMENT` flag, no TS shell). A LIVE theme that isn't a full
+  document fails loud (500); the publish/activate/rollback invariant prevents that for new publishes.
 
 ## Invariants — violating any of these breaks the live storefront
 
@@ -46,5 +47,6 @@ first. Then respect these invariants.
 
 ## Current work
 
-Full Theme Ownership (OFCE-629) is mid-go-live. The publish/activate/rollback full-document invariant is
-shipped (flag-gated). Next is OFCE-641 (retire the TS shell) — see `.claude/context/07-roadmap-and-state.md`.
+Full Theme Ownership (OFCE-629) is mid-go-live. The invariant is unconditional and the TS shell is
+retired (#280). Remaining: run the base-rebase migration on staging (a hard deploy prereq now), and
+migrate the order/thank-you page onto the theme layout. See `.claude/context/07-roadmap-and-state.md`.

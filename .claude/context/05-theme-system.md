@@ -65,21 +65,22 @@ version only when the default content hash changes), `adoptAndPublishDefaultThem
 Goal: the theme owns the **entire** HTML document (shell, `<head>`, chrome, scripts, assets), and the
 origin just renders it — the substrate for AI editing the whole store.
 
-- Gated by env flag **`THEME_OWNS_DOCUMENT`**. When on AND `layoutOwnsDocument()` is true, the origin
-  renders via `renderThemeLayout` (`x-theme-render: layout`); otherwise the legacy **TS shell** wraps
-  the body (`storefrontHead` + `renderChrome`, `x-theme-render: shell`). The flag is currently **off**
-  everywhere (in code + no deployed config).
-- **Publish-time invariant (shipped):** the admin publish/activate/rollback routes refuse a theme whose
-  composed/frozen `layout/theme.liquid` is not a full document — **gated on `THEME_OWNS_DOCUMENT`** so
-  it activates at go-live together with layout rendering (never before). This is the enforced guarantee
-  that replaces the shell fallback: once on, the origin can drop the shell and fail loud.
-- **Migration:** `scripts/rebase-to-latest-base.ts --apply` rebases every store on an older base onto
-  the full-document base, so they self-migrate to the layout path.
-- **What remains (OFCE-641, "retire the shell"):** run the migration on staging → flip the flag →
-  delete the OFF branch + `layoutOwnsDocument` gate + flag; move the **order/thank-you page** and the
-  **page-builder degrade renderer** off `storefrontHead`; **decouple `renderChrome`** into the layout
-  (it currently fills the layout's `{{ header }}`/`{{ footer }}` slots in _both_ branches). See
-  07-roadmap-and-state.md.
+- **The storefront shell is retired (OFCE-641, #280).** The origin ALWAYS renders the theme's own
+  `layout/theme.liquid` via `renderThemeLayout` (`x-theme-render: layout`); there is no `THEME_OWNS_DOCUMENT`
+  flag and no TS-shell fallback. A live theme that isn't a full document is a bug → the origin **fails
+  loud (500)**, never a headless page / 404 / stale content. `renderChrome` output flows into the
+  layout's `{{ header }}`/`{{ footer }}` slots.
+- **Publish-time invariant (unconditional):** the admin publish/activate/rollback routes refuse a theme
+  whose composed/frozen `layout/theme.liquid` is not a full document. This is the enforced guarantee that
+  replaced the shell fallback. (Enforced at the HTTP boundary, not in `ThemeStore.publish()` itself —
+  direct callers rely on the base being a full document.)
+- **Migration (deploy prereq):** `scripts/rebase-to-latest-base.ts --apply` rebases every store on an
+  older base onto the full-document base. **Un-rebased (body-only) live stores fail loud (500)** once
+  this is deployed, so the migration must run first — including stores with a dirty draft (the script
+  reports those; publish/discard their draft, then re-run).
+- **Still to come:** the **order/thank-you page** and the **page-builder degrade renderer** still use
+  `storefrontHead` (kept on purpose); migrating the order page onto the theme layout is the remaining
+  OFCE-641 work. See 07-roadmap-and-state.md.
 
 ## Storefront data (products/collections)
 

@@ -44,13 +44,16 @@ to the backend default (20). If a `PRODUCTS` dataSource "won't limit", check the
 Without it: `@ratio/data-db: configureDb(...) must be called at startup`. Local test DB is **`s2poc_test`
 on port 5433** (docker), not 5432.
 
-## The shell still fills chrome even when the theme "owns the document"
+## The theme owns the document — a non-full-document LIVE theme fails loud (500)
 
-`renderChrome` runs **unconditionally** and its output is injected into the layout's `{{ header }}` /
-`{{ footer }}` slots — in _both_ the layout branch and the shell branch. So flipping `THEME_OWNS_DOCUMENT`
-does **not** by itself make the theme's own header/footer sections replace `renderChrome`; retiring
-`renderChrome` is a separate, larger step (OFCE-641). Likewise the **order/thank-you page** and the
-**page-builder degrade renderer** still hard-use `storefrontHead` and aren't behind the flag.
+Full theme ownership is live (OFCE-641, #280): there is **no `THEME_OWNS_DOCUMENT` flag and no TS-shell
+fallback**. The origin always renders the theme's `layout/theme.liquid`; a LIVE theme whose layout isn't
+a full document (`<!doctype`/`<html`) is a bug → the origin **fails loud (500)** (rethrown past the
+bundle degrade-catch), never a headless page / 404 / stale page-builder content. The invariant on
+publish/activate/rollback prevents this for new publishes; the base-rebase migration handles existing
+stores. `renderChrome` still renders the header/footer sections and feeds the layout's
+`{{ header }}`/`{{ footer }}` slots. `storefrontHead` remains only for the **order/thank-you page** and
+the **page-builder degrade renderer** (not the storefront).
 
 ## Base version bumps
 
