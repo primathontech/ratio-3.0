@@ -965,7 +965,13 @@ export function createApp(
     const hash = rows[0]?.compiled_hash;
     if (!hash) return null; // no such version — setLive/rollback raises the precise 400/404
     const compiled = await themes.loadCompiled(tenantId, themeId, hash);
-    if (!layoutOwnsDocument(compiled?.['layout/theme.liquid']))
+    // A published version with no loadable bundle is an infra fault (missing/corrupt S3 blob), NOT a
+    // merchant content error — bubble it to onError (500 + logged) instead of blaming their layout.
+    if (compiled == null)
+      throw new Error(
+        `compiled bundle missing for theme '${themeId}'@${version ?? 'latest'} (hash ${hash})`
+      );
+    if (!layoutOwnsDocument(compiled['layout/theme.liquid']))
       return c.json(
         {
           error:
