@@ -10,7 +10,7 @@ process.env.AGENT_TOKEN_SECRET = 'test-authz-secret';
 process.env.PLATFORM_ADMIN_IDS = '';
 
 import { createApp } from '../app';
-import { composeVerifiers, agentVerifier, mintAgentToken, type Verifier } from '../auth';
+import { composeVerifiers, agentVerifier, mintAgentToken, type Verifier } from '../middleware/auth';
 import { pool } from '@ratio/data-db';
 
 const VICTIM = 'user_victim_authz';

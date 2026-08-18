@@ -12,7 +12,11 @@ process.env.EDGE_SECRET = resolveEdgeSecret(process.env);
 
 import { app as origin } from '../../apps/origin/src/index';
 import { createApp } from '../../apps/admin-api/src/app';
-import { composeVerifiers, agentVerifier, type Verifier } from '../../apps/admin-api/src/auth';
+import {
+  composeVerifiers,
+  agentVerifier,
+  type Verifier,
+} from '../../apps/admin-api/src/middleware/auth';
 import { pool } from '@ratio/data-db';
 
 const OWNER = 'user_r5_owner';

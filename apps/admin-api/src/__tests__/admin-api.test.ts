@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../app';
-import { getMembership } from '../auth';
+import { getMembership } from '../middleware/auth';
 import { forTenant } from '@ratio/data-repo';
 import { pool } from '@ratio/data-db';
 
