@@ -46,7 +46,7 @@ apply prod-grade caution. (See `rules/` for the full posture.)
 bun run db:up           # docker: Postgres (:5433) + MinIO (:9000)
 bun run db:init         # run migrations
 bun run dev             # edge :8080, origin :9090, admin-api :8787, admin-web :5173
-bun run typecheck       # root tsc --noEmit  (admin-web has its OWN stricter tsc — run it too)
+bun run typecheck       # root tsc --noEmit — EXCLUDES apps/admin-web; run its own tsc separately (below)
 bun run test            # full suite (test:setup then node:test)
 
 # single test file — real Postgres (5433) + MinIO (9000), both 'poc' creds, bootstrap import required:
@@ -79,7 +79,8 @@ durable tenant-tag purge to the edge. Details: `context/02-architecture.md`.
 - **`saveOverrides` deletes omitted base files** — always save the FULL composed tree, never a partial.
 - **`getProducts` uses `first`, not `productLimit`** (a COLLECTION-only field it ignores → defaults to 20).
 - **CI has no MinIO** — gate bundle/render tests on `BUNDLE_S3_ENDPOINT` (skip when unset).
-- **admin-web has a stricter typecheck** than root — run it when you touch admin-web.
+- **Root `bun run typecheck` excludes `apps/admin-web`** (root tsconfig `exclude`), so it doesn't
+  type-check admin-web at all — run `cd apps/admin-web && npx tsc --noEmit` (the separate `admin-ui` CI job) when you touch it.
 
 ## Non-negotiables (see `.claude/rules/`)
 

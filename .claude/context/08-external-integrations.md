@@ -55,4 +55,5 @@ via `aws logs tail` (no redeploy needed).
 The origin + admin-api get `COMMERCE_*`, `GOKWIK_*`, `EDGE_SECRET`, `DATABASE_URL`, `BUNDLE_S3_*`,
 etc. **injected by CI from GitHub repo variables** into the ECS task definitions — they are **not**
 committed. `THEME_OWNS_DOCUMENT` is **not** in any committed/deployed config today (so it's off
-everywhere until go-live sets it). The remote is `ratio-3.0-cloudflare`; PRs target `main`.
+everywhere until go-live sets it). Canonical repo `primathontech/ratio-3.0` (local `origin` may show the
+old `…-cloudflare` name, which redirects); PRs target `main`.

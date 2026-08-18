@@ -32,7 +32,7 @@ to the backend default (20). If a `PRODUCTS` dataSource "won't limit", check the
 
 ## CI ≠ local green
 
-- Root `bun run typecheck` is **not** the same as green CI. **admin-web has its own stricter typecheck**
+- Root `bun run typecheck` is **not** the same as green CI. **Root tsconfig excludes `apps/admin-web`**, so root typecheck skips it entirely; admin-web has its own `tsc`
   (the `admin-ui` CI job) — run `cd apps/admin-web && npx tsc --noEmit` when you touch it.
 - **CI has no MinIO.** Any bundle/storefront-render/asset test must be **gated on `BUNDLE_S3_ENDPOINT`**
   (skip when unset), or it fails in CI. Follow the `const skip = endpoint ? false : '...'` pattern.

@@ -14,9 +14,9 @@ Non-negotiable. These override convenience.
 
 ## Branching
 
-- Branch off **`main`** (this is the PR target; there is **no `dev`** branch on the remote
-  `ratio-3.0-cloudflare`, despite some tooling defaulting to it). Never edit the working tree while on
-  `main` — branch first.
+- Branch off **`main`** (the PR target; there is **no `dev`** branch). The canonical GitHub repo is
+  **`primathontech/ratio-3.0`**; the local `origin` URL may still show the old `…-cloudflare` name, which
+  redirects. Never edit the working tree while on `main` — branch first.
 - Branch names: `feat/<name>`, `fix/<name>`, `test/<name>`, `chore/<name>`, `docs/<name>`,
   `refactor/<name>`.
 
@@ -24,8 +24,8 @@ Non-negotiable. These override convenience.
 
 - Conventional commits: `type(scope): subject`. Short imperative subject; body explains WHY, not WHAT.
 - Every commit leaves the branch buildable + tests green.
-- End commit messages with the co-author trailer used across recent history:
-  `Co-Authored-By: Claude <noreply@anthropic.com>`.
+- End commit messages with a `Co-Authored-By:` trailer for Claude (recent history uses
+  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`).
 
 ## PRs
 

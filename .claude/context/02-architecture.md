@@ -69,5 +69,6 @@ visitor ──▶ edge (:8080, Cloudflare Worker)
 
 - Edge → Cloudflare (`wrangler`). Origin + admin-api → containers/ECS. Env for the origin/admin-api is
   **CI-injected from GitHub repo variables** (e.g. `COMMERCE_*`, `GOKWIK_*`), not committed. The remote
-  git host is `ratio-3.0-cloudflare`; PRs merge into **`main`** (there is no `dev` branch on the remote,
+  canonical GitHub repo is `primathontech/ratio-3.0` (the local `origin` may show the old `…-cloudflare`
+  name, which redirects); PRs merge into **`main`** (there is no `dev` branch on the remote,
   despite some tooling defaults).

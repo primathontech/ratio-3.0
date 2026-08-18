@@ -40,7 +40,7 @@ logs with `grep -vE '"lvl"|"evt"|"svc"|gokwik'`.
 
 ```bash
 cd apps/admin-web && npx vitest run src/features/onboarding/featured.test.ts
-cd apps/admin-web && npx tsc --noEmit        # the stricter typecheck CI runs (admin-ui job)
+cd apps/admin-web && npx tsc --noEmit        # root typecheck EXCLUDES admin-web; this is its own check (admin-ui CI job)
 ```
 
 ## Gotchas

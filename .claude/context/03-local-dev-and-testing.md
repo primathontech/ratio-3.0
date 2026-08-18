@@ -74,8 +74,9 @@ node --import tsx --import ./tests/bootstrap.ts --test \
 ## Typecheck — root is NOT enough
 
 - `bun run typecheck` (root `tsc --noEmit`) is the baseline.
-- **`admin-web` has its OWN stricter typecheck** (its `tsc`), run separately in CI (the `admin-ui`
-  job). Run `cd apps/admin-web && npx tsc --noEmit` when you touch admin-web.
+- **Root `typecheck` EXCLUDES `apps/admin-web`** (root `tsconfig.json` `exclude: ["apps/admin-web"]`), so
+  it doesn't type-check admin-web at all — admin-web has its OWN `tsc` (run separately in CI as the
+  `admin-ui` job). Run `cd apps/admin-web && npx tsc --noEmit` when you touch admin-web.
 - CI has **no MinIO** — bundle/storefront-render tests must be gated on `BUNDLE_S3_ENDPOINT` or they'll
   fail there.
 - `admin-web` tests use **vitest** (`npx vitest run <file>`), not `node:test`.

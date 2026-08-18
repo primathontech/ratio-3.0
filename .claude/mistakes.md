@@ -14,6 +14,7 @@ keep each to a line or two with the fix. The deeper rationale lives in `.claude/
 - **Enforced a new invariant unconditionally before the feature flag / migration** → would block
   existing stores on an old base before they're rebased. Fix: gate on the feature flag so it activates
   with the rollout, after the migration.
-- **Ran only root `bun run typecheck`** → CI still failed on admin-web's stricter separate typecheck.
-  Fix: `cd apps/admin-web && npx tsc --noEmit` when admin-web changes.
+- **Ran only root `bun run typecheck`** → CI still failed on admin-web, because root tsconfig
+  **excludes** `apps/admin-web` (it's not type-checked by the root run at all). Fix:
+  `cd apps/admin-web && npx tsc --noEmit` when admin-web changes.
 - **S3-dependent test not gated on `BUNDLE_S3_ENDPOINT`** → failed in CI (no MinIO). Fix: `{ skip }` gate.

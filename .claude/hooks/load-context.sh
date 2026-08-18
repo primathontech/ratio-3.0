@@ -7,6 +7,10 @@ cd "${CLAUDE_PROJECT_DIR:-.}" 2>/dev/null || exit 0
 command -v git >/dev/null 2>&1 || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
+# Housekeeping: the knowledge-nudge Stop hook drops a per-session sentinel; clean stale ones so they
+# don't accumulate (they're git-ignored, one per session).
+find .claude -maxdepth 1 -name '.knowledge-checked-*' -mtime +1 -delete 2>/dev/null || true
+
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
 commits="$(git log --oneline -5 2>/dev/null)"
 status="$(git status --short 2>/dev/null | head -20)"

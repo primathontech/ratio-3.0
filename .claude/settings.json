@@ -20,23 +20,7 @@
       "Bash(ls:*)",
       "Bash(find:*)"
     ],
-    "deny": [
-      "Read(**/.env)",
-      "Read(**/.env.local)",
-      "Read(**/.env.*.local)",
-      "Write(**/.env)",
-      "Write(**/.env.local)",
-      "Write(**/.env.*.local)",
-      "Bash(cat **/.env)",
-      "Bash(cat **/.env.local)",
-      "Bash(cat **/.env.*.local)",
-      "Bash(head **/.env)",
-      "Bash(tail **/.env)",
-      "Bash(less **/.env)",
-      "Bash(more **/.env)",
-      "Bash(cp **/.env* *)",
-      "Bash(mv **/.env* *)"
-    ]
+    "deny": ["Read(.env)", "Read(.env.*)", "Edit(.env)", "Edit(.env.*)"]
   },
   "hooks": {
     "SessionStart": [
@@ -68,18 +52,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(echo \"$CLAUDE_TOOL_INPUT\" | python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"file_path\",\"\"))' 2>/dev/null); case \"$f\" in *.ts|*.tsx|*.js|*.jsx|*.json|*.md|*.css|*.scss) [ -f \"$f\" ] && npx --yes --no-install prettier --write \"$f\" >/dev/null 2>&1 || true ;; esac"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/format-on-edit.sh\""
           }
         ]
       }
     ],
     "Stop": [
       {
-        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "git diff --name-only 2>/dev/null | grep -E '\\.(ts|tsx|js|jsx)$' | while read f; do grep -Hn -E '(console\\.log|debugger)' \"$f\" 2>/dev/null; done | head -5 | sed 's/^/[hook] debug statement left: /' >&2 || true"
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/debug-check.sh\""
           },
           {
             "type": "command",

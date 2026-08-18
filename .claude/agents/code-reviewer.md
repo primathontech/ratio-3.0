@@ -46,7 +46,8 @@ verification, say so plainly.
   `PRODUCTS` dataSource that tries to limit with `productLimit`.
 - **CI/MinIO gating**: any test needing S3 must be gated on `BUNDLE_S3_ENDPOINT` (skip when unset) — CI
   has no MinIO. `node:test` runs need the `tests/bootstrap.ts` import.
-- **admin-web**: touched? It has a stricter separate typecheck — call it out if types look risky.
+- **admin-web**: touched? Root `typecheck` **excludes** `apps/admin-web`, so it's not covered by the root
+  run (separate `admin-ui` CI job) — call it out if types look risky.
 - **Theme-ownership invariant**: publish/activate/rollback must all enforce the full-document rule when
   `THEME_OWNS_DOCUMENT` is on; guarding only one live-pointer path is a gap.
 - **Rollout/migration risk**: a new hard constraint that could block an existing store before a

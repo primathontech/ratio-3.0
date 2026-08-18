@@ -28,7 +28,8 @@ The disciplined path from "code works" to "merged", following this repo's non-ne
 - **NEVER commit/push without the user's explicit approval.** Show the diff and ask.
 - Branch off `main` (there is no `dev` remote): `git checkout -b feat/<name> main`.
 - Stage **specific paths** — never `git add -A` (someone's WIP could be swept in).
-- Conventional commit; body explains WHY; end with `Co-Authored-By: Claude <noreply@anthropic.com>`.
+- Conventional commit; body explains WHY; end with a `Co-Authored-By:` trailer for Claude (recent
+  history uses `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`).
 
 ## 4. Open the PR (base `main`)
 

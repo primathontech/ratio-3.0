@@ -53,6 +53,6 @@ Write tests that fail for the right reason and can't rot into false confidence:
 ## Before declaring done
 
 1. Run the touched test file(s) — see them pass.
-2. `bun run typecheck` — and `cd apps/admin-web && npx tsc --noEmit` if you touched admin-web (its
-   typecheck is stricter and is a separate CI job).
+2. `bun run typecheck` — and `cd apps/admin-web && npx tsc --noEmit` if you touched admin-web (root
+   tsconfig **excludes** `apps/admin-web`, so root typecheck skips it; its `tsc` is a separate CI job).
 3. Do not say "fixed" / "done" until you've seen green.

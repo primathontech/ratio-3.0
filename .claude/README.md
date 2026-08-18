@@ -14,7 +14,7 @@ here** and **the process for adding or updating it** — keep it current as the 
 | `agents/*.md`            | Subagents: code-reviewer, adversarial-reviewer, security-auditor, principal-architect, test-writer. | When that agent is invoked            |
 | `skills/<name>/SKILL.md` | Workflows: run-tests, theme-change, plan-feature, triage-error, ship-pr.                            | Auto-activated by their `description` |
 | `commands/*.md`          | Slash commands: `/review`, `/audit`.                                                                | When you type `/<name>`               |
-| `hooks/*.sh`             | Hook scripts: guard, load-context, knowledge-nudge.                                                 | Wired via `settings.json`             |
+| `hooks/*.sh`             | Hook scripts: guard, load-context, format-on-edit, debug-check, knowledge-nudge.                    | Wired via `settings.json`             |
 | `settings.json`          | **Shared** permissions (allow/deny) + hooks (SessionStart/PreToolUse/PostToolUse/Stop).             | Every session                         |
 | `settings.local.json`    | **Personal** overrides (UI, effort). **Git-ignored** — do not commit.                               | Every session (per dev)               |
 | `mistakes.md`            | Running lessons-learned log.                                                                        | On demand                             |
@@ -46,21 +46,36 @@ here** and **the process for adding or updating it** — keep it current as the 
 - **`gokwik-code-search`** — semantic code + docs search (MCP).
 - **`gokwik-dev-context-generators`** — dev context generators.
 
-**Each developer must add the marketplace once** for these to activate:
-`/plugin marketplace add <gokwik-ops-hub source>` (ask your team for the source). The committed
-`enabledPlugins` block only _declares_ the dependency; without the marketplace installed locally the
-plugins are simply inert (the inline `.claude/` config still works fully on its own). Peer repos
+**The marketplace must be registered once** for these to activate. Either add it by hand
+(`/plugin marketplace add <gokwik-ops-hub source>` — ask your team for the source repo), or auto-register
+it by adding `extraKnownMarketplaces` to `settings.json` so anyone who trusts the folder gets it (fill in
+the real org/repo):
+
+```json
+"extraKnownMarketplaces": {
+  "gokwik-ops-hub": { "source": { "source": "github", "repo": "<org>/<repo>" } }
+}
+```
+
+Either way you then run `claude plugin install` (registering no longer auto-installs external-source
+plugins). The committed `enabledPlugins` block only _declares_ the dependency; without the marketplace
+installed the plugins are inert and the inline `.claude/` config still works fully on its own. Peer repos
 (`kwikcart-be`) also pre-approve plugin MCP tools (Signoz observability, service-resolver) in their
 personal `settings.local.json` — add those to yours if you use them.
 
 ## Hooks (wired in `settings.json`)
 
-- `SessionStart` → `load-context.sh` — injects branch + recent commits + status so sessions open oriented.
+All hooks read the tool payload from **stdin** (Claude Code does not set a `CLAUDE_TOOL_INPUT` env var);
+env vars like `CLAUDE_PROJECT_DIR` are available.
+
+- `SessionStart` → `load-context.sh` — injects branch + recent commits + status so sessions open oriented
+  (also cleans stale `.knowledge-checked-*` sentinels).
 - `PreToolUse:Bash` → `guard.sh` — blocks `git add -A`/`.`, force-push, deploys, broad `rm -rf`, and
-  hardcoded-secret patterns (exit 2). Escape hatch: `CLAUDE_SKIP_GUARD=1`.
-- `PostToolUse:Edit|Write` → inline Prettier on the edited file.
-- `Stop` → inline debug-statement warning + `knowledge-nudge.sh` (once/session, if files changed, nudges
-  a `context/`/`mistakes.md` update). Sentinel `.claude/.knowledge-checked-*` is git-ignored.
+  hardcoded-secret patterns (exit 2). Escape hatch: export `CLAUDE_SKIP_GUARD=1` **before** launching claude.
+- `PostToolUse:Edit|Write|MultiEdit` → `format-on-edit.sh` — Prettier on the edited file.
+- `Stop` → `debug-check.sh` (warns on `console.log`/`debugger` added vs HEAD) + `knowledge-nudge.sh`
+  (once/session, if files changed, nudges a `context/`/`mistakes.md` update). Sentinel
+  `.claude/.knowledge-checked-*` is git-ignored.
 
 ## Precedence & how it's used
 

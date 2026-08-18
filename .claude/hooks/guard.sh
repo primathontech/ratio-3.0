@@ -2,21 +2,17 @@
 # PreToolUse guard (matcher: Bash). Deterministically blocks always-wrong / dangerous commands so the
 # non-negotiables in .claude/rules/ are enforced, not just documented.
 # Exit 2 = block the command (Claude sees the reason on stderr). Exit 0 = allow.
-# Reads the tool input from $CLAUDE_TOOL_INPUT (this setup's convention) or stdin JSON (fallback).
-# Written for bash 3.2 (macOS default). Escape hatch: set CLAUDE_SKIP_GUARD=1.
+# Claude Code passes the hook payload as JSON on STDIN (there is no CLAUDE_TOOL_INPUT env var).
+# Written for bash 3.2 (macOS default). Escape hatch: export CLAUDE_SKIP_GUARD=1 BEFORE launching claude
+# (hooks inherit claude's environment; a prefix on the blocked command itself does not reach the hook).
 set -uo pipefail
 
 [ "${CLAUDE_SKIP_GUARD:-0}" = "1" ] && exit 0
 
-cmd="$(printf '%s' "${CLAUDE_TOOL_INPUT:-}" | python3 -c 'import json,sys
-try: print(json.load(sys.stdin).get("command",""))
-except Exception: pass' 2>/dev/null)"
-if [ -z "$cmd" ]; then
-  cmd="$(cat 2>/dev/null | python3 -c 'import json,sys
+cmd="$(cat 2>/dev/null | python3 -c 'import json,sys
 try:
     d=json.load(sys.stdin); print(d.get("tool_input",{}).get("command", d.get("command","")))
 except Exception: pass' 2>/dev/null)"
-fi
 [ -z "$cmd" ] && exit 0
 
 block() { printf '%s\n' "$1" >&2; exit 2; }
@@ -35,7 +31,7 @@ fi
 
 # 3. Deploys are outward/irreversible — a human runs them explicitly (staging cutover, wrangler, ECS).
 if printf '%s' "$cmd" | grep -qE '(wrangler[[:space:]]+deploy|(npm|bun|pnpm|yarn)[[:space:]]+run[[:space:]]+deploy|aws[[:space:]]+s3[[:space:]]+sync|aws[[:space:]]+ecs[[:space:]]+update-service|docker[[:space:]]+push)'; then
-  block "[guard] deploy commands are blocked here — deploys are an explicit human/ops step (.claude/rules/git-workflow.md). CLAUDE_SKIP_GUARD=1 to override."
+  block "[guard] deploy commands are blocked — deploys are an explicit human/ops step. To override, export CLAUDE_SKIP_GUARD=1 before launching claude (.claude/rules/git-workflow.md)."
 fi
 
 # 4. Catastrophic deletes: rm -rf against filesystem root, home, or unbounded globs.
@@ -44,7 +40,7 @@ if printf '%s' "$cmd" | grep -qE 'rm[[:space:]]+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]
 fi
 
 # 5. Hardcoded secrets in the command text (prevents echoing/committing a live credential).
-if printf '%s' "$cmd" | grep -qE '(AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})'; then
+if printf '%s' "$cmd" | grep -qE '(AKIA[0-9A-Z]{16}|sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})'; then
   block "[guard] a hardcoded secret pattern is present in this command — do not echo/commit credentials (.claude/rules/security.md)."
 fi
 
