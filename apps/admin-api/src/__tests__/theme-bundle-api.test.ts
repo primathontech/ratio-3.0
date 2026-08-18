@@ -74,11 +74,15 @@ const call = (
 // Save a draft the way the editor does: read the current revision, then PUT with it. Used for the
 // setup saves whose point isn't the concurrency check (the CAS tests below pass revisions explicitly).
 async function putDraft(files: Record<string, string>, headers = alice) {
+  // Mirror the real editor flow: scaffold (provisions the store's theme over the full-document base and
+  // returns the composed tree), then save the WHOLE tree with the test's edits layered on top. This keeps
+  // layout/theme.liquid in the published theme, so a publish satisfies the full-theme-ownership invariant
+  // — the editor never saves a base-wiping partial.
   const got = (await (
-    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, headers)
-  ).json()) as { revision: string };
+    await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, headers, {})
+  ).json()) as { files: Record<string, string>; revision: string };
   return call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, headers, {
-    files,
+    files: { ...got.files, ...files },
     revision: got.revision,
   });
 }
