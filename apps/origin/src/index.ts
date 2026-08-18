@@ -8,15 +8,16 @@ import { composePage } from '@ratio/builder-core';
 import { resolvePage } from '@ratio/builder-core';
 import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { storefrontResolver, buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
-import { storefrontHead } from '@ratio/builder-core';
 import type { ThemeTokens } from '@ratio/builder-core';
 import { resolveThemeTokens } from '@ratio/builder-core';
 import { readAssetManifest, isAssetHash } from '@ratio/builder-core';
+import { storefrontHead } from '@ratio/builder-core';
 import {
   CartService,
   readCartToken,
   cartCookie,
   expireCartCookie,
+  orderBody,
   renderOrderPage,
   type CartBackend,
 } from '@ratio/builder-core';
@@ -288,30 +289,52 @@ async function renderOrderResponse(
     paymentMethod: url.searchParams.get('payment') ?? undefined,
   };
   // The thank-you page body is an editable theme section (sections/order.liquid); render it with the
-  // order context when the theme has one, else renderOrderPage falls back to the built-in body. The
-  // money filter wants paise but the checkout event reports rupees, so pass total × 100.
+  // order context when the theme has one, else the built-in orderBody. The money filter wants paise but
+  // the checkout event reports rupees, so pass total × 100.
   const orderLiquid = (compiled ?? {})['sections/order.liquid'];
-  const body = orderLiquid
+  const orderSection = orderLiquid
     ? await renderUntrusted(orderLiquid, {
         order_id: order.id,
         total: order.total != null ? Math.round(order.total * 100) : undefined,
         payment_method: order.paymentMethod,
       })
-    : undefined;
-  const html = renderOrderPage(order, {
-    siteName: tenant.name,
-    styleHead: storefrontHead(
-      resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens),
-      (compiled ?? {})['assets/theme.css'] ?? ''
-    ),
-    header,
-    footer,
-    headExtra: ix.head,
-    bodyEnd: ix.bodyEnd,
-    body,
-  });
+    : orderBody(order);
+  const themeTokens = resolveThemeTokens(compiled ?? {}, (tenant.theme ?? {}) as ThemeTokens);
+  // Full theme ownership (OFCE-641): when the store has a full-document live theme, the order page
+  // renders through the theme's OWN layout/theme.liquid (order section → content_for_layout, chrome →
+  // header/footer slots) — the same layout the storefront uses. Unlike the storefront path it does NOT
+  // fail loud when no full-document layout is available (store not yet on a bundle theme, or a transient
+  // theme-store load failure): this page is uncacheable (no-store), so the edge can't shield an S3 blip
+  // behind serve-stale, and a shopper who just paid must still get a complete page. Fall back to the
+  // built-in document wrapper — which keeps the chrome, brand CSS, AND the GoKwik purchase pixel
+  // (ix.head/ix.bodyEnd), the last of which a headless renderThemeLayout fragment would silently drop.
+  const layout = (compiled ?? {})['layout/theme.liquid'];
+  const ownsDocument = layoutOwnsDocument(layout);
+  const html = ownsDocument
+    ? await renderThemeLayout(compiled ?? {}, (l, d) => renderUntrusted(l, d), {
+        content_for_layout: orderSection,
+        header,
+        footer,
+        content_for_header: ix.head,
+        content_for_body_end: ix.bodyEnd,
+        token_css: tokenCss(themeTokens),
+        site_name: tenant.name,
+        page_title: `Order confirmed · ${tenant.name}`,
+      })
+    : renderOrderPage(order, {
+        siteName: tenant.name,
+        styleHead: storefrontHead(themeTokens, (compiled ?? {})['assets/theme.css'] ?? ''),
+        header,
+        footer,
+        headExtra: ix.head,
+        bodyEnd: ix.bodyEnd,
+        body: orderSection,
+      });
   c.header('x-tenant', tenantId);
   c.header('x-handler', 'order');
+  // Which branch rendered — so a degrade (bundle unavailable on this uncacheable page) is visible in
+  // prod response headers, mirroring the storefront's x-theme-render.
+  c.header('x-theme-render', ownsDocument ? 'layout' : 'fallback');
   c.header('x-cache', 'no-store');
   c.header('set-cookie', expireCartCookie());
   setStorefrontSecurity(c, cspToString(mergeCsp(STOREFRONT_BASE_CSP, ix.csp)));
