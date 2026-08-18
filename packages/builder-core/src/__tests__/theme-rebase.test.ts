@@ -26,6 +26,8 @@ const STORE_THEME = 't_rebase_store_main';
 const STORE_THEME_ALT = 't_rebase_store_alt'; // a second, NON-live theme of the same store
 const STORE_THEME_DIRTY = 't_rebase_store_dirty'; // has an unpublished draft edit
 const STORE_THEME_FAIL = 't_rebase_store_fail'; // used for the publish-fails-then-retry path
+const BROKEN_TENANT = 't_rebase_broken'; // live on a body-only layout (its override broke the doc)
+const BROKEN_THEME = 't_rebase_broken_main';
 const ROOT_TENANT = 't_rebase_root';
 const ROOT_THEME = 't_rebase_root_main';
 const identity: CompileFn = (s) => s;
@@ -38,15 +40,16 @@ async function cleanup() {
     STORE_THEME_ALT,
     STORE_THEME_DIRTY,
     STORE_THEME_FAIL,
+    BROKEN_THEME,
     ROOT_THEME,
   ];
   for (const th of allThemes)
     await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [th]);
-  for (const t of [BASE_TENANT, STORE_TENANT, ROOT_TENANT])
+  for (const t of [BASE_TENANT, STORE_TENANT, BROKEN_TENANT, ROOT_TENANT])
     await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [t]);
   await pool.query('DELETE FROM theme WHERE id = ANY($1)', [allThemes]);
   await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [
-    [BASE_TENANT, STORE_TENANT, ROOT_TENANT],
+    [BASE_TENANT, STORE_TENANT, BROKEN_TENANT, ROOT_TENANT],
   ]);
 }
 
@@ -77,6 +80,7 @@ before(async () => {
 
   await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Rebase Lib')`, [BASE_TENANT]);
   await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Rebase Store')`, [STORE_TENANT]);
+  await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Rebase Broken')`, [BROKEN_TENANT]);
   await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Rebase Root')`, [ROOT_TENANT]);
 
   // Base v1 (body-only layout).
@@ -149,6 +153,20 @@ before(async () => {
     { themeId: STORE_THEME_FAIL, tenantId: STORE_TENANT },
     { compile: identity, makeLive: false }
   );
+
+  // A LIVE theme whose own override broke the document: it overrides layout/theme.liquid with a
+  // body-only fragment, so even after rebasing onto base v2 (a full document) the override still wins.
+  // Published live via the primitive (which has no full-document check — that's the route's job), it
+  // simulates a store left on a body-only live theme. Rebasing it must REFUSE to republish it live.
+  await store.ensureTheme(BROKEN_TENANT, BROKEN_THEME, 'Broken', {
+    themeId: BASE_THEME,
+    version: 1,
+  });
+  await store.saveDraft(
+    { themeId: BROKEN_THEME, tenantId: BROKEN_TENANT },
+    { 'layout/theme.liquid': '{{ content_for_layout }}' } // body-only override
+  );
+  await store.publish({ themeId: BROKEN_THEME, tenantId: BROKEN_TENANT }, { compile: identity }); // live
 
   // A standalone root theme (no base) — rebase must refuse it.
   await store.ensureTheme(ROOT_TENANT, ROOT_THEME, 'Root');
@@ -240,6 +258,38 @@ test('rebaseToBase does NOT move the live pointer for a non-live theme', { skip 
   );
   assert.equal(live.rows[0].id, STORE_THEME, 'the store stays live on its original theme');
 });
+
+test(
+  'rebaseToBase refuses to republish a live theme whose layout is not a full document',
+  { skip },
+  async () => {
+    const liveBefore = await pool.query<{ v: number | null }>(
+      'SELECT live_theme_version AS v FROM tenants WHERE id = $1',
+      [BROKEN_TENANT]
+    );
+    await assert.rejects(
+      () => store.rebaseToBase(BROKEN_TENANT, BROKEN_THEME, { compile: identity }),
+      /not a full HTML document/
+    );
+    // The base pin was bumped then restored (via the catch), so a re-run retries once the merchant
+    // fixes their layout rather than skipping the store as 'already latest'.
+    const pin = await pool.query<{ v: number }>(
+      'SELECT base_version AS v FROM theme WHERE id = $1',
+      [BROKEN_THEME]
+    );
+    assert.equal(Number(pin.rows[0].v), 1, 'base pin restored to v1');
+    // No new version was cut and the live pointer never moved onto a broken theme.
+    const liveAfter = await pool.query<{ v: number | null }>(
+      'SELECT live_theme_version AS v FROM tenants WHERE id = $1',
+      [BROKEN_TENANT]
+    );
+    assert.equal(
+      Number(liveAfter.rows[0].v),
+      Number(liveBefore.rows[0].v),
+      'live version unchanged'
+    );
+  }
+);
 
 test('rebaseToBase refuses a root theme that tracks no base', { skip }, async () => {
   await assert.rejects(
