@@ -230,14 +230,29 @@ test('default theme home fills product rows for a connected store that lacks the
   }
 });
 
-test('default theme home shows product rows (New arrivals + Trending) out of the box', async () => {
+test('default theme home shows the two product rows (Featured products + New arrivals) out of the box', async () => {
   const { html } = await renderPage('index');
-  assert.match(html, /New arrivals/, 'the New arrivals row heading renders');
-  assert.match(html, /Trending now/, 'the Trending row heading renders');
+  // Target the collection-row section headings specifically (<h2 class="heading">…), NOT incidental
+  // promo-tile copy — asserting a bare /New arrivals/ passes on the promo section's marketing text
+  // even if the product rows disappear, which masked a real regression before.
+  assert.match(
+    html,
+    /<h2 class="heading">Featured products<\/h2>/,
+    'the Featured products row heading renders'
+  );
+  assert.match(
+    html,
+    /<h2 class="heading">New arrivals<\/h2>/,
+    'the New arrivals row heading renders'
+  );
   assert.match(html, /Sample product 1/, 'products render on the home page');
   assert.match(html, /₹499\.00/, 'home prices are formatted to rupees');
-  // Uses the platform design-system classes so it's styled by the origin's storefront stylesheet.
-  assert.match(html, /class="grid"/, 'product rows use the .grid card layout');
+  // Exactly the two product rows render as .grid card layouts (only collection-row uses .grid).
+  assert.equal(
+    (html.match(/class="grid"/g) ?? []).length,
+    2,
+    'both product rows render as .grid card layouts'
+  );
   // The header/footer are NOT theme sections — the origin renders them in the page shell (OFCE-618),
   // so the theme body itself carries neither.
   assert.doesNotMatch(
