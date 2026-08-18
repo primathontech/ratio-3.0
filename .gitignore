@@ -4,3 +4,7 @@ node_modules/
 .DS_Store
 .wrangler/
 dist/
+
+# Claude Code — personal per-developer overrides (shared config lives in .claude/settings.json)
+.claude/settings.local.json
+.claude/.knowledge-checked-*

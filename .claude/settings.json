@@ -1,0 +1,93 @@
+{
+  "enabledPlugins": {
+    "gokwik-dev-context-generators@gokwik-ops-hub": true,
+    "gokwik-code-search@gokwik-ops-hub": true,
+    "gokwik-eng-standards@gokwik-ops-hub": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(bun run typecheck)",
+      "Bash(bun run lint)",
+      "Bash(bun run lint:*)",
+      "Bash(bun run format:check)",
+      "Bash(bun run test)",
+      "Bash(bun run test:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.local)",
+      "Read(**/.env.*.local)",
+      "Write(**/.env)",
+      "Write(**/.env.local)",
+      "Write(**/.env.*.local)",
+      "Bash(cat **/.env)",
+      "Bash(cat **/.env.local)",
+      "Bash(cat **/.env.*.local)",
+      "Bash(head **/.env)",
+      "Bash(tail **/.env)",
+      "Bash(less **/.env)",
+      "Bash(more **/.env)",
+      "Bash(cp **/.env* *)",
+      "Bash(mv **/.env* *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/load-context.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/guard.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(echo \"$CLAUDE_TOOL_INPUT\" | python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"file_path\",\"\"))' 2>/dev/null); case \"$f\" in *.ts|*.tsx|*.js|*.jsx|*.json|*.md|*.css|*.scss) [ -f \"$f\" ] && npx --yes --no-install prettier --write \"$f\" >/dev/null 2>&1 || true ;; esac"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "git diff --name-only 2>/dev/null | grep -E '\\.(ts|tsx|js|jsx)$' | while read f; do grep -Hn -E '(console\\.log|debugger)' \"$f\" 2>/dev/null; done | head -5 | sed 's/^/[hook] debug statement left: /' >&2 || true"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/knowledge-nudge.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
