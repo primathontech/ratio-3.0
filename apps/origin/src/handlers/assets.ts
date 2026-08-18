@@ -1,6 +1,11 @@
 import { type Context } from 'hono';
 import { forTenant } from '@ratio/data-repo';
-import { readAssetManifest, isAssetHash, ThemeStore } from '@ratio/builder-core';
+import {
+  readAssetManifest,
+  isAssetHash,
+  safeAssetContentType,
+  ThemeStore,
+} from '@ratio/builder-core';
 import { type Vars } from './helpers';
 
 export type AssetsDeps = {
@@ -45,7 +50,10 @@ export async function handleAssets(c: Context<Vars>, deps: AssetsDeps): Promise<
           .getAsset({ themeId: tenant.liveThemeId, tenantId: assetTenant }, hash)
           .catch(() => null);
         if (bytes) {
-          c.header('content-type', entry.contentType);
+          // The manifest content-type is merchant-editable → untrusted. Neutralize a non-allowlisted
+          // type to octet-stream so a tampered entry can't be served as active HTML/JS (and then CDN-
+          // cached immutable) on the public storefront. nosniff is already set above.
+          c.header('content-type', safeAssetContentType(entry.contentType));
           c.header('cache-control', 'public, max-age=31536000, immutable');
           c.header('x-cache', 'long');
           c.header('x-handler', 'theme-asset');
