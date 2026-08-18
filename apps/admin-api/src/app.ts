@@ -940,6 +940,19 @@ export function createApp(
   async function publishBundle(c: Context<Vars>, themeId: string) {
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
+    // Full theme ownership: a store's live theme MUST own the whole document — the origin renders the
+    // theme's layout/theme.liquid with no TS-shell fallback. Enforce the invariant at this boundary
+    // (untrusted merchant/AI layout): refuse to publish a composed theme whose layout is not a full HTML
+    // document. The base is a full document, so this only trips a merchant who broke their own layout.
+    const composed = await themes.readComposed({ themeId, tenantId: id });
+    if (!layoutOwnsDocument(composed['layout/theme.liquid']))
+      return c.json(
+        {
+          error:
+            'layout/theme.liquid must be a full HTML document (start with <!doctype or <html) before publishing',
+        },
+        400
+      );
     // Publish does NOT create the theme — draft-save is the create point.
     let version: number;
     try {

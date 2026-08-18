@@ -216,6 +216,28 @@ test('activate requires a published version (400 when none)', async () => {
   assert.strictEqual(res.status, 400);
 });
 
+test('publish rejects a theme whose layout is not a full HTML document (full theme ownership invariant)', async () => {
+  // Full theme ownership: the store's live theme MUST own the whole document (no TS-shell fallback), so
+  // a publish whose composed layout/theme.liquid is not a full HTML document is refused at the boundary.
+  const { id } = await createTheme({ name: 'Layout store' });
+  // Untouched layout composes in the full-document base → publishes fine.
+  const okPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
+  assert.strictEqual(okPub.status, 200);
+
+  // Override the layout with a body-only fragment (no <!doctype/<html) → publish must 400, not serve it.
+  const got = (await (await call(app, 'GET', `/stores/${A}/themes/${id}/draft`, alice)).json()) as {
+    files: Record<string, string>;
+    revision: string;
+  };
+  const save = await call(app, 'PUT', `/stores/${A}/themes/${id}/draft`, alice, {
+    files: { ...got.files, 'layout/theme.liquid': '<div>no doctype here</div>' },
+    revision: got.revision,
+  });
+  assert.strictEqual(save.status, 200);
+  const badPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
+  assert.strictEqual(badPub.status, 400);
+});
+
 test('activate makes a theme live, and switching between themes repoints the store', async () => {
   const { id: t1 } = await createTheme({ name: 'One' });
   await editHero(t1, '<section>one</section>');
