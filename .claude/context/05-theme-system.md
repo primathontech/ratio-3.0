@@ -72,15 +72,31 @@ origin just renders it — the substrate for AI editing the whole store.
   layout's `{{ header }}`/`{{ footer }}` slots.
 - **Publish-time invariant (unconditional):** the admin publish/activate/rollback routes refuse a theme
   whose composed/frozen `layout/theme.liquid` is not a full document. This is the enforced guarantee that
-  replaced the shell fallback. (Enforced at the HTTP boundary, not in `ThemeStore.publish()` itself —
-  direct callers rely on the base being a full document.)
-- **Migration (deploy prereq):** `scripts/rebase-to-latest-base.ts --apply` rebases every store on an
-  older base onto the full-document base. **Un-rebased (body-only) live stores fail loud (500)** once
-  this is deployed, so the migration must run first — including stores with a dirty draft (the script
-  reports those; publish/discard their draft, then re-run).
-- **Still to come:** the **order/thank-you page** and the **page-builder degrade renderer** still use
-  `storefrontHead` (kept on purpose); migrating the order page onto the theme layout is the remaining
-  OFCE-641 work. See 07-roadmap-and-state.md.
+  replaced the shell fallback. Enforced at the HTTP boundary, plus `ThemeStore.rebaseToBase` — the bulk
+  migration's direct primitive caller — enforces it too (#283) so a broken override can't be republished
+  live. The `publish`/`setLive`/`rollback` primitives are NOT guarded (store-mechanics unit tests publish
+  minimal body-only bundles by design; their production callers are the guarded routes).
+- **Migration (`scripts/rebase-to-latest-base.ts --apply`):** rebases every store on an older base onto
+  the full-document base; **un-rebased (body-only) live stores fail loud (500)** once this deploys, so it
+  must run first — including stores with a dirty draft (the script reports those; publish/discard their
+  draft, then re-run). **NOT a blocking prereq today:** the env is pre-launch with **no persistent live
+  stores** (build → onboard a throwaway store → test → clear → repeat), so the script only touches
+  disposable fixtures. This becomes a real cutover step once persistent stores exist.
+- **Order/thank-you page (migrated, #282) — deliberately LENIENT, not fail-loud.** `/order` renders
+  through the theme's own layout too, but falls back to the built-in `renderOrderPage` document wrapper
+  (`x-theme-render: fallback`) when no full-document live bundle is loadable. **The real reason it exists:**
+  a **transient theme-store / S3 load failure** (`loadLiveCompiled` throws → `liveCompiled` returns null)
+  can hit a fully-launched store, and `/order` is `no-store` (uncacheable) so the edge can't serve-stale to
+  hide the blip the way it does for storefront pages. The wrapper keeps the GoKwik **Purchase pixel**
+  (`ix.head`/`ix.bodyEnd`, derived from the merchant id + env, NOT the bundle) firing for a shopper who just
+  paid, instead of a 500. (The other null-bundle triggers — a pre-launch draft store, an un-migrated legacy
+  store, or a `BUNDLE_S3_*`-less deployment — are edge/defensive: every _launched_ merchant has a live
+  bundle published from the default/base theme at onboarding, and a real shopper can't reach `/order`
+  without a working checkout.) **Keep this fallback** — do not delete it as dead code — until **KwikPass**
+  (GoKwik customer login) is integrated: then `/order` will be **guarded behind a login access token** (only
+  the authenticated buyer sees their order) and this anonymous-degrade model gets revisited.
+- **Still to come:** the **page-builder degrade renderer** still uses `storefrontHead` (kept on purpose).
+  See 07-roadmap-and-state.md.
 
 ## Storefront data (products/collections)
 
