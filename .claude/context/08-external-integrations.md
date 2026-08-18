@@ -16,7 +16,7 @@ Products, collections, cart, and orders come from **GoKwik**, not our DB. The se
   silently serving "Sample product N". Non-prod keeps the stub fallback.
 - The GoKwik **widget** integrations (side-cart, checkout, thank-you) live in `packages/gokwik` behind
   one seam. Config from the DB `merchantId` + env; **no fallbacks**; `composeGokwik` must run on every
-  page. Per-widget env gating (SIDECART vs BASE_SCRIPT_URL) is a footgun — check `GOKWIK_*` env names.
+  page. Per-widget env gating (`SIDECART` vs `BASE_SCRIPT_URL`) is a footgun — check `GOKWIK_*` env names.
   The thank-you/Purchase event uses `orderName` (camelCase, intentional — don't revert to snake_case).
 
 ### Test merchant (real-catalog verification)
@@ -55,5 +55,4 @@ via `aws logs tail` (no redeploy needed).
 The origin + admin-api get `COMMERCE_*`, `GOKWIK_*`, `EDGE_SECRET`, `DATABASE_URL`, `BUNDLE_S3_*`,
 etc. **injected by CI from GitHub repo variables** into the ECS task definitions — they are **not**
 committed. `THEME_OWNS_DOCUMENT` is **not** in any committed/deployed config today (so it's off
-everywhere until go-live sets it). Canonical repo `primathontech/ratio-3.0` (local `origin` may show the
-old `…-cloudflare` name, which redirects); PRs target `main`.
+everywhere until go-live sets it). GitHub repo `primathontech/ratio-3.0`; PRs target `main`.

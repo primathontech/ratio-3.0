@@ -14,9 +14,8 @@ Non-negotiable. These override convenience.
 
 ## Branching
 
-- Branch off **`main`** (the PR target; there is **no `dev`** branch). The canonical GitHub repo is
-  **`primathontech/ratio-3.0`**; the local `origin` URL may still show the old `…-cloudflare` name, which
-  redirects. Never edit the working tree while on `main` — branch first.
+- Branch off **`main`** (the PR target; there is **no `dev`** branch). The GitHub repo is
+  **`primathontech/ratio-3.0`**. Never edit the working tree while on `main` — branch first.
 - Branch names: `feat/<name>`, `fix/<name>`, `test/<name>`, `chore/<name>`, `docs/<name>`,
   `refactor/<name>`.
 
