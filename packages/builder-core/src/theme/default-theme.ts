@@ -105,28 +105,26 @@ export function defaultBundleTheme(): ThemeFiles {
         { type: 'promo' },
         {
           type: 'collection-row',
-          dataSourceKey: 'all',
-          data: { heading: 'Feature Products', cta_href: '/collections/all' },
+          dataSourceKey: 'featured',
+          data: { heading: 'Featured products' },
         },
         {
           type: 'collection-row',
-          dataSourceKey: 'new-launches',
-          data: { heading: 'New launches', cta_href: '/collections/new-launches' },
+          dataSourceKey: 'latest',
+          data: { heading: 'New arrivals' },
         },
         { type: 'brand-story' },
       ],
       {
-        // `available: false` asks the commerce backend for the FULL catalog. Its default is
-        // available-only, which returns nothing for a store that doesn't flag product availability
-        // (so the row renders empty though the collection has products). A theme that wants only
-        // in-stock products flips this to true.
-        all: {
-          type: 'COLLECTION_BY_HANDLES',
-          params: { handles: ['all'], productLimit: 8, filters: [{ available: false }] },
-        },
-        'new-launches': {
-          type: 'COLLECTION_BY_HANDLES',
-          params: { handles: ['new-launches'], productLimit: 8, filters: [{ available: false }] },
+        // Bind the home rows to a handle-INDEPENDENT product listing, not fixed collection handles: a
+        // fresh store has no guarantee of an `all`/`new-launches` collection, so binding those left the
+        // home empty for a real connected merchant (StubResolver hid it by faking collection products).
+        // A merchant can rebind a row to one of their real collections (COLLECTION_BY_HANDLES) in the
+        // editor. `latest` sorts by newest so the two rows differ out of the box.
+        featured: { type: 'PRODUCTS', params: { productLimit: 8 } },
+        latest: {
+          type: 'PRODUCTS',
+          params: { productLimit: 8, sortKey: 'CREATED_AT', reverse: true },
         },
       }
     ),

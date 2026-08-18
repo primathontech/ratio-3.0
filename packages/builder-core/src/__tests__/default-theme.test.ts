@@ -180,6 +180,41 @@ test('default theme PDP leaves variantId empty so the origin resolves it from th
   );
 });
 
+test('default theme home fills product rows for a connected store that lacks the all/new-launches collections', async () => {
+  // A real merchant whose catalog has NO collection matching a fixed handle: the backend returns
+  // products for a PRODUCTS listing but nothing for COLLECTION_BY_HANDLES. The home must still show
+  // products out of the box — so its product rows bind a handle-independent listing, not specific
+  // collection handles a fresh store may not have. (StubResolver hides this: it fakes products for
+  // COLLECTION too, so the older stub-only test passes even when the real home would be empty.)
+  const catalogOnly = {
+    async fetch(source: { type: string }) {
+      if (source.type === 'PRODUCTS' || source.type === 'PRODUCTS_BY_HANDLES')
+        return {
+          value: {
+            products: [{ id: 'p1', title: 'Real Catalog Tee', handle: 'real-tee', price: 12345 }],
+          },
+          tags: [],
+        };
+      return { value: { products: [] }, tags: [] }; // no collection matches this merchant's handles
+    },
+  };
+  const { html } = await renderThemePage(
+    defaultBundleTheme(),
+    'index',
+    { theme },
+    {
+      resolver: catalogOnly as never,
+      ctx: { tenantId: 't1', routeParams: {} },
+    }
+  );
+  assert.match(
+    html,
+    /Real Catalog Tee/,
+    'the home shows real products without an all/new-launches collection'
+  );
+  assert.match(html, /₹123\.45/, 'listing prices render in rupees');
+});
+
 test('default theme home shows product rows (New arrivals + Trending) out of the box', async () => {
   const { html } = await renderPage('index');
   assert.match(html, /New arrivals/, 'the New arrivals row heading renders');

@@ -339,8 +339,8 @@ test(
     assert.equal(res.headers.get('x-handler'), 'theme-bundle');
     const body = await res.text();
     assert.match(body, /^<!doctype html>/);
-    assert.match(body, /New arrivals/, 'the default New arrivals product row renders');
-    assert.match(body, /New launches/, 'the default New launches row renders');
+    assert.match(body, /Featured products/, 'the default Featured products row renders');
+    assert.match(body, /New arrivals/, 'the default New arrivals row renders');
     // The header + footer are rendered by the ORIGIN shell from the theme's editable header/footer
     // sections (renderChrome) with the store's real name — the SAME header cart/order use. So the
     // brand is the store name, and there is exactly one header/footer.
