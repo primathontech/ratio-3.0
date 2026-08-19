@@ -3,7 +3,9 @@
     "main": {
       "type": "COLLECTION_BY_HANDLES",
       "params": {
-        "handles": ["{{params.handle}}"],
+        "handles": [
+          "{{params.handle}}"
+        ],
         "productLimit": 12,
         "filters": [
           {
