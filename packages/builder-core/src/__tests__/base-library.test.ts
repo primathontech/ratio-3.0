@@ -15,6 +15,7 @@ import {
   listBaseThemes,
   baseThemeDef,
   DEFAULT_BASE_THEME_ID,
+  EDITORIAL_BASE_THEME_ID,
 } from '../theme/base-library';
 import { defaultBundleTheme } from '../theme/default-theme';
 
@@ -240,6 +241,46 @@ test(
     assert.equal(composed?.['sections/promo.liquid'], '<section>PROMO</section>'); // merchant-added
     assert.equal(composed?.['layout/theme.liquid'], base['layout/theme.liquid']); // untouched → base
     assert.equal(composed?.['sections/footer.liquid'], base['sections/footer.liquid']); // untouched base section
+  }
+);
+
+test(
+  'a store can adopt the Editorial base and its editorial home goes live',
+  { skip },
+  async () => {
+    const { themeId, version } = await ensureSeededBaseById(store, EDITORIAL_BASE_THEME_ID, {
+      compile: identity,
+    });
+    assert.equal(themeId, EDITORIAL_BASE_THEME_ID);
+    assert.ok(version >= 1);
+    const T = '_ed_store';
+    const TH = '_ed_store_main';
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+    await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Ed Store')`, [T]);
+    await store.ensureTheme(T, TH, 'Store', { themeId: EDITORIAL_BASE_THEME_ID, version });
+    await store.publish({ themeId: TH, tenantId: T }, { compile: identity }); // makes TH live
+
+    const composed = await store.loadLiveCompiled(T);
+    assert.match(
+      composed?.['sections/editorial-hero.liquid'] ?? '',
+      /ed-hero/,
+      'ships the editorial hero'
+    );
+    assert.match(
+      composed?.['templates/index.json'] ?? '',
+      /editorial-hero/,
+      'home uses the editorial hero'
+    );
+    assert.doesNotMatch(
+      composed?.['templates/index.json'] ?? '',
+      /"promo"/,
+      'no promo carousel — distinct from Default'
+    );
+
+    await pool.query('DELETE FROM page_purge_outbox WHERE tenant_id = $1', [T]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
   }
 );
 

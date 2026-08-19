@@ -5,6 +5,7 @@
 // over. Publishing it is what turns the (already-built) base⊕overrides composition on for real.
 import { bundleId, type ThemeFiles } from './bundle';
 import { defaultBundleTheme } from './default-theme';
+import { editorialBundleTheme } from './editorial-theme';
 import type { ThemeStore, CompileFn } from './theme-store';
 import { pool } from '@ratio/data-db';
 
@@ -24,12 +25,21 @@ export interface BaseThemeDef {
   files: () => ThemeFiles;
 }
 
+export const EDITORIAL_BASE_THEME_ID = 'library-editorial';
+
 export const BASE_THEMES: BaseThemeDef[] = [
   {
     id: DEFAULT_BASE_THEME_ID,
     name: 'Default',
     description: 'A clean, flexible storefront that suits most stores.',
     files: defaultBundleTheme,
+  },
+  {
+    id: EDITORIAL_BASE_THEME_ID,
+    name: 'Editorial',
+    description:
+      'Serif type, generous whitespace, and a story-first home — for brands with a point of view.',
+    files: editorialBundleTheme,
   },
 ];
 
