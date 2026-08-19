@@ -1,6 +1,7 @@
 import type { Hono, MiddlewareHandler } from 'hono';
 import { planBaseRebase, applyBaseRebase, tenantTag } from '@ratio/builder-core';
 import { isPlatformAdmin, denyNarrowedScope } from '../../middleware/auth';
+import { MAX_APPLY_TARGETS } from '../../constants';
 import type { RouteDeps, Vars } from '../deps';
 
 // Base-theme propagation (OFCE-633 Phase 2): the platform-admin surface over the builder-core
@@ -12,11 +13,6 @@ import type { RouteDeps, Vars } from '../deps';
 // /admin/users: denyNarrowedScope (no scope-narrowed agent token) + an isPlatformAdmin check (the one
 // cross-tenant escape hatch). The mutating apply is recorded by auditMiddleware as a single platform
 // action (tenant null); the per-store detail is the response body.
-// Most stores rebased in one call. The rollout is meant to be staged (canary → all) and each target is
-// a sequential rebase + publish + purge, so one request must not hold a connection open over thousands
-// of stores; past this, batch. Well above any real store count in this pre-launch env.
-const MAX_APPLY_TARGETS = 500;
-
 export function registerBaseThemeRoutes(app: Hono<Vars>, deps: RouteDeps) {
   const { themes, identityCompile, bundle503, purgeEdgeTags } = deps;
 

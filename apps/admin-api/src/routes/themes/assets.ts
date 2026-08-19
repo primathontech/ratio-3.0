@@ -8,14 +8,12 @@ import {
   writeAssetManifest,
 } from '@ratio/builder-core';
 import { requireMembership } from '../../middleware/auth';
+import { MAX_ASSET_BYTES } from '../../constants';
 import type { RouteDeps, Vars } from '../deps';
 
-// Binary asset upload limits (OFCE-645). MAX_ASSET_BYTES is the exact per-file cap the upload handler
-// enforces; the request-body limit is a bit higher to leave room for multipart overhead (the boundary
-// + the `path` field). isAssetUploadPath lets the global 1 MB body limit step aside for exactly these
-// two routes — everything else stays at 1 MB.
-const MAX_ASSET_BYTES = 5 * 1024 * 1024;
-export const ASSET_UPLOAD_BODY_LIMIT = MAX_ASSET_BYTES + 64 * 1024;
+// isAssetUploadPath lets the global 1 MB body limit step aside for exactly the two asset-upload routes
+// (which carry a file up to ASSET_UPLOAD_BODY_LIMIT) — everything else stays at 1 MB. The byte caps live
+// in ../../constants.
 export const isAssetUploadPath = (path: string) =>
   /\/theme\/bundle\/assets$/.test(path) || /\/themes\/[^/]+\/assets$/.test(path);
 

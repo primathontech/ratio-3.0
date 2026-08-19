@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { RatioControlPlane } from '@ratio/control-plane-client';
 import { ControlPlaneError } from '@ratio/control-plane-client';
+import { MAX_STEPS } from '../constants';
 
 // OFCE-400 Model A: an in-dashboard AI assistant. It does NOT re-implement onboarding or
 // editing (ADR-014 D-STR7) — it drives the SAME control-plane the dashboard uses, via the
@@ -26,7 +27,6 @@ export interface AssistantResult {
 }
 
 export const ASSISTANT_MODEL = 'claude-sonnet-5';
-const MAX_STEPS = 8;
 
 // Least privilege (audit N1): when the assistant is opened on a specific store, its agent
 // token is scoped to THAT store only — so a prompt-injected or buggy agent can't reach the

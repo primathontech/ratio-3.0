@@ -51,11 +51,8 @@ import { registerAssistantRoutes } from './routes/assistant';
 import { registerPageBuilderRoutes } from './routes/page-builder';
 import { registerDomainRoutes } from './routes/domains';
 import { registerBundleThemeRoutes } from './routes/themes/bundle';
-import {
-  registerThemeAssetsRoutes,
-  ASSET_UPLOAD_BODY_LIMIT,
-  isAssetUploadPath,
-} from './routes/themes/assets';
+import { registerThemeAssetsRoutes, isAssetUploadPath } from './routes/themes/assets';
+import { ASSET_UPLOAD_BODY_LIMIT } from './constants';
 import { registerMultiThemeRoutes } from './routes/themes/multi';
 import { registerBaseThemeRoutes } from './routes/themes/base';
 

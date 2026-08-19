@@ -4,6 +4,7 @@
 // TXT records. fetch is injected so the API layer is testable without calling Cloudflare.
 
 import { getDomain } from 'tldts';
+import { KV_WRITETHROUGH_TTL } from '../constants';
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
 
@@ -56,12 +57,6 @@ export function kvConfig(): KvConfig | null {
 const kvValuePath = (cfg: KvConfig, host: string) =>
   `/accounts/${cfg.accountId}/storage/kv/namespaces/${cfg.namespaceId}/values/` +
   encodeURIComponent(`host:${host.toLowerCase()}`);
-
-// Write-through TTL backstop (S2 Decision #3: "push-on-change + TTL fallback"). Matches the
-// edge's own positive-populate TTL so a stale key — e.g. a control-plane unpublish that failed
-// silently — self-heals within an hour: the key expires, the edge misses, and re-reads the
-// authoritative verified=true row from Postgres.
-const KV_WRITETHROUGH_TTL = 3600;
 
 // Publish a VERIFIED mapping (H1 — callers must confirm the DB actually verified first). Value
 // shape matches the edge reader (lookupTenant): {"t": tenantId}.
