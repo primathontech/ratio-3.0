@@ -526,29 +526,48 @@ export class ThemeStore {
       );
       if (t.rowCount === 0) throw new Error(`unknown theme '${ref.themeId}'`);
       const tenantId = t.rows[0].tenant_id;
-      const next = await client.query<{ v: string }>(
-        'SELECT COALESCE(MAX(version), 0) + 1 AS v FROM theme_bundle_version WHERE theme_id = $1',
+      // Content-addressed idempotency on the COMPILED (render-ready) output: if what this theme would
+      // SERVE is byte-identical to the latest published version, publishing again changed nothing — reuse
+      // that version instead of churning v2/v3/… (pressing Publish with no edits). We key on compiled_hash,
+      // NOT source_hash: source_hash is only the merchant's OVERRIDES bundle, which is unchanged by a
+      // rebase (the base moved) even though the composed output — and thus the served page — did change.
+      const latest = await client.query<{ version: string; compiled_hash: string }>(
+        'SELECT version, compiled_hash FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC LIMIT 1',
         [ref.themeId]
       );
-      const version = Number(next.rows[0].v);
-      await client.query(
-        `INSERT INTO theme_bundle_version (theme_id, version, source_hash, compiled_hash, created_by)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [ref.themeId, version, sourceHash, compiledHash, opts.by ?? null]
-      );
+      const unchanged = latest.rows[0]?.compiled_hash === compiledHash;
+      const version = unchanged
+        ? Number(latest.rows[0].version)
+        : Number(latest.rows[0]?.version ?? 0) + 1;
+      if (!unchanged) {
+        await client.query(
+          `INSERT INTO theme_bundle_version (theme_id, version, source_hash, compiled_hash, created_by)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [ref.themeId, version, sourceHash, compiledHash, opts.by ?? null]
+        );
+      }
       if (makeLive) {
-        const ptr = await client.query(
+        // Move the live pointer to this (theme, version) — idempotent. Only enqueue a purge when the
+        // pointer actually moves (new version, or promoting a different theme/version to live): an
+        // unchanged republish that's already live is a true no-op and must not spam the purge outbox.
+        const cur = await client.query<{ live: string | null; v: number | null }>(
+          'SELECT live_theme_id AS live, live_theme_version AS v FROM tenants WHERE id = $1',
+          [tenantId]
+        );
+        if (cur.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
+        const alreadyLive = cur.rows[0].live === ref.themeId && Number(cur.rows[0].v) === version;
+        await client.query(
           'UPDATE tenants SET live_theme_id = $2, live_theme_version = $3 WHERE id = $1',
           [tenantId, ref.themeId, version]
         );
-        if (ptr.rowCount === 0) throw new Error(`unknown tenant '${tenantId}'`);
-        // What the store serves changed → enqueue a durable purge of the tenant tag in the SAME
-        // transaction (D2), so the edge drops every cached page of this store. Same outbox +
-        // drainPurges() worker as the legacy page store; a lost purge can't strand a stale page.
-        await client.query('INSERT INTO page_purge_outbox (tenant_id, tags) VALUES ($1, $2)', [
-          tenantId,
-          [tenantTag(tenantId)],
-        ]);
+        if (!alreadyLive) {
+          // What the store serves changed → durable tenant-tag purge in the SAME transaction (D2), so
+          // the edge drops every cached page. Same outbox + drainPurges() worker as the legacy page store.
+          await client.query('INSERT INTO page_purge_outbox (tenant_id, tags) VALUES ($1, $2)', [
+            tenantId,
+            [tenantTag(tenantId)],
+          ]);
+        }
       }
       await client.query('COMMIT');
       return { version, sourceHash, compiledHash };
