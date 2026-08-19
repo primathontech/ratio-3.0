@@ -77,3 +77,35 @@ test('a theme with no layout override is not forced to have one (WIP-friendly)',
   // Editing only a section must not demand the merchant also send a layout.
   assert.deepEqual(validateThemeFiles({ 'sections/hero.liquid': '<h1>hi</h1>' }), []);
 });
+
+test('an empty tree has no issues', () => {
+  assert.deepEqual(validateThemeFiles({}), []);
+});
+
+test('a manifest that is valid JSON but not an object is flagged', () => {
+  const asArray = validateThemeFiles({ 'config/assets.json': '[]' });
+  assert.deepEqual(asArray, [
+    { path: 'config/assets.json', error: 'must be a JSON object of asset entries' },
+  ]);
+  // A JSON scalar is the same shape error.
+  assert.deepEqual(validateThemeFiles({ 'config/assets.json': '5' }), [
+    { path: 'config/assets.json', error: 'must be a JSON object of asset entries' },
+  ]);
+  // `null` is valid JSON but means "no manifest" — not an error.
+  assert.deepEqual(validateThemeFiles({ 'config/assets.json': 'null' }), []);
+});
+
+test('multiple simultaneous issues are all aggregated, not short-circuited', () => {
+  const issues = validateThemeFiles({
+    'templates/index.json': '{ broken', // invalid JSON
+    'config/assets.json': JSON.stringify({ x: { hash: 'nothex' } }), // malformed entry
+    'layout/theme.liquid': '<!doctype html><html><body></body></html>', // no slots
+  });
+  const paths = issues.map((i) => i.path).sort();
+  assert.deepEqual(paths, [
+    'config/assets.json',
+    'layout/theme.liquid',
+    'layout/theme.liquid',
+    'templates/index.json',
+  ]);
+});
