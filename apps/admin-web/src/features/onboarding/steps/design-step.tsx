@@ -3,6 +3,7 @@ import { Field, Spinner } from '../../../common/ui';
 import { ApiError, type StoreTheme, type ThemeFiles } from '../../../common/api';
 import { tokensFromFiles, filesWithTokens } from '../../theme/tokens-file';
 import { ThemeControls, resolve } from '../../theme/theme-controls';
+import { PreviewFrame } from '../../theme/preview-frame';
 import { readFeatured, mapFeaturedCollections } from '../featured';
 import type { StepProps } from '../types';
 
@@ -165,12 +166,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
             </div>
             <div className={mobile ? 'ts-frame-wrap mobile' : 'ts-frame-wrap'}>
               {previewHtml ? (
-                <iframe
-                  className="ts-frame"
-                  sandbox=""
-                  srcDoc={previewHtml}
-                  title="Store preview"
-                />
+                <PreviewFrame className="ts-frame" title="Store preview" html={previewHtml} />
               ) : (
                 <div className="ts-frame center-pad">
                   <Spinner />

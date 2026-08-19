@@ -8,6 +8,7 @@ import type { Api, Store, StoreTheme, ThemeFiles } from '../../common/api';
 import { ApiError, canManageStore } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
 import { tokensFromFiles, filesWithTokens } from './tokens-file';
+import { PreviewFrame } from './preview-frame';
 import { ThemeControls, resolve } from './theme-controls';
 import './theme-settings.css';
 
@@ -161,12 +162,7 @@ export function ThemeSettingsPanel({
           </div>
           <div className={mobile ? 'ts-frame-wrap mobile' : 'ts-frame-wrap'}>
             {previewHtml ? (
-              <iframe
-                className="ts-frame"
-                sandbox=""
-                srcDoc={previewHtml}
-                title="Storefront preview"
-              />
+              <PreviewFrame className="ts-frame" title="Storefront preview" html={previewHtml} />
             ) : (
               <div className="ts-frame center-pad">
                 <Spinner />
