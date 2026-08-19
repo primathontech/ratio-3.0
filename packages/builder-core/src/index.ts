@@ -10,6 +10,7 @@ export * from './theme/theme-render';
 export * from './theme/theme-tokens';
 export * from './theme/theme-store';
 export * from './theme/base-library';
+export * from './theme/base-propagation';
 export * from './theme/default-theme';
 
 // Page-builder (PageDoc content-model render engine)
