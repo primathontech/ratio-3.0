@@ -33,9 +33,9 @@ test('base registry offers the default base and resolves every listed base to fi
   }
 });
 
-test('ensureSeededBaseById rejects an unknown base id before touching the store', () => {
-  assert.throws(
-    () => ensureSeededBaseById(undefined as never, 'nope', { compile: (s) => s }),
+test('ensureSeededBaseById rejects an unknown base id before touching the store', async () => {
+  await assert.rejects(
+    ensureSeededBaseById(undefined as never, 'nope', { compile: (s) => s }),
     /unknown base theme 'nope'/
   );
 });

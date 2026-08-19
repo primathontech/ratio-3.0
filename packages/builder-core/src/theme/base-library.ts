@@ -104,13 +104,13 @@ export async function ensureSeededBase(
 // Seed a specific registry base into the library, returning the version stores should adopt. Seeds
 // from the base's code files on first run; thereafter the published base is the source of truth
 // (edited via the admin base-theme editor, OFCE-656), never re-derived from code.
-export function ensureSeededBaseById(
+export async function ensureSeededBaseById(
   store: ThemeStore,
   id: string,
   opts: { compile: CompileFn }
 ): Promise<{ themeId: string; version: number }> {
   const def = baseThemeDef(id);
-  if (!def) throw new Error(`unknown base theme '${id}'`);
+  if (!def) throw new Error(`unknown base theme '${id}'`); // async → surfaces as a rejection, not a sync throw
   return ensureSeededBase(
     store,
     {
