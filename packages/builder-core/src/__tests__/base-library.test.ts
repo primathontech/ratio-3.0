@@ -9,6 +9,7 @@ import { pool } from '@ratio/data-db';
 import { ThemeStore, type CompileFn } from '../theme/theme-store';
 import {
   ensureDefaultBaseTheme,
+  ensureSeededBase,
   adoptAndPublishDefaultTheme,
   DEFAULT_BASE_THEME_ID,
 } from '../theme/base-library';
@@ -75,6 +76,63 @@ test('publishes the Default base, idempotently', { skip }, async () => {
   );
   assert.equal(after.rows[0].n, before.rows[0].n);
 });
+
+test(
+  'ensureSeededBase seeds v1 from files, then never republishes from files (SEED-ONLY, OFCE-656)',
+  { skip },
+  async () => {
+    // A throwaway base, so we exercise the seed-only rule without mutating the shared library-default.
+    const T = '_seed_lib';
+    const TH = 'seed_base';
+    const seeded = { tenantId: T, tenantName: 'Seed Lib', themeId: TH, themeName: 'Seed' };
+    const V1 = {
+      'layout/theme.liquid': '<!doctype html><html><body>{{ content_for_layout }}</body></html>',
+    };
+    await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [TH]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+
+    // First call seeds v1 from the code files; a second call with the same files is a no-op.
+    assert.equal(
+      (await ensureSeededBase(store, seeded, { files: V1, compile: identity })).version,
+      1
+    );
+    assert.equal(
+      (await ensureSeededBase(store, seeded, { files: V1, compile: identity })).version,
+      1
+    );
+
+    // Simulate a platform admin editing the base via the editor: publish a diverged v2 directly.
+    await store.saveDraft(
+      { themeId: TH, tenantId: T },
+      {
+        'layout/theme.liquid':
+          '<!doctype html><html><body>ADMIN {{ content_for_layout }}</body></html>',
+      }
+    );
+    assert.equal(
+      (await store.publish({ themeId: TH, tenantId: T }, { compile: identity, makeLive: false }))
+        .version,
+      2
+    );
+
+    // Seed-only: calling again with the ORIGINAL code files must NOT clobber the admin's v2 — it stays
+    // the latest, and no third version is cut. (Pre-OFCE-656 this would have published a v3 reverting it.)
+    assert.equal(
+      (await ensureSeededBase(store, seeded, { files: V1, compile: identity })).version,
+      2
+    );
+    const n = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
+      [TH]
+    );
+    assert.equal(n.rows[0].n, 2, 'no third version cut — code never overwrites an edited base');
+
+    await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [TH]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+  }
+);
 
 test(
   'a store adopting the base renders base sections + its override section',

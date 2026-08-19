@@ -55,6 +55,7 @@ import { registerThemeAssetsRoutes, isAssetUploadPath } from './routes/themes/as
 import { ASSET_UPLOAD_BODY_LIMIT } from './constants';
 import { registerMultiThemeRoutes } from './routes/themes/multi';
 import { registerBaseThemeRoutes } from './routes/themes/base';
+import { registerBaseThemeEditRoutes } from './routes/themes/base-edit';
 
 export { platformSubdomainAllowed };
 
@@ -417,6 +418,7 @@ export function createApp(
   registerThemeAssetsRoutes(app, deps);
   registerMultiThemeRoutes(app, deps);
   registerBaseThemeRoutes(app, deps);
+  registerBaseThemeEditRoutes(app, deps);
 
   return app;
 }
