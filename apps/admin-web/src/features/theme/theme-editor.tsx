@@ -281,6 +281,24 @@ export function ThemeCodeEditor({
         );
         return false;
       }
+      // Save-gate validation (OFCE-654): the server returns { error, issues:[{path,error}] } as the body.
+      // Surface which file is wrong so the merchant can fix it, instead of a raw JSON toast.
+      if (e instanceof ApiError && e.status === 400) {
+        let msg = e.message;
+        try {
+          const b = JSON.parse(e.message) as {
+            error?: string;
+            issues?: { path: string; error: string }[];
+          };
+          if (b.issues?.length)
+            msg = `Can’t save — ${b.issues.map((i) => `${i.path} ${i.error}`).join('; ')}`;
+          else if (b.error) msg = b.error;
+        } catch {
+          /* body wasn't JSON — fall back to the raw message */
+        }
+        toast(msg, 'error');
+        return false;
+      }
       toast((e as Error).message, 'error');
       return false;
     } finally {
