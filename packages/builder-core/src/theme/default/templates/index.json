@@ -1,17 +1,9 @@
 {
   "dataSources": {
-    "featured": {
+    "all": {
       "type": "PRODUCTS",
       "params": {
         "first": 8
-      }
-    },
-    "latest": {
-      "type": "PRODUCTS",
-      "params": {
-        "first": 8,
-        "sortKey": "CREATED_AT",
-        "reverse": true
       }
     }
   },
@@ -30,16 +22,9 @@
     },
     {
       "type": "collection-row",
-      "dataSourceKey": "featured",
+      "dataSourceKey": "all",
       "data": {
-        "heading": "Featured products"
-      }
-    },
-    {
-      "type": "collection-row",
-      "dataSourceKey": "latest",
-      "data": {
-        "heading": "New arrivals"
+        "heading": "All products"
       }
     },
     {

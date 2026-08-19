@@ -4,7 +4,7 @@
   <div>
     <h1>{{ title | escape }}</h1>
     <div class="price">{{ price | money }}{% if compare_at_price and compare_at_price > price %} <s class="was">{{ compare_at_price | money }}</s>{% endif %}</div>
-    {% if description %}<div class="rte"><p>{{ description | escape }}</p></div>{% endif %}
+    {% if description %}<div class="rte">{{ description }}</div>{% endif %}
     <form class="atc" method="post" action="/cart/add">
       <input type="hidden" name="variantId" value="{{ variant_id | default: variants.first.id | escape }}">
       <input type="hidden" name="handle" value="{{ handle | escape }}">

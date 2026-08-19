@@ -47,7 +47,7 @@ a{color:inherit;text-decoration:none}
 .hero{padding:76px 0 64px;text-align:center}
 .hero h1{font-size:clamp(2rem,5vw,3.25rem);line-height:1.05;letter-spacing:-.02em;margin:0 0 14px;text-wrap:balance}
 .hero p{font-size:1.15rem;color:var(--muted);margin:0 auto 26px;max-width:52ch}
-.btn,.button{display:inline-block;background:var(--accent);color:var(--accent-ink);font-weight:600;padding:12px 22px;border-radius:calc(var(--radius) - 4px);transition:filter .15s}
+.btn,.button{display:inline-block;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;padding:12px 22px;border:0;border-radius:calc(var(--radius) - 4px);cursor:pointer;text-align:center;transition:filter .15s}
 .btn:hover,.button:hover{filter:brightness(1.08)}
 .heading{font-size:1.5rem;letter-spacing:-.01em;margin:44px 0 18px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px;padding:6px 0 40px}
