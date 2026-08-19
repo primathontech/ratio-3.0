@@ -9,7 +9,7 @@ import {
 } from '../../common/api';
 import { Dialog, EmptyState, Field, Icon, Spinner, useToast } from '../../common/ui';
 import { PageHeader } from '../../common/page-header';
-import { storeSlug, storefrontUrl } from '../../common/store-context';
+import { storeSlug, storefrontUrl, useStoreData } from '../../common/store-context';
 import { ThemeCard, type Preview } from './theme-card';
 import './themes-list.css';
 
@@ -21,9 +21,12 @@ type Status = 'loading' | 'ready' | 'disabled' | 'error';
 export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const { me } = useStoreData();
   const slug = storeSlug(store);
   const domain = store.host ?? store.id;
-  const liveUrl = storefrontUrl(store, false);
+  // Open the storefront where it's actually reachable: the .localhost edge alias in local dev, the
+  // real domain in production. Hardcoding non-local sent local users to the prod https URL.
+  const liveUrl = storefrontUrl(store, !!me?.isLocal);
   const canManage = canManageStore(store);
 
   const [status, setStatus] = useState<Status>('loading');

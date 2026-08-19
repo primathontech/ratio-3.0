@@ -1,4 +1,7 @@
 /* Guided onboarding wizard (OFCE-618) — a chrome-less, full-viewport flow. */
+.ds-section-label {
+  margin-bottom: 8px;
+}
 .ob-wrap {
   min-height: 100vh;
   display: flex;

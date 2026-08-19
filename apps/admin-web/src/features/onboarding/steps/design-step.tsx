@@ -17,7 +17,6 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
   const [collections, setCollections] = useState<{ handle: string; title: string }[]>([]);
   const [tokens, setTokens] = useState<StoreTheme>({ color: data.color });
   const [newArrivals, setNewArrivals] = useState('');
-  const [trending, setTrending] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [mobile, setMobile] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,9 +36,10 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
         setRevision(draft.revision);
         // The theme's own tokens win; fall back to the colour chosen in step 2 when the theme omits it.
         setTokens({ color: data.color, ...tokensFromFiles(draft.files) });
-        const f = readFeatured(draft.files);
-        setNewArrivals(f.newArrivals);
-        setTrending(f.trending);
+        // Preselect the row's saved collection, else the first available one so the picker always
+        // shows a real choice. With no collections at all, it stays empty → the row falls back to the
+        // all-products listing (see mapFeaturedCollections).
+        setNewArrivals(readFeatured(draft.files).newArrivals || cols[0]?.handle || '');
         setCollections(cols);
       })
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load the theme'));
@@ -49,8 +49,8 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
   const draft = useMemo(() => {
     if (!files) return null;
     const withTokens = filesWithTokens(files, resolve(tokens));
-    return mapFeaturedCollections(withTokens, { newArrivals, trending });
-  }, [files, tokens, newArrivals, trending]);
+    return mapFeaturedCollections(withTokens, { newArrivals });
+  }, [files, tokens, newArrivals]);
 
   // Live preview, debounced so dragging the colour picker doesn't hammer the render.
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -120,31 +120,22 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
         <div className="ts-grid">
           <ThemeControls theme={tokens} onChange={setTokens}>
             <section>
-              <div className="ts-label">Featured collections</div>
+              <div className="ts-label ds-section-label">Homepage Products</div>
               {collections.length > 0 ? (
-                <>
-                  <Field
-                    label="Feature collection"
-                    info="Which collection this featured row shows."
-                  >
-                    <CollectionSelect
-                      value={newArrivals}
-                      options={collections}
-                      onChange={setNewArrivals}
-                    />
-                  </Field>
-                  <Field label="New launches">
-                    <CollectionSelect
-                      value={trending}
-                      options={collections}
-                      onChange={setTrending}
-                    />
-                  </Field>
-                </>
+                <Field
+                  label="Show"
+                  info="Choose which collection's products to show on your homepage."
+                >
+                  <CollectionSelect
+                    value={newArrivals}
+                    options={collections}
+                    onChange={setNewArrivals}
+                  />
+                </Field>
               ) : (
                 <p className="muted ts-desc">
-                  Connect a catalogue to feature your collections — the rows fill in once products
-                  are available.
+                  Connect a catalogue to feature a collection — the row shows all products until
+                  then.
                 </p>
               )}
             </section>
@@ -203,19 +194,12 @@ function CollectionSelect({
   options: { handle: string; title: string }[];
   onChange: (v: string) => void;
 }) {
-  // A handle the store no longer has (e.g. the theme's default) still shows so the row isn't silently
-  // repointed; picking a real collection replaces it.
+  // A handle the store no longer has (e.g. one saved earlier, or the theme default) still shows so the
+  // row isn't silently repointed; picking a real collection replaces it.
   const known = options.some((o) => o.handle === value);
   return (
     <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-      {/* Keep the shown selection and React state in sync: a placeholder for an empty value, or the
-          current (non-catalogue) handle, so the browser never highlights an option state doesn't hold. */}
-      {!value && (
-        <option value="" disabled>
-          Choose a collection…
-        </option>
-      )}
-      {value && !known && <option value={value}>{value} (not in your catalogue)</option>}
+      {value && !known && <option value={value}>{value} (Not in your catalogue)</option>}
       {options.map((o) => (
         <option key={o.handle} value={o.handle}>
           {o.title}

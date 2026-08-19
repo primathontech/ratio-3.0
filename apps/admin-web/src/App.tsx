@@ -17,7 +17,6 @@ import {
   ComingSoonPage,
   DangerPage,
   DomainsPage,
-  HomePage,
   RequireAdmin,
   RoleRedirect,
   SuperAdminPage,
@@ -174,8 +173,8 @@ function AuthedRoutes() {
               element={<FullScreenEditorPage />}
             />
             <Route path="/stores/:storeId" element={<MerchantLayout />}>
-              {/* A store URL renders that store's dashboard directly — no /dashboard sub-path. */}
-              <Route index element={<HomePage />} />
+              {/* Themes is the store's home — a store URL lands on its theme library. */}
+              <Route index element={<Navigate to="themes" replace />} />
               <Route path="themes" element={<ThemesListPage />} />
               <Route path="themes/:themeId" element={<ThemePage />} />
               <Route path="pages" element={<PagesPage />} />
