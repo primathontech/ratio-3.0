@@ -716,6 +716,71 @@ test('raw-serve 404s an unknown path, 400s a missing ?path, 403s a non-member', 
   assert.strictEqual((await rawAsset(bob, 'images/pic.png')).status, 403);
 });
 
+// OFCE-654: draft-save structural validation (reject-on-save). putDraft merges the edit over the
+// scaffolded full-document base, so only a genuinely-broken file trips the gate.
+test('draft-save rejects malformed JSON in a theme file (400 + issue)', async () => {
+  const res = await putDraft({ 'templates/index.json': '{ "sections": [ }' });
+  assert.strictEqual(res.status, 400);
+  const body = (await res.json()) as { error: string; issues: { path: string; error: string }[] };
+  assert.ok(
+    body.issues.some((i) => i.path === 'templates/index.json' && /valid JSON/.test(i.error)),
+    'the broken template JSON is reported'
+  );
+});
+
+test('draft-save rejects a layout that dropped a platform slot (400)', async () => {
+  const res = await putDraft({
+    // full document, but no {{ content_for_header }} — islands/CSP/integration head would vanish
+    'layout/theme.liquid': '<!doctype html><html><body>{{ content_for_layout }}</body></html>',
+  });
+  assert.strictEqual(res.status, 400);
+  const body = (await res.json()) as { issues: { path: string; error: string }[] };
+  assert.ok(body.issues.some((i) => /content_for_header/.test(i.error)));
+});
+
+// OFCE-655: a developer edits the full theme (head + a script + a section), the save-gate catches a
+// bad edit, and the good draft publishes → live. (Origin render of a published full-doc theme is
+// covered by apps/origin theme-ownership-origin.test.ts.)
+test('edit head + script + section → save-gate catches a bad edit → publish', async () => {
+  await call(app, 'POST', `/stores/${ID}/theme/bundle/scaffold`, alice, {});
+  const got = (await (
+    await call(app, 'GET', `/stores/${ID}/theme/bundle/draft`, alice)
+  ).json()) as {
+    files: Record<string, string>;
+    revision: string;
+  };
+  // Edit the <head> (add a script) AND a section — a whole-theme edit that keeps the platform slots.
+  const edited = {
+    ...got.files,
+    'layout/theme.liquid': got.files['layout/theme.liquid'].replace(
+      '</head>',
+      '<script>window.__x=1</script></head>'
+    ),
+    'sections/hero.liquid': '<h1>edited hero</h1>',
+  };
+  const ok = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: edited,
+    revision: got.revision,
+  });
+  assert.strictEqual(ok.status, 200, 'a valid full-theme edit saves');
+  const rev2 = ((await ok.json()) as { hash: string }).hash;
+
+  // A bad edit (layout drops content_for_layout) is caught at save, not left for publish.
+  const bad = await call(app, 'PUT', `/stores/${ID}/theme/bundle/draft`, alice, {
+    files: {
+      ...edited,
+      'layout/theme.liquid':
+        '<!doctype html><html><head>{{ content_for_header }}</head><body></body></html>',
+    },
+    revision: rev2,
+  });
+  assert.strictEqual(bad.status, 400, 'the save-gate rejects the broken layout');
+
+  // The good draft still publishes → live.
+  const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
+  assert.strictEqual(pub.status, 200, 'the valid draft publishes');
+});
+
 test('publish with no saved draft → 400 (publish does not create the theme)', async () => {
   const pub = await call(app, 'POST', `/stores/${ID}/theme/bundle/publish`, alice, {});
   assert.strictEqual(pub.status, 400);

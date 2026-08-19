@@ -5,6 +5,7 @@ import {
   DraftConflict,
   layoutOwnsDocument,
   tenantTag,
+  validateThemeFiles,
   ThemeStore as BundleThemeStore,
 } from '@ratio/builder-core';
 import type { ThemeFiles } from '@ratio/builder-core';
@@ -90,6 +91,11 @@ export function registerBundleThemeRoutes(app: Hono<Vars>, deps: RouteDeps) {
     // loud (400) instead of a blind last-write-wins save.
     if (typeof body.revision !== 'string')
       return c.json({ error: 'revision is required to save a draft' }, 400);
+    // Reject-on-save structural validation (OFCE-654): a malformed JSON file, a broken asset manifest,
+    // or a layout that dropped a platform slot fails here (400) — early, clear feedback — instead of a
+    // silently-broken or blank store at publish. Liquid syntax errors still surface in the live preview.
+    const issues = validateThemeFiles(body.files ?? {});
+    if (issues.length) return c.json({ error: 'theme has validation errors', issues }, 400);
     if (ensure) await ensure();
     // Store only the delta from the base (untouched files keep tracking base updates); reject the save
     // if another editor moved the draft first (409) instead of silently clobbering it.
