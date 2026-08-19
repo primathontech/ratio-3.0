@@ -270,6 +270,7 @@ export function PlatformLayout() {
     { label: 'Users', group: 'Navigate', run: () => navigate('/admin') },
     { label: 'Stores', group: 'Navigate', run: () => navigate('/admin/stores') },
     { label: 'Base theme', group: 'Navigate', run: () => navigate('/admin/base-theme') },
+    { label: 'Edit base theme', group: 'Navigate', run: () => navigate('/admin/base-theme/edit') },
     { label: 'New store', group: 'Actions', run: openCreate },
   ];
 
@@ -303,8 +304,11 @@ export function PlatformLayout() {
           <NavLink to="/admin/stores" className={({ isActive }) => (isActive ? 'on' : '')}>
             Stores
           </NavLink>
-          <NavLink to="/admin/base-theme" className={({ isActive }) => (isActive ? 'on' : '')}>
+          <NavLink to="/admin/base-theme" end className={({ isActive }) => (isActive ? 'on' : '')}>
             Base theme
+          </NavLink>
+          <NavLink to="/admin/base-theme/edit" className={({ isActive }) => (isActive ? 'on' : '')}>
+            Edit base
           </NavLink>
         </nav>
         <div className="shell-body">

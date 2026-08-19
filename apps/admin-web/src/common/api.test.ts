@@ -126,6 +126,62 @@ describe('admin api client', () => {
     expect(res.outcomes[0]).toMatchObject({ themeId: 't_a_main', ok: true, version: 4 });
   });
 
+  test('getBaseThemeDraft GETs the base editor draft', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(
+        200,
+        { files: { 'layout/theme.liquid': '<!doctype html>' }, revision: 'r1' },
+        (r) => (seen = r)
+      )
+    );
+    const res = await api.getBaseThemeDraft();
+    expect(seen?.method).toBe('GET');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme/edit/draft');
+    expect(res.revision).toBe('r1');
+  });
+
+  test('saveBaseThemeDraft PUTs the files + revision', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, hash: 'h2' }, (r) => (seen = r))
+    );
+    const files = { 'layout/theme.liquid': '<!doctype html><html></html>' };
+    await api.saveBaseThemeDraft(files, 'r1');
+    expect(seen?.method).toBe('PUT');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme/edit/draft');
+    expect(await seen!.json()).toEqual({ files, revision: 'r1' });
+  });
+
+  test('publishBaseTheme POSTs publish and returns the version', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { ok: true, version: 5 }, (r) => (seen = r))
+    );
+    expect((await api.publishBaseTheme()).version).toBe(5);
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme/edit/publish');
+  });
+
+  test('resetBaseThemeDraft POSTs reset and returns the restored draft', async () => {
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, {
+        ok: true,
+        files: { 'layout/theme.liquid': '<!doctype html>' },
+        revision: 'r0',
+      })
+    );
+    expect((await api.resetBaseThemeDraft()).revision).toBe('r0');
+  });
+
   test('getCommerce GETs and unwraps merchantId; saveCommerce PUTs it', async () => {
     let seen: Request | undefined;
     const get = createApi('http://api', async () => 't', fakeFetch(200, { merchantId: 'm1' }));

@@ -4,6 +4,7 @@ import { AgentAccessPanel } from '../features/access/agent-access-panel';
 import { SuperAdmin } from '../features/admin/superadmin';
 import { SuperAdminUsers } from '../features/admin/superadmin-users';
 import { BaseThemeConsole } from '../features/admin/base-theme';
+import { BaseThemeEditor } from '../features/admin/base-theme-editor';
 import { AuditPanel } from '../features/audit/audit-panel';
 import { CommercePanel } from '../features/commerce/commerce-panel';
 import { DashboardHome } from '../features/dashboard/dashboard';
@@ -45,6 +46,11 @@ export function SuperAdminUsersPage() {
 export function BaseThemePage() {
   const { api } = useStoreData();
   return <BaseThemeConsole api={api} />;
+}
+
+export function BaseThemeEditPage() {
+  const { api } = useStoreData();
+  return <BaseThemeEditor api={api} />;
 }
 
 export function HomePage() {

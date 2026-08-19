@@ -308,6 +308,29 @@ export function createApi(
         targets,
         toVersion,
       }),
+    // Platform-admin only: edit the shared base theme (OFCE-656). Draft read/save, preview, publish
+    // (a new base version), reset to the last published base.
+    getBaseThemeDraft: () =>
+      req<{ files: ThemeFiles; revision: string }>('GET', '/admin/base-theme/edit/draft'),
+    saveBaseThemeDraft: (files: ThemeFiles, revision: string) =>
+      req<{ ok: boolean; hash: string }>('PUT', '/admin/base-theme/edit/draft', {
+        files,
+        revision,
+      }),
+    previewBaseTheme: (files: ThemeFiles, page: string) =>
+      req<{ html?: string; sampleData?: boolean; error?: string }>(
+        'POST',
+        '/admin/base-theme/edit/preview',
+        { files, page }
+      ),
+    publishBaseTheme: () =>
+      req<{ ok: boolean; version: number }>('POST', '/admin/base-theme/edit/publish', {}),
+    resetBaseThemeDraft: () =>
+      req<{ ok: boolean; files: ThemeFiles; revision: string }>(
+        'POST',
+        '/admin/base-theme/edit/reset',
+        {}
+      ),
     createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
     // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
