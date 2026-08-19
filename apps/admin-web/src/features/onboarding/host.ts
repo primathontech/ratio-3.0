@@ -23,6 +23,6 @@ export function suggestHost(name: string): string {
 // registers that alias as `${host.split('.')[0]}.localhost`, so we derive it the same way (the
 // entered .ratiodev.in host doesn't resolve to localhost). Otherwise use the API-returned https URL.
 export function liveStoreUrl(host: string, storeUrl: string | null, isLocal: boolean): string {
-  if (isLocal) return `http://${host.split('.')[0]}.localhost:${LOCAL_EDGE_PORT}`;
-  return storeUrl ?? `https://${host}`;
+  if (isLocal && host) return `http://${host.split('.')[0]}.localhost:${LOCAL_EDGE_PORT}`;
+  return storeUrl ?? (host ? `https://${host}` : '');
 }

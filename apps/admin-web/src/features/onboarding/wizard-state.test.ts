@@ -58,6 +58,22 @@ describe('wizard-state', () => {
     expect(loadWizardState(s)).toBeNull();
   });
 
+  test('drops state left untouched past the max age (stale draft)', () => {
+    const s = fakeStorage();
+    // savedAt:0 (epoch) is far older than the max age → treated as stale, start fresh.
+    s.setItem('ratio.onboarding.v1', JSON.stringify({ step: 2, data: state.data, savedAt: 0 }));
+    expect(loadWizardState(s)).toBeNull();
+  });
+
+  test('clamps an out-of-range step so an old payload cannot strand the wizard', () => {
+    const s = fakeStorage();
+    s.setItem(
+      'ratio.onboarding.v1',
+      JSON.stringify({ step: 99, data: state.data, savedAt: Date.now() })
+    );
+    expect(loadWizardState(s)?.step).toBe(3); // clamped to the last step (STEP_LABELS.length - 1)
+  });
+
   test('clear removes the persisted state', () => {
     const s = fakeStorage();
     saveWizardState(state, s);
