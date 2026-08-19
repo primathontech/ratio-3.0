@@ -6,6 +6,7 @@
   gap: 16px;
   height: calc(100vh - 230px);
   min-height: 420px;
+  margin-top: 12px;
 }
 .base-editor-code {
   display: flex;
