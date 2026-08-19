@@ -1,0 +1,47 @@
+/* Base theme editor (OFCE-656): a two-column code + preview layout. Reuses the theme editor's
+   .code-host / .wb-preview primitives (imported from theme-editor.css); this file only lays them out. */
+.base-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  height: calc(100vh - 230px);
+  min-height: 420px;
+}
+.base-editor-code {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.base-editor-code .code-host {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.base-editor-grid .wb-preview {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.base-editor-grid .wb-preview-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: #fff;
+}
+
+@media (max-width: 900px) {
+  .base-editor-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .base-editor-code .code-host,
+  .base-editor-grid .wb-preview {
+    height: 60vh;
+  }
+}
