@@ -224,13 +224,17 @@ test('publish rejects a theme whose layout is not a full HTML document (full the
   const okPub = await call(app, 'POST', `/stores/${A}/themes/${id}/publish`, alice, {});
   assert.strictEqual(okPub.status, 200);
 
-  // Override the layout with a body-only fragment (no <!doctype/<html) → publish must 400.
+  // Override the layout with a body-only fragment: it KEEPS the platform slots (so draft-save validation
+  // passes, OFCE-654) but is not a full document (no <!doctype/<html) → publish must 400.
   const got = (await (await call(app, 'GET', `/stores/${A}/themes/${id}/draft`, alice)).json()) as {
     files: Record<string, string>;
     revision: string;
   };
   const save = await call(app, 'PUT', `/stores/${A}/themes/${id}/draft`, alice, {
-    files: { ...got.files, 'layout/theme.liquid': '<div>no doctype here</div>' },
+    files: {
+      ...got.files,
+      'layout/theme.liquid': '<div>{{ content_for_header }}{{ content_for_layout }}</div>',
+    },
     revision: got.revision,
   });
   assert.strictEqual(save.status, 200);
