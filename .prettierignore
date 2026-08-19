@@ -6,3 +6,7 @@ bun.lock
 db/*.sql
 db/migrations/*.sql
 apps/admin
+
+# The base theme source files are byte-exact (a change bumps the base content hash → store rebases).
+# Prettier must NOT reformat them; the codegen (scripts/gen-default-theme.ts) inlines them verbatim.
+packages/builder-core/src/theme/default/

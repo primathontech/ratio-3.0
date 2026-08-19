@@ -16,6 +16,7 @@
     "start": "node --env-file-if-exists=apps/origin/.env --import tsx dev/server.ts",
     "admin-api": "node --env-file-if-exists=apps/admin-api/.env --import tsx apps/admin-api/src/server.ts",
     "gen:client": "tsx scripts/gen-client.ts",
+    "gen:default-theme": "tsx scripts/gen-default-theme.ts",
     "prove": "node --env-file-if-exists=apps/origin/.env --import tsx tests/prove.ts",
     "prove:s1": "node --env-file-if-exists=apps/origin/.env --import tsx tests/prove-s1.ts",
     "onboard": "node --env-file-if-exists=apps/origin/.env --import tsx scripts/onboard.ts",
