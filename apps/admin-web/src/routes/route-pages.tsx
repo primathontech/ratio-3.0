@@ -7,7 +7,6 @@ import { BaseThemeConsole } from '../features/admin/base-theme';
 import { BaseThemeEditor } from '../features/admin/base-theme-editor';
 import { AuditPanel } from '../features/audit/audit-panel';
 import { CommercePanel } from '../features/commerce/commerce-panel';
-import { DashboardHome } from '../features/dashboard/dashboard';
 import { DomainsPanel } from '../features/domains/domains-panel';
 import { ComingSoon } from '../features/shell/app-shell';
 import { DangerPanel } from '../features/stores/danger-panel';
@@ -53,10 +52,6 @@ export function BaseThemeEditPage() {
   return <BaseThemeEditor api={api} />;
 }
 
-export function HomePage() {
-  const { store } = useMerchant();
-  return <DashboardHome storeName={store.name} />;
-}
 // Themes landing — the store's live theme as a card with a preview thumbnail (see themes-list.tsx).
 export function ThemesListPage() {
   const { api, store } = useMerchant();

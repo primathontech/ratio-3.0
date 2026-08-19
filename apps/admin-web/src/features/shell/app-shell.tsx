@@ -3,7 +3,7 @@ import { NavLink, Navigate, Outlet, useLocation, useNavigate, useParams } from '
 import { UserButton } from '@clerk/clerk-react';
 import { ThemeToggle } from '../../common/theme-toggle';
 import { Icon } from '../../common/ui';
-import { NAV, type NavItem } from '../dashboard/dashboard-data';
+import { NAV, type NavItem } from './nav';
 import { AskRatio } from '../assistant/ask-sophie';
 import { CommandPalette, type Command } from './command-palette';
 import { resolveStore, storeSlug, storefrontUrl, useStoreData } from '../../common/store-context';
@@ -63,12 +63,7 @@ export function MerchantLayout() {
   const slug = storeSlug(store);
   const liveUrl = storefrontUrl(store, !!me?.isLocal);
 
-  const pathFor = (route: string) =>
-    route === 'admin'
-      ? '/admin'
-      : route === 'home'
-        ? `/stores/${slug}`
-        : `/stores/${slug}/${route}`;
+  const pathFor = (route: string) => (route === 'admin' ? '/admin' : `/stores/${slug}/${route}`);
 
   const groups = NAV.map((g) => ({
     title: g.title,
@@ -135,7 +130,6 @@ export function MerchantLayout() {
                 <NavLink
                   key={it.route}
                   to={pathFor(it.route)}
-                  end={it.route === 'home'}
                   className={({ isActive }) => (isActive ? 'nav-item active' : 'nav-item')}
                 >
                   <span className="bar" />

@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import type { Api, Store } from './api';
+import { LOCAL_EDGE_PORT } from './constants';
 
 export interface Me {
   userId: string;
@@ -46,7 +47,6 @@ export function storeSlug(store: { id: string }): string {
 // The live storefront URL to open in a browser. In local dev (RATIO_LOCAL / me.isLocal) the store
 // is reachable at its <label>.localhost alias on the local edge; in production it's the real domain
 // over https. Returns null when the store has no matching host yet.
-const LOCAL_EDGE_PORT = '8080';
 export function storefrontUrl(store: Store, isLocal: boolean): string | null {
   const hosts = [...(store.hosts ?? []), store.host].filter(Boolean) as string[];
   if (isLocal) {

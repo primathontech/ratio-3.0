@@ -174,6 +174,20 @@ export class ApiError extends Error {
   }
 }
 
+// The API returns errors as JSON ({ error } or { message }). Pull the human message out so callers
+// show "that domain is already connected" — not the raw {"error":"…"} envelope. Falls back to the
+// body as-is for a non-JSON error (e.g. a proxy 502 HTML page).
+export function apiErrorMessage(body: string): string {
+  try {
+    const j = JSON.parse(body) as { error?: unknown; message?: unknown };
+    const m = j.error ?? j.message;
+    if (typeof m === 'string' && m) return m;
+  } catch {
+    /* not JSON — use the raw body */
+  }
+  return body;
+}
+
 export interface ApiOptions {
   timeoutMs?: number; // abort a request that stalls, so the UI never hangs forever (M1)
   assistantTimeoutMs?: number; // the assistant runs a multi-step tool loop; it needs longer (R12 M-1)
@@ -280,7 +294,7 @@ export function createApi(
     }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new ApiError(res.status, text || res.statusText);
+      throw new ApiError(res.status, apiErrorMessage(text) || res.statusText);
     }
     if (res.status === 204) return null as T;
     try {
@@ -444,7 +458,10 @@ export function createApi(
         { headers: token ? { authorization: `Bearer ${token}` } : {} }
       );
       if (!res.ok)
-        throw new ApiError(res.status, (await res.text().catch(() => '')) || res.statusText);
+        throw new ApiError(
+          res.status,
+          apiErrorMessage(await res.text().catch(() => '')) || res.statusText
+        );
       return res.blob();
     },
     listDomains: (id: string) =>

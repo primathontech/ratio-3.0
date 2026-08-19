@@ -111,6 +111,30 @@ describe('mapFeaturedCollections', () => {
     expect(readFeatured(out)).toEqual({ newArrivals: 'summer', trending: 'new-launches' });
   });
 
+  test('selecting All products (empty handle) reverts a collection-bound row to the products listing', () => {
+    // baseIndex binds the first row to COLLECTION_BY_HANDLES['all']. Choosing "All products" must
+    // revert it to the handle-independent PRODUCTS listing (renders for every store), not leave the
+    // old collection bound.
+    const out = mapFeaturedCollections({ [INDEX]: baseIndex() }, { newArrivals: '' });
+    const doc = JSON.parse(out[INDEX]);
+    expect(doc.dataSources.all.type).toBe('PRODUCTS');
+    expect(doc.dataSources.all.params.handles).toBeUndefined();
+    expect(doc.dataSources.all.params.first).toBe(8);
+    // The unspecified trending row is left exactly as it was.
+    expect(doc.dataSources['new-launches'].params.handles).toEqual(['new-launches']);
+  });
+
+  test('an unspecified row (undefined) is left alone, not reverted', () => {
+    const out = mapFeaturedCollections({ [INDEX]: baseIndex() }, { newArrivals: 'summer' });
+    const doc = JSON.parse(out[INDEX]);
+    expect(doc.dataSources['new-launches'].type).toBe('COLLECTION_BY_HANDLES');
+  });
+
+  test('a row already on the products listing is untouched by All products (no churn)', () => {
+    const files = { [INDEX]: productListingIndex() };
+    expect(mapFeaturedCollections(files, { newArrivals: '' })).toBe(files);
+  });
+
   test('returns the files unchanged when the template is not the expected shape', () => {
     const files = { [INDEX]: JSON.stringify({ sections: [] }) };
     expect(mapFeaturedCollections(files, { newArrivals: 'summer' })).toBe(files);

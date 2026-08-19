@@ -41,6 +41,17 @@ describe('admin api client', () => {
     await expect(api.listStores()).rejects.toBeInstanceOf(ApiError);
   });
 
+  test('surfaces the JSON {error} body as a clean message (not the raw envelope)', async () => {
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(409, { error: 'that domain is already connected to another store' })
+    );
+    await expect(api.createStore({ name: 'A', host: 'a.ratiodev.in' })).rejects.toMatchObject({
+      message: 'that domain is already connected to another store',
+    });
+  });
+
   test('sends no auth header when unauthenticated (getToken null)', async () => {
     let seen: Request | undefined;
     const api = createApi(

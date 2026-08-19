@@ -69,7 +69,9 @@ export function mapFeaturedCollections(files: ThemeFiles, sel: Partial<Featured>
     [trendingKey, sel.trending],
   ] as const) {
     const ds = key ? doc.dataSources[key] : undefined;
-    if (handle && ds) {
+    // undefined = this row wasn't part of the selection → leave it exactly as-is.
+    if (!ds || handle === undefined) continue;
+    if (handle) {
       // The default home rows are a handle-INDEPENDENT product listing (type PRODUCTS), so a fresh
       // store is never empty. Selecting a collection binds this row to it: switch the row to a
       // collection source (full catalogue, matching the collection page) with the chosen handle. Write
@@ -81,6 +83,14 @@ export function mapFeaturedCollections(files: ThemeFiles, sel: Partial<Featured>
         : [{ available: false }];
       ds.type = 'COLLECTION_BY_HANDLES';
       ds.params = { handles: [handle], productLimit, filters };
+      changed = true;
+    } else if (ds.type === 'COLLECTION_BY_HANDLES') {
+      // handle === '' → "All products". Revert a collection-bound row back to the handle-independent
+      // PRODUCTS listing (which renders for every store) — otherwise the row would stay stuck on the
+      // previously-chosen collection. A row already on a listing is left untouched (no churn).
+      const first = typeof ds.params?.productLimit === 'number' ? ds.params.productLimit : 8;
+      ds.type = 'PRODUCTS';
+      ds.params = { first };
       changed = true;
     }
   }

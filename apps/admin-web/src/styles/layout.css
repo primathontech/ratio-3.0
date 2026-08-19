@@ -88,6 +88,9 @@
   border: 1px solid var(--line);
   border-radius: 10px;
   background: transparent;
+  /* Sets currentColor for the store-switcher chevron; without it the icon fell back to the button's
+     UA text colour and vanished on the dark theme. */
+  color: var(--text-3);
   font: inherit;
   text-align: left;
   cursor: pointer;
