@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AgentAccessPanel } from '../features/access/agent-access-panel';
 import { SuperAdmin } from '../features/admin/superadmin';
 import { SuperAdminUsers } from '../features/admin/superadmin-users';
+import { BaseThemeConsole } from '../features/admin/base-theme';
 import { AuditPanel } from '../features/audit/audit-panel';
 import { CommercePanel } from '../features/commerce/commerce-panel';
 import { DashboardHome } from '../features/dashboard/dashboard';
@@ -39,6 +40,11 @@ export function SuperAdminPage() {
 export function SuperAdminUsersPage() {
   const { api, openCreate } = useStoreData();
   return <SuperAdminUsers api={api} onCreate={openCreate} />;
+}
+
+export function BaseThemePage() {
+  const { api } = useStoreData();
+  return <BaseThemeConsole api={api} />;
 }
 
 export function HomePage() {

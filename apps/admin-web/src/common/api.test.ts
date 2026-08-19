@@ -77,6 +77,55 @@ describe('admin api client', () => {
     expect(new URL(seen!.url).pathname).toBe('/stores/t_x');
   });
 
+  test('getBaseTheme GETs the admin base-theme status', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(
+        200,
+        { baseThemeId: 'library-default', latestVersion: 3, storesBehind: 2 },
+        (r) => (seen = r)
+      )
+    );
+    const res = await api.getBaseTheme();
+    expect(seen?.method).toBe('GET');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme');
+    expect(res).toEqual({ baseThemeId: 'library-default', latestVersion: 3, storesBehind: 2 });
+  });
+
+  test('previewBasePropagation POSTs to the preview endpoint and returns the plan', async () => {
+    let seen: Request | undefined;
+    const plan = { baseThemeId: 'library-default', latestVersion: 3, targets: [] };
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, plan, (r) => (seen = r))
+    );
+    expect(await api.previewBasePropagation()).toEqual(plan);
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme/propagate/preview');
+  });
+
+  test('applyBasePropagation POSTs the targets + toVersion and returns outcomes', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(
+        200,
+        { outcomes: [{ tenantId: 't_a', themeId: 't_a_main', ok: true, version: 4 }] },
+        (r) => (seen = r)
+      )
+    );
+    const targets = [{ tenantId: 't_a', themeId: 't_a_main' }];
+    const res = await api.applyBasePropagation(targets, 3);
+    expect(seen?.method).toBe('POST');
+    expect(new URL(seen!.url).pathname).toBe('/admin/base-theme/propagate/apply');
+    expect(await seen!.json()).toEqual({ targets, toVersion: 3 });
+    expect(res.outcomes[0]).toMatchObject({ themeId: 't_a_main', ok: true, version: 4 });
+  });
+
   test('getCommerce GETs and unwraps merchantId; saveCommerce PUTs it', async () => {
     let seen: Request | undefined;
     const get = createApi('http://api', async () => 't', fakeFetch(200, { merchantId: 'm1' }));

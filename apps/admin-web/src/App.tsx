@@ -22,6 +22,7 @@ import {
   RoleRedirect,
   SuperAdminPage,
   SuperAdminUsersPage,
+  BaseThemePage,
   ThemesListPage,
 } from './routes/route-pages';
 import { StoresLauncher } from './features/stores/stores-launcher';
@@ -151,6 +152,7 @@ function AuthedRoutes() {
         >
           <Route index element={<SuperAdminUsersPage />} />
           <Route path="stores" element={<SuperAdminPage />} />
+          <Route path="base-theme" element={<BaseThemePage />} />
         </Route>
         {stores.length === 0 ? (
           // No stores: merchants get the create-store empty state; platform admins go to /admin.

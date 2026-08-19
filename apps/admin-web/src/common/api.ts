@@ -197,6 +197,43 @@ export interface ThemeAsset {
   size: number;
 }
 
+// Base-theme propagation (OFCE-633). These mirror builder-core's base-propagation types — admin-web
+// can't import @ratio/builder-core, so they're redeclared here and kept in sync by hand. Source of
+// truth: packages/builder-core/src/theme/base-propagation.ts.
+export type RebaseBlock = 'dirty-draft' | 'broken-layout';
+export interface BaseRebaseTarget {
+  tenantId: string;
+  themeId: string;
+  name: string; // the store's display name
+  fromVersion: number; // base version it tracks today
+  toVersion: number; // base version it would move to
+  isLive: boolean;
+  overrideCount: number;
+  shadowedFiles: string[]; // base files it overrode, so the base change won't reach them
+  blocked: RebaseBlock | null;
+  error?: string;
+}
+export interface BaseRebasePlan {
+  baseThemeId: string;
+  latestVersion: number;
+  targets: BaseRebaseTarget[];
+}
+export interface BaseRebaseOutcome {
+  tenantId: string;
+  themeId: string;
+  ok: boolean;
+  skipped?: boolean; // already current — nothing republished
+  version?: number;
+  madeLive?: boolean;
+  error?: string;
+  purgeError?: string;
+}
+export interface BaseThemeStatus {
+  baseThemeId: string | null;
+  latestVersion: number | null;
+  storesBehind: number;
+}
+
 export function createApi(
   baseUrl: string,
   getToken: GetToken,
@@ -262,6 +299,15 @@ export function createApi(
       req<Record<string, unknown>>('GET', '/admin/users').then((d) =>
         pickArray<PlatformUser>(d, 'users')
       ),
+    // Platform-admin only: base-theme propagation (OFCE-633). Status, dry-run plan, and apply-to-a-set.
+    getBaseTheme: () => req<BaseThemeStatus>('GET', '/admin/base-theme'),
+    previewBasePropagation: (body: { toVersion?: number; baseThemeId?: string } = {}) =>
+      req<BaseRebasePlan>('POST', '/admin/base-theme/propagate/preview', body),
+    applyBasePropagation: (targets: { tenantId: string; themeId: string }[], toVersion?: number) =>
+      req<{ outcomes: BaseRebaseOutcome[] }>('POST', '/admin/base-theme/propagate/apply', {
+        targets,
+        toVersion,
+      }),
     createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
       req<{ id: string; url: string }>('POST', '/stores', s),
     // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
