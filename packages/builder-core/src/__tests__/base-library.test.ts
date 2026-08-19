@@ -135,6 +135,58 @@ test(
 );
 
 test(
+  'publish is content-addressed: republishing an unchanged draft cuts no new version',
+  { skip },
+  async () => {
+    const T = '_pub_idem';
+    const TH = 'pub_idem_theme';
+    const full = {
+      'layout/theme.liquid': '<!doctype html><html><body>{{ content_for_layout }}</body></html>',
+    };
+    await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [TH]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+    await pool.query(`INSERT INTO tenants (id, name) VALUES ($1, 'Pub Idem')`, [T]);
+    await store.ensureTheme(T, TH, 'Pub'); // root theme
+
+    await store.saveDraft({ themeId: TH, tenantId: T }, full);
+    const a = await store.publish(
+      { themeId: TH, tenantId: T },
+      { compile: identity, makeLive: false }
+    );
+    // Press publish again with NO change — must reuse the same version, not churn v2/v3/…
+    const b = await store.publish(
+      { themeId: TH, tenantId: T },
+      { compile: identity, makeLive: false }
+    );
+    assert.equal(b.version, a.version, 'unchanged republish reuses the version');
+    const n1 = await pool.query<{ n: number }>(
+      'SELECT count(*)::int AS n FROM theme_bundle_version WHERE theme_id = $1',
+      [TH]
+    );
+    assert.equal(n1.rows[0].n, 1, 'no duplicate version row');
+
+    // A real edit DOES cut a new version.
+    await store.saveDraft(
+      { themeId: TH, tenantId: T },
+      {
+        'layout/theme.liquid':
+          '<!doctype html><html><body>CHANGED {{ content_for_layout }}</body></html>',
+      }
+    );
+    const c = await store.publish(
+      { themeId: TH, tenantId: T },
+      { compile: identity, makeLive: false }
+    );
+    assert.equal(c.version, a.version + 1, 'a changed draft advances the version');
+
+    await pool.query('DELETE FROM theme_bundle_version WHERE theme_id = $1', [TH]);
+    await pool.query('DELETE FROM theme WHERE id = $1', [TH]);
+    await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+  }
+);
+
+test(
   'a store adopting the base renders base sections + its override section',
   { skip },
   async () => {
