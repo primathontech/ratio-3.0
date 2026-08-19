@@ -90,11 +90,25 @@ Helpers live in `apps/origin/src/log.ts` + `@ratio/observability-tracing`; the s
 
 ## Jira / Story points
 
-- Every ticket you create goes in the **active sprint** and gets **Original Story Points**
-  (`customfield_10455`, "without-AI" estimate) at create time; the actual **Story Points**
-  (`customfield_10016`, "with-AI") are set when the ticket is **Done**. Board convention: **1 day = 1 SP**.
-  A **deferred** ticket (explicitly "not now") stays in the backlog, not the active sprint.
-- Every created ticket needs a label. `Done` transition id is `31`.
+- **Field IDs (get these right — they're easy to confuse):** `customfield_10455` = **Original Story
+  Points** (the "without-AI" estimate), `customfield_10024` = **Actual Story Points** (the "with-AI"
+  actual). `customfield_10016` is "Story point estimate" — **NOT** the actual-SP field; don't write
+  actual SP there. Board convention: **1 day = 1 SP**.
+- **On create:** every ticket goes in the **active sprint**, gets **Original Story Points**
+  (`customfield_10455`) and a **label**. A **deferred** ticket (explicitly "not now") stays in the
+  backlog, not the active sprint.
+- **On close — this is the step that gets missed:** set **Actual Story Points** (`customfield_10024`)
+  AND confirm **Original Story Points** (`customfield_10455`) is set, IN THE SAME action as the `Done`
+  transition (id `31`). Never transition-to-Done without SP. **This applies to SUB-TASKS too** — sub-tasks
+  skip the Start/Due/Original-SP validator that stories hit, so a sub-task will close with null SP and no
+  error unless you set it explicitly.
+- **When you close a parent story, sweep its sub-tasks:** query `parent = <KEY> AND statusCategory != Done`,
+  then close each (with SP) — or, if a sub-task describes descoped/not-built work, leave it open and flag
+  it rather than falsely closing it. A story may carry TWO sub-task sets (an original decomposition plus
+  phase sub-tasks you added later); check for both.
+- Story transitions to **In Progress** / **Done** also require Original SP, Start Date
+  (`customfield_10015`), and Due Date (`duedate`) set first (a behaviour validator) — set them via
+  `editJiraIssue`, then transition.
 
 ## Decision priority (architecture)
 
