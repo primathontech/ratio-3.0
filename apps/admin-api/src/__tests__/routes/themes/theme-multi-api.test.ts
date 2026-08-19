@@ -6,7 +6,7 @@
 import { test, before, beforeEach, after } from 'node:test';
 import assert from 'node:assert';
 import { createApp } from '../../../app';
-import { ThemeStore, DEFAULT_BASE_THEME_ID } from '@ratio/builder-core';
+import { ThemeStore, DEFAULT_BASE_THEME_ID, EDITORIAL_BASE_THEME_ID } from '@ratio/builder-core';
 import type { ObjectStore } from '@ratio/data-objects';
 import { pool } from '@ratio/data-db';
 
@@ -159,6 +159,39 @@ test('create from base → appears in listThemes and adopts the shared Default b
     [id]
   );
   assert.strictEqual(rows[0].base_theme_id, DEFAULT_BASE_THEME_ID, 'the theme tracks the base');
+});
+
+test('GET /base-themes lists the start-from bases (default + editorial)', async () => {
+  const res = await call(app, 'GET', '/base-themes', alice);
+  assert.strictEqual(res.status, 200);
+  const { baseThemes } = (await res.json()) as {
+    baseThemes: { id: string; name: string; description: string }[];
+  };
+  const ids = baseThemes.map((b) => b.id);
+  assert.ok(ids.includes(DEFAULT_BASE_THEME_ID), 'offers the default base');
+  assert.ok(ids.includes(EDITORIAL_BASE_THEME_ID), 'offers the editorial base');
+  for (const b of baseThemes) assert.ok(b.name && b.description, 'each base has picker text');
+});
+
+test('create with baseThemeId adopts the chosen base (editorial), not the default', async () => {
+  const { status, id } = await createTheme({ name: 'Mag', baseThemeId: EDITORIAL_BASE_THEME_ID });
+  assert.strictEqual(status, 200);
+  const { rows } = await pool.query<{ base_theme_id: string | null }>(
+    'SELECT base_theme_id FROM theme WHERE id = $1',
+    [id]
+  );
+  assert.strictEqual(
+    rows[0].base_theme_id,
+    EDITORIAL_BASE_THEME_ID,
+    'the theme tracks the editorial base'
+  );
+});
+
+test('create with an unknown baseThemeId is rejected (400), no theme created', async () => {
+  const res = await call(app, 'POST', `/stores/${A}/themes`, alice, {
+    baseThemeId: 'library-nope',
+  });
+  assert.strictEqual(res.status, 400);
 });
 
 test('create with duplicateOf copies the source theme’s overrides', async () => {

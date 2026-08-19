@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Hono } from 'hono';
 import { pool } from '@ratio/data-db';
-import { ensureDefaultBaseTheme, tenantTag } from '@ratio/builder-core';
+import {
+  ensureSeededBaseById,
+  baseThemeDef,
+  listBaseThemes,
+  DEFAULT_BASE_THEME_ID,
+  tenantTag,
+} from '@ratio/builder-core';
 import { requireMembership, requireRole } from '../../middleware/auth';
 import type { RouteDeps, Vars } from '../deps';
 import { assertVersionOwnsDocument } from './bundle';
@@ -12,24 +18,37 @@ import { assertVersionOwnsDocument } from './bundle';
 export function registerMultiThemeRoutes(app: Hono<Vars>, deps: RouteDeps) {
   const { themes, assertThemeInStore, identityCompile, bundle503, purgeEdgeTags } = deps;
 
+  // The "start from" bases a store can adopt (name + description for the picker). Not store-scoped —
+  // any signed-in user building a store may list them.
+  app.get('/base-themes', async (c) => c.json({ baseThemes: listBaseThemes() }));
+
   // List the store's themes (which is live, each theme's latest published version).
   app.get('/stores/:id/themes', requireMembership, async (c) => {
     if (!themes) return bundle503(c);
     return c.json({ themes: await themes.listThemes(c.req.param('id')) });
   });
 
-  // Create a theme — a fresh one adopting the shared Default base, or a duplicate of an existing theme.
+  // Create a theme — a fresh one adopting a chosen base (default = the platform Default), or a
+  // duplicate of an existing theme.
   app.post('/stores/:id/themes', requireMembership, async (c) => {
     if (!themes) return bundle503(c);
     const id = c.req.param('id')!;
-    const body = (await c.req.json().catch(() => ({}))) as { name?: string; duplicateOf?: string };
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: string;
+      duplicateOf?: string;
+      baseThemeId?: string;
+    };
     const themeId = `${id}-${randomUUID().replace(/-/g, '').slice(0, 10)}`;
     const name = body.name ?? 'New theme';
     if (body.duplicateOf) {
       await assertThemeInStore(body.duplicateOf, id);
       await themes.createTheme(id, themeId, name, { duplicateOf: body.duplicateOf });
     } else {
-      const base = await ensureDefaultBaseTheme(themes, { compile: identityCompile });
+      if (body.baseThemeId !== undefined && !baseThemeDef(body.baseThemeId))
+        return c.json({ error: 'unknown base theme' }, 400);
+      const base = await ensureSeededBaseById(themes, body.baseThemeId ?? DEFAULT_BASE_THEME_ID, {
+        compile: identityCompile,
+      });
       await themes.createTheme(id, themeId, name, { base });
     }
     c.set('auditTenant', id);

@@ -20,7 +20,7 @@ import type { ThemeTokens } from '@ratio/builder-core';
 import { fetchMainMenu, fetchFooter, renderChrome } from '@ratio/builder-core';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore } from '@ratio/data-objects';
-import { ensureDefaultBaseTheme, adoptAndPublishDefaultTheme } from '@ratio/builder-core';
+import { ensureDefaultBaseTheme, adoptAndPublishBaseTheme } from '@ratio/builder-core';
 import { commerceResolverFromEnv } from '@ratio/builder-core';
 import type { TenantCommerce } from '@ratio/builder-core';
 import {
@@ -270,15 +270,16 @@ export function createApp(
   // failed before publish (or the editor's ensureStoreTheme created it), the row exists yet the store
   // is still on the page-builder — re-running must finish the job, not no-op forever. Once live, it's
   // a no-op (adopt/publish is only for a store with no live theme).
-  async function publishStoreThemeOnOnboard(tenantId: string): Promise<void> {
+  async function publishStoreThemeOnOnboard(tenantId: string, baseThemeId?: string): Promise<void> {
     if (!themes) return;
     const { rows } = await pool.query<{ live_theme_id: string | null }>(
       'SELECT live_theme_id FROM tenants WHERE id = $1',
       [tenantId]
     );
     if (rows[0]?.live_theme_id) return;
-    await adoptAndPublishDefaultTheme(themes, tenantId, mainThemeId(tenantId), {
+    await adoptAndPublishBaseTheme(themes, tenantId, mainThemeId(tenantId), {
       compile: identityCompile,
+      baseThemeId,
     });
   }
 
