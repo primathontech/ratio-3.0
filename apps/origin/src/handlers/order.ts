@@ -16,6 +16,7 @@ import {
 } from '@ratio/builder-core';
 import { composeGokwik, mergeCsp, cspToString } from '@ratio/gokwik';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
+import { logger } from '../log';
 import {
   type Vars,
   type CartTenant,
@@ -97,6 +98,12 @@ export async function renderOrderResponse(
   // (ix.head/ix.bodyEnd), the last of which a headless renderThemeLayout fragment would silently drop.
   const layout = (compiled ?? {})['layout/theme.liquid'];
   const ownsDocument = layoutOwnsDocument(layout);
+  if (!ownsDocument)
+    // Degraded to the built-in wrapper: no full-document live theme was loadable (store not on a bundle
+    // theme, or a transient theme-store/S3 load failure). This page is uncacheable, so — unlike the
+    // storefront — the edge can't shield it; log it so a bundle-load problem is alertable, not just a
+    // response header. hadBundle=true would be an anomaly (the publish invariant keeps live layouts full).
+    logger.warn({ evt: 'order_render_fallback', tenant: tenantId, hadBundle: compiled != null });
   const html = ownsDocument
     ? await renderThemeLayout(compiled ?? {}, (l, d) => renderUntrusted(l, d), {
         content_for_layout: orderSection,
