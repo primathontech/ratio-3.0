@@ -12,9 +12,8 @@ const ONBOARD_SUGGESTIONS = [
 ];
 
 // The AI copilot rail. Reference "Ask Sophie" styling, but the chat drives our REAL assistant
-// (api.assistant → the same control-plane the rest of the UI uses). The two insight cards are
-// placeholder prompts; clicking them sends a real message. With storeId === null the rail runs in
-// onboarding mode: store-metric insights make no sense yet, so it shows onboarding guidance.
+// (api.assistant → the same control-plane the rest of the UI uses). With storeId === null the rail
+// runs in onboarding mode and the example prompts guide the merchant to create their first store.
 export function AskRatio({
   api,
   storeId,
@@ -76,36 +75,6 @@ export function AskRatio({
           </button>
         )}
       </div>
-
-      {!onboarding && (
-        <div className="ask-insights">
-          <div className="insight">
-            <div className="insight-kind" style={{ color: 'var(--success)' }}>
-              Opportunity
-            </div>
-            <div style={{ fontSize: 13, lineHeight: '20px' }}>
-              Revenue is up 12% — Instagram converts 2.1× your site average. Shift budget to Reels?
-            </div>
-            <button className="insight-act" onClick={() => send('Create a discount campaign')}>
-              Draft the campaign →
-            </button>
-          </div>
-          <div className="insight" style={{ background: 'var(--warning-weak)' }}>
-            <div className="insight-kind" style={{ color: 'var(--warning)' }}>
-              Risk
-            </div>
-            <div style={{ fontSize: 13, lineHeight: '20px' }}>
-              Linen Shirt — Ecru sells out in 5 days. Supplier lead time is 11 days.
-            </div>
-            <button
-              className="insight-act"
-              onClick={() => send('Reorder 240 units of Linen Shirt — Ecru')}
-            >
-              Reorder 240 units →
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="ask-body" aria-live="polite">
         {turns.length === 0 && (
