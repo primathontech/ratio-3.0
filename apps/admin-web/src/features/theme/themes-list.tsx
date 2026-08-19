@@ -34,6 +34,8 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const [renameTarget, setRenameTarget] = useState<ThemeSummary | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<ThemeSummary | null>(null);
+  const [duplicateTarget, setDuplicateTarget] = useState<ThemeSummary | null>(null);
+  const [duplicateName, setDuplicateName] = useState('');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('New theme');
   const [busy, setBusy] = useState(false);
@@ -100,12 +102,19 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
     }
   }
 
-  async function duplicate(theme: ThemeSummary) {
+  // Duplicate opens a naming dialog (prefilled "Copy of …") and drops into the editor on the new theme,
+  // matching Create — instead of a silent one-click copy with a server-default name.
+  async function submitDuplicate(e: FormEvent) {
+    e.preventDefault();
+    if (!duplicateTarget) return;
     setBusy(true);
     try {
-      await api.createTheme(store.id, { duplicateOf: theme.id });
-      toast(`Duplicated ${theme.name}`, 'ok');
-      load();
+      const { id } = await api.createTheme(store.id, {
+        name: duplicateName.trim() || `Copy of ${duplicateTarget.name}`,
+        duplicateOf: duplicateTarget.id,
+      });
+      setDuplicateTarget(null);
+      navigate(`/stores/${slug}/themes/${id}/editor`, { state: { fromApp: true } });
     } catch (e) {
       toast((e as Error).message, 'error');
     } finally {
@@ -229,7 +238,10 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
                 setRenameValue(theme.name);
                 setRenameTarget(theme);
               }}
-              onDuplicate={() => duplicate(theme)}
+              onDuplicate={() => {
+                setDuplicateName(`Copy of ${theme.name}`);
+                setDuplicateTarget(theme);
+              }}
               onDelete={() => setDeleteTarget(theme)}
             />
           ))}
@@ -263,6 +275,47 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
               </button>
               <button type="submit" className="btn btn-primary" disabled={busy}>
                 {busy ? <Spinner /> : <Icon.plus />} Create theme
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {duplicateTarget && (
+        <Dialog
+          title={`Duplicate ${duplicateTarget.name}`}
+          onClose={() => setDuplicateTarget(null)}
+        >
+          <form onSubmit={submitDuplicate}>
+            <div className="body">
+              <Field label="Name">
+                <input
+                  className="input"
+                  value={duplicateName}
+                  onChange={(e) => setDuplicateName(e.target.value)}
+                  autoFocus
+                />
+              </Field>
+              <p className="muted" style={{ fontSize: 13 }}>
+                Copies this theme's edits into a new theme. You'll drop straight into the code
+                editor.
+              </p>
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setDuplicateTarget(null)}
+                disabled={busy}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={busy || !duplicateName.trim()}
+              >
+                {busy ? <Spinner /> : <Icon.files />} Duplicate theme
               </button>
             </div>
           </form>
