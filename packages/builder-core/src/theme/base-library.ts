@@ -13,6 +13,35 @@ export const LIBRARY_TENANT_ID = '_library';
 // The default base a new store adopts.
 export const DEFAULT_BASE_THEME_ID = 'library-default';
 
+// The catalogue of base ("start from") themes a store can adopt. Each is seeded into the _library
+// tenant as its own root theme; a store picks one at create and records it via theme.base_theme_id
+// (so base propagation, OFCE-633, already scopes per base). Adding a base = add an entry here with its
+// full ThemeFiles + the name/description the picker shows. The first entry is the platform default.
+export interface BaseThemeDef {
+  id: string;
+  name: string;
+  description: string;
+  files: () => ThemeFiles;
+}
+
+export const BASE_THEMES: BaseThemeDef[] = [
+  {
+    id: DEFAULT_BASE_THEME_ID,
+    name: 'Default',
+    description: 'A clean, flexible storefront that suits most stores.',
+    files: defaultBundleTheme,
+  },
+];
+
+// The bases offered in the "start from" picker — metadata only, no file bytes.
+export function listBaseThemes(): { id: string; name: string; description: string }[] {
+  return BASE_THEMES.map(({ id, name, description }) => ({ id, name, description }));
+}
+
+export function baseThemeDef(id: string): BaseThemeDef | undefined {
+  return BASE_THEMES.find((b) => b.id === id);
+}
+
 // Seed a base library theme from `files` the FIRST time, then leave it alone. SEED-ONLY (OFCE-656): the
 // very first call cuts v1 from `files` (the code default); once ANY version exists, that published lineage
 // is the source of truth and is NEVER republished from `files` again. So once a platform admin edits the
@@ -72,23 +101,46 @@ export async function ensureSeededBase(
   }
 }
 
-// Ensure the shared Default base exists, returning the version stores should adopt. Seeds it from the
-// code default (`defaultBundleTheme()`) on first run; thereafter the published base is the source of
-// truth (edited via the admin base-theme editor, OFCE-656), never re-derived from code.
-export function ensureDefaultBaseTheme(
+// Seed a specific registry base into the library, returning the version stores should adopt. Seeds
+// from the base's code files on first run; thereafter the published base is the source of truth
+// (edited via the admin base-theme editor, OFCE-656), never re-derived from code.
+export async function ensureSeededBaseById(
   store: ThemeStore,
+  id: string,
   opts: { compile: CompileFn }
 ): Promise<{ themeId: string; version: number }> {
+  const def = baseThemeDef(id);
+  if (!def) throw new Error(`unknown base theme '${id}'`); // async → surfaces as a rejection, not a sync throw
   return ensureSeededBase(
     store,
     {
       tenantId: LIBRARY_TENANT_ID,
       tenantName: 'Ratio Library',
-      themeId: DEFAULT_BASE_THEME_ID,
-      themeName: 'Default theme',
+      themeId: def.id,
+      themeName: def.name,
     },
-    { files: defaultBundleTheme(), compile: opts.compile }
+    { files: def.files(), compile: opts.compile }
   );
+}
+
+// Seed EVERY registry base (idempotent). Returns each base's adoptable version, keyed by base id — the
+// provisioning / backfill path so every offered base exists before a store can pick it.
+export async function ensureSeededBases(
+  store: ThemeStore,
+  opts: { compile: CompileFn }
+): Promise<Record<string, { themeId: string; version: number }>> {
+  const out: Record<string, { themeId: string; version: number }> = {};
+  for (const def of BASE_THEMES) out[def.id] = await ensureSeededBaseById(store, def.id, opts);
+  return out;
+}
+
+// Ensure the shared Default base exists, returning the version stores should adopt. Thin wrapper over
+// the registry for the (many) callers that only ever want the platform default.
+export function ensureDefaultBaseTheme(
+  store: ThemeStore,
+  opts: { compile: CompileFn }
+): Promise<{ themeId: string; version: number }> {
+  return ensureSeededBaseById(store, DEFAULT_BASE_THEME_ID, opts);
 }
 
 // Make a store render through the bundle from day one: adopt the shared Default base into the store's

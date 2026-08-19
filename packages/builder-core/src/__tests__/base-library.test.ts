@@ -10,10 +10,35 @@ import { ThemeStore, type CompileFn } from '../theme/theme-store';
 import {
   ensureDefaultBaseTheme,
   ensureSeededBase,
+  ensureSeededBaseById,
   adoptAndPublishDefaultTheme,
+  listBaseThemes,
+  baseThemeDef,
   DEFAULT_BASE_THEME_ID,
 } from '../theme/base-library';
 import { defaultBundleTheme } from '../theme/default-theme';
+
+// Registry basics — pure, no DB/S3, so they run everywhere (incl. CI without MinIO).
+test('base registry offers the default base and resolves every listed base to files', () => {
+  const list = listBaseThemes();
+  assert.ok(
+    list.some((b) => b.id === DEFAULT_BASE_THEME_ID),
+    'the platform default base is offered'
+  );
+  for (const b of list) {
+    assert.ok(b.name && b.description, 'each base has a picker name + description');
+    const def = baseThemeDef(b.id);
+    assert.ok(def, `listed base ${b.id} resolves to a def`);
+    assert.ok(Object.keys(def!.files()).length > 0, `base ${b.id} ships files`);
+  }
+});
+
+test('ensureSeededBaseById rejects an unknown base id before touching the store', async () => {
+  await assert.rejects(
+    ensureSeededBaseById(undefined as never, 'nope', { compile: (s) => s }),
+    /unknown base theme 'nope'/
+  );
+});
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const bucket = process.env.S3_TEST_BUCKET ?? 's2poc-test';
