@@ -57,10 +57,12 @@ export function BaseThemeEditor({ api }: { api: Api }) {
   filesRef.current = files ?? {};
 
   const runPreview = useCallback(
-    async (page: string) => {
+    // `filesOverride` lets a caller pass just-loaded files instead of the ref, which only updates on the
+    // next render — so the initial post-load preview doesn't fire with the stale (empty) ref.
+    async (page: string, filesOverride?: ThemeFiles) => {
       setPreviewing(true);
       try {
-        const r = await api.previewBaseTheme(filesRef.current, page);
+        const r = await api.previewBaseTheme(filesOverride ?? filesRef.current, page);
         if (r.error) setPreviewErr(r.error);
         else {
           setPreviewHtml(r.html ?? '');
@@ -90,7 +92,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
         );
         setDirty(false);
         setReloadKey((k) => k + 1);
-        void runPreview('index');
+        void runPreview('index', d.files);
       })
       .catch((e) => setError(errorText(e)));
   }, [api, runPreview]);
@@ -150,7 +152,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
       setDirty(false);
       setReloadKey((k) => k + 1);
       setConfirmReset(false);
-      void runPreview(previewPage);
+      void runPreview(previewPage, d.files);
     } catch (e) {
       toast(errorText(e), 'error');
     } finally {
