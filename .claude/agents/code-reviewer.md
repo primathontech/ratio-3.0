@@ -31,6 +31,10 @@ verification, say so plainly.
   (shell/SQL/Liquid), secrets, untrusted input validated at the **route boundary** not the primitive.
 - Error boundaries: an **infra fault** (missing S3 blob, DB error) must surface as 500 + logged, NOT a
   misleading user-content 400.
+- **Observability** (see 04-conventions.md): is new observable work instrumented? A new **external call**
+  (commerce/S3/CF) needs a span + failure log; a **mutation** needs `auditTenant`; a **degrade / fallback /
+  catch branch** needs a structured `logger.warn`/`.error` (`evt` + `tenant`) — a response header alone is
+  NOT alertable; a bare `catch {}` that swallows an error is a finding.
 - Tests: does a new/changed test actually go **red before the fix**? Any test passing vacuously (e.g. a
   flag-gated check with the flag off, so the assertion never runs)?
 - No stray debug logs, no `git add -A` implied, no committed secrets.
@@ -70,14 +74,15 @@ Then two tables and a verdict:
 
 **Security & risk** (mark each PASS / FAIL / N/A with a one-line note):
 
-| Check                                              | Verdict | Note |
-| -------------------------------------------------- | ------- | ---- |
-| Secrets (no hardcoded/logged creds)                |         |      |
-| Injection (shell / SQL / Liquid)                   |         |      |
-| Auth & authz (requireMembership/requireRole)       |         |      |
-| Tenant isolation (`AND tenant_id = $x`)            |         |      |
-| Error boundaries (infra fault → 500, not user 400) |         |      |
-| PII in logs                                        |         |      |
+| Check                                                | Verdict | Note |
+| ---------------------------------------------------- | ------- | ---- |
+| Secrets (no hardcoded/logged creds)                  |         |      |
+| Injection (shell / SQL / Liquid)                     |         |      |
+| Auth & authz (requireMembership/requireRole)         |         |      |
+| Tenant isolation (`AND tenant_id = $x`)              |         |      |
+| Error boundaries (infra fault → 500, not user 400)   |         |      |
+| Observability (calls/mutations/degrade+catch logged) |         |      |
+| PII in logs                                          |         |      |
 
 **Test coverage**:
 

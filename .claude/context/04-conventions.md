@@ -57,6 +57,22 @@ presentational components**, each in its own file. Follow the existing editor st
   guard mocks the backend.
 - Don't test framework internals or re-assert what the code literally does.
 
+## Observability (instrument new work — not optional)
+
+A silent failure or degrade is a production incident you can't see. Instrument new code AS you write it
+(the stack is `@ratio/observability*`; helpers already exist — don't invent ad-hoc logging). When you add:
+
+- **an external call** (GoKwik/commerce, S3/object store, Cloudflare, another service) → wrap it in a span
+  (`withSpan`) and log failures (`logCommerceError` / `logger.error`) — never a bare `catch {}`.
+- **a mutation** (a write route) → `c.set('auditTenant', id)` so `auditMiddleware` records it.
+- **a degrade / fallback / error branch** → a structured `logger.warn`/`.error` with an `evt` + `tenant`
+  (e.g. the storefront's `bundle_render_error`, the order page's `order_render_fallback`). A response
+  header alone (like `x-theme-render: fallback`) is NOT enough — it isn't alertable.
+- **a request handler** → phase timing (`timed(c, 'phase', …)`) / a request span, like the origin handlers.
+
+Helpers live in `apps/origin/src/log.ts` + `@ratio/observability-tracing`; the stack is in
+08-external-integrations.md. **This is a code-review gate** — the `code-reviewer` checks it on every PR.
+
 ## Git & PR workflow (strict)
 
 - **NEVER `git commit` / `git push` without the user's explicit approval.** Write → test → show the
