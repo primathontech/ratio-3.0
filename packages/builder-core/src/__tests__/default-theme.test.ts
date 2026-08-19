@@ -162,10 +162,74 @@ test('default theme binds + renders the collection products with rupee prices', 
   assert.match(html, /href="\/products\/sample-1"/, 'each card links to its product page');
 });
 
+test('default theme collection cards carry an add-to-cart form that posts the handle (no variant)', async () => {
+  // Grid cards have no real variant id — like the PDP they post the handle to /cart/add and the origin
+  // resolves the variant server-side. The button must sit OUTSIDE the card link so a click adds to cart
+  // instead of navigating to the product page.
+  const { html } = await renderPage('collection', { handle: 'summer' });
+  assert.match(
+    html,
+    /<form class="atc" method="post" action="\/cart\/add">/,
+    'each card has a /cart/add form'
+  );
+  assert.match(html, /name="handle"\s+value="sample-1"/, 'the card posts the product handle');
+  assert.doesNotMatch(
+    html,
+    /name="variantId"/,
+    'the card carries no variant id (resolved from the handle)'
+  );
+  const closeLink = html.indexOf('</a>');
+  const form = html.indexOf('<form class="atc"');
+  assert.ok(closeLink > -1 && form > closeLink, 'the add-to-cart form is outside the card link');
+});
+
+test('default theme home product rows carry the add-to-cart form on each card', async () => {
+  const { html } = await renderPage('index');
+  assert.ok(
+    (html.match(/action="\/cart\/add"/g) ?? []).length >= 2,
+    'the home product rows render add-to-cart forms on their cards'
+  );
+});
+
 test('default theme renders the product detail page', async () => {
   const { html } = await renderPage('product', { handle: 'air-max-90' });
   assert.match(html, /Sample: air-max-90/, 'the resolved product title renders');
   assert.match(html, /₹999\.00/, 'the product price is formatted to rupees');
+});
+
+test('default theme PDP renders the product description as rich HTML, not escaped text', async () => {
+  // Product descriptions are merchant catalogue HTML (like Shopify's product.description). The PDP
+  // must render them as markup — escaping shows raw <p>/<strong> tags to the shopper.
+  const htmlResolver = {
+    async fetch(source: { type: string; params?: Record<string, unknown> }) {
+      if (source.type === 'PRODUCT') {
+        return {
+          value: {
+            id: 'p1',
+            title: 'Rich',
+            handle: 'rich',
+            price: 27900,
+            description: '<p>Hair colour that <strong>wrecks</strong> your strands?</p>',
+            image_url: '',
+          },
+          tags: [],
+        };
+      }
+      return { value: {}, tags: [] };
+    },
+  };
+  const { html } = await renderThemePage(
+    defaultBundleTheme(),
+    'product',
+    { theme },
+    { resolver: htmlResolver as never, ctx: { tenantId: 't1', routeParams: { handle: 'rich' } } }
+  );
+  assert.match(html, /<strong>wrecks<\/strong>/, 'the description HTML is rendered as markup');
+  assert.doesNotMatch(
+    html,
+    /&lt;strong&gt;/,
+    'the description is not HTML-escaped into visible tags'
+  );
 });
 
 test('default theme PDP leaves variantId empty so the origin resolves it from the handle', async () => {
@@ -230,28 +294,23 @@ test('default theme home fills product rows for a connected store that lacks the
   }
 });
 
-test('default theme home shows the two product rows (Featured products + New arrivals) out of the box', async () => {
+test('default theme home shows the single All products row out of the box', async () => {
   const { html } = await renderPage('index');
-  // Target the collection-row section headings specifically (<h2 class="heading">…), NOT incidental
-  // promo-tile copy — asserting a bare /New arrivals/ passes on the promo section's marketing text
-  // even if the product rows disappear, which masked a real regression before.
+  // Target the collection-row section heading specifically (<h2 class="heading">…), NOT incidental
+  // promo-tile copy — asserting a bare /All products/ passes on other marketing text even if the
+  // product row disappears, which would mask a real regression.
   assert.match(
     html,
-    /<h2 class="heading">Featured products<\/h2>/,
-    'the Featured products row heading renders'
-  );
-  assert.match(
-    html,
-    /<h2 class="heading">New arrivals<\/h2>/,
-    'the New arrivals row heading renders'
+    /<h2 class="heading">All products<\/h2>/,
+    'the All products row heading renders'
   );
   assert.match(html, /Sample product 1/, 'products render on the home page');
   assert.match(html, /₹499\.00/, 'home prices are formatted to rupees');
-  // Exactly the two product rows render as .grid card layouts (only collection-row uses .grid).
+  // Exactly one product row renders as a .grid card layout (only collection-row uses .grid).
   assert.equal(
     (html.match(/class="grid"/g) ?? []).length,
-    2,
-    'both product rows render as .grid card layouts'
+    1,
+    'the single product row renders as a .grid card layout'
   );
   // The header/footer are NOT theme sections — the origin renders them in the page shell (OFCE-618),
   // so the theme body itself carries neither.

@@ -11,6 +11,12 @@
           <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
         </div>
       </a>
+      <div class="card-atc">
+        <form class="atc" method="post" action="/cart/add">
+          <input type="hidden" name="handle" value="{{ p.handle | escape }}">
+          <button type="submit" class="btn">Add to cart</button>
+        </form>
+      </div>
     </div>
     {% endfor %}
   </div>
