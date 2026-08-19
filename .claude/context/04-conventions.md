@@ -12,12 +12,33 @@ experience on this repo.
   non-obvious constraint, workaround, or invariant. Never write comments referencing a ticket/PR/flow
   ("added for X") — they rot. (The existing code is comment-dense with _why_-comments — match that when
   the why is genuinely non-obvious, e.g. the theme-store transaction/locking notes.)
-- **Keep files small and focused.** New component → its own file. Prefer editing existing files over
-  creating new ones. Don't create README/docs files unless asked.
+- **Keep files small and focused — enforced.** New component → its own file. Prefer editing existing
+  files over creating new ones; don't create README/docs unless asked. A **`max-lines` ESLint rule
+  (error, 400 code-lines)** blocks a commit when a source file grows too big — when you hit it, **split
+  by concern (see Module structure below), never disable the rule.** (Tests + generated files are
+  exempt; `theme-store.ts` is the one documented exception — a cohesive class.)
 - **Errors:** validate at system boundaries (user/AI input, external APIs); trust internal code. Don't
   wrap everything in try/catch. Let unexpected errors crash loudly in dev. Infra faults should bubble
   to `onError` (→ 500 + logged), never be dressed up as a user-content 400.
 - **No stray `console.log` / debug prints** in committed code. Use the observability logger or remove.
+
+## Module structure (no monoliths)
+
+Server apps keep a **thin composition root** that only wires things; the actual logic lives in
+per-domain modules. This is how `admin-api`'s `app.ts` (once 1616 lines) and `origin`'s `index.ts` are
+structured — follow them as the template rather than growing a new monolith:
+
+- **admin-api** — `app.ts` builds a `deps` object + middleware, then calls `registerXRoutes(app, deps)`
+  from `routes/<domain>.ts` (`routes/themes/{bundle,assets,multi}.ts`, `routes/stores.ts`, …). Shared
+  singletons flow through `RouteDeps` (`routes/deps.ts`); guards/package code are imported directly.
+  Support code sits in `middleware/` (auth, audit, idempotency, …) and `services/` (domains, assistant,
+  …). `__tests__/` mirrors that layout.
+- **origin** — `index.ts` holds boot effects + the order-sensitive `app.all('*')` dispatch ladder; each
+  branch body is a `handleX(c, deps)` in `handlers/<domain>.ts`, deps threaded as params (one-directional
+  imports, no cycles).
+
+Rule of thumb: a route/handler file grouping one domain, a composition root that only registers +
+wires. When adding a new area, add a module + register it — don't inline it into the root.
 
 ## Container/presentational UI pattern (admin-web)
 
