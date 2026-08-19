@@ -1,3 +1,6 @@
+/* eslint-disable max-lines -- ThemeStore is one cohesive domain class (draft/publish/rollback/rebase/
+   assets/load/multi-theme); splitting it across files would fragment that cohesion without a partial-
+   class idiom. The documented exception to the max-lines guardrail — reviewed + kept whole by decision. */
 // The theme store (LLD BC1/BC2): theme file BYTES live as compressed bundles in an ObjectStore (S3),
 // never one object per file. The mutable draft is one source bundle; Publish freezes an immutable,
 // content-addressed source bundle (for merges / re-editing) plus a compiled bundle (for rendering).
