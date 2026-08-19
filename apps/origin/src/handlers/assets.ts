@@ -4,6 +4,7 @@ import {
   readAssetManifest,
   isAssetHash,
   safeAssetContentType,
+  tenantTag,
   ThemeStore,
 } from '@ratio/builder-core';
 import { type Vars } from './helpers';
@@ -63,6 +64,70 @@ export async function handleAssets(c: Context<Vars>, deps: AssetsDeps): Promise<
       }
     }
   }
+  c.header('x-cache', 'no-store');
+  return c.text('404 — not found', 404);
+}
+
+// Well-known root paths (OFCE-631): browsers request /favicon.ico by default (even with no <link>), and
+// a PWA fetches /manifest.json — serve both from the store's LIVE theme so a real storefront doesn't 404
+// on them. /favicon.ico is a binary asset (looked up by its manifest path); /manifest.json rides the
+// bundle as TEXT (application/json isn't an allowed binary-asset type). Unlike the immutable content-
+// addressed /assets/<hash>, these are STABLE URLs whose bytes change when the merchant re-uploads/edits,
+// so they carry a short max-age (a change self-heals within the hour), never `immutable`.
+export async function handleWellKnown(c: Context<Vars>, deps: AssetsDeps): Promise<Response> {
+  const { themeStore } = deps;
+  const path = new URL(c.req.url).pathname;
+  c.header('x-content-type-options', 'nosniff');
+  const assetTenant = c.req.header('x-ratio-tenant');
+  const compiled =
+    themeStore && assetTenant
+      ? await themeStore.loadLiveCompiled(assetTenant).catch(() => null)
+      : null;
+  // Same suspended-store contract as /assets and the storefront (OFCE-410): only an ACTIVE tenant with a
+  // live theme serves content — a suspended/unknown store 404s, never revealing it exists.
+  const tenant =
+    compiled && assetTenant
+      ? await forTenant(assetTenant)
+          .getTenant()
+          .catch(() => null)
+      : null;
+  if (compiled && assetTenant && tenant && tenant.status === 'active' && tenant.liveThemeId) {
+    // These paths are mutable (a re-upload/edit changes them), so they ride the store's tenant tag: a
+    // theme publish enqueues a tenantTag purge, which now evicts a stale favicon/manifest at the edge
+    // too — the short max-age is just the fallback bound, not the only one.
+    const withTags = () => {
+      c.header('cache-control', 'public, max-age=3600');
+      c.header('x-surrogate-keys', tenantTag(assetTenant));
+      c.header('x-handler', 'well-known');
+    };
+    if (path === '/manifest.json') {
+      const body = compiled['manifest.json'];
+      if (typeof body === 'string') {
+        c.header('content-type', 'application/json; charset=utf-8');
+        withTags();
+        return c.body(body);
+      }
+    } else if (path === '/favicon.ico') {
+      // The theme references a favicon under any path whose basename is favicon.ico (e.g. the editor
+      // uploads assets under `assets/`), so match on the basename, not an exact key.
+      const entry = Object.entries(readAssetManifest(compiled)).find(
+        ([p]) => p === 'favicon.ico' || p.endsWith('/favicon.ico')
+      )?.[1];
+      if (entry) {
+        const bytes = await themeStore!
+          .getAsset({ themeId: tenant.liveThemeId, tenantId: assetTenant }, entry.hash)
+          .catch(() => null);
+        if (bytes) {
+          // Untrusted merchant manifest content-type → neutralize a non-allowlisted type (same guard as
+          // /assets/<hash>), so a tampered favicon entry can't be served as active HTML/JS.
+          c.header('content-type', safeAssetContentType(entry.contentType));
+          withTags();
+          return c.body(bytes.slice().buffer as ArrayBuffer);
+        }
+      }
+    }
+  }
+  // No active theme, or no favicon/manifest → a normal 404 (browsers handle a missing favicon fine).
   c.header('x-cache', 'no-store');
   return c.text('404 — not found', 404);
 }

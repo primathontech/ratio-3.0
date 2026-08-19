@@ -16,7 +16,7 @@ import { withSpan, withRequestSpan, SpanKind } from '@ratio/observability-tracin
 import { logger, requestLog, sanitizeReqId, logCheckout, logCommerceError } from './log';
 import { type Vars, edgeAuthOk, timed } from './handlers/helpers';
 import { handleHealth, handleReady, handleStats } from './handlers/ops';
-import { handleAssets } from './handlers/assets';
+import { handleAssets, handleWellKnown } from './handlers/assets';
 import { handleCart, cartBackendFor } from './handlers/cart';
 import { renderOrderResponse } from './handlers/order';
 import { renderStorefront } from './handlers/storefront';
@@ -183,6 +183,12 @@ app.all('*', async (c) => {
   // text/html body is what made the browser refuse to execute the script).
   if (path.startsWith('/assets/')) {
     return handleAssets(c, { themeStore, islandsUrl: ISLANDS_URL, islandsJs: ISLANDS_JS });
+  }
+
+  // Well-known root paths (/favicon.ico, /manifest.json) served from the live theme (OFCE-631), so a
+  // storefront doesn't 404 on the browser's default favicon request. Tenant-scoped (needs x-ratio-tenant).
+  if (path === '/favicon.ico' || path === '/manifest.json') {
+    return handleWellKnown(c, { themeStore, islandsUrl: ISLANDS_URL, islandsJs: ISLANDS_JS });
   }
 
   const tenantId = c.req.header('x-ratio-tenant');
