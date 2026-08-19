@@ -57,6 +57,7 @@ import {
   isAssetUploadPath,
 } from './routes/themes/assets';
 import { registerMultiThemeRoutes } from './routes/themes/multi';
+import { registerBaseThemeRoutes } from './routes/themes/base';
 
 export { platformSubdomainAllowed };
 
@@ -418,6 +419,7 @@ export function createApp(
   registerBundleThemeRoutes(app, deps);
   registerThemeAssetsRoutes(app, deps);
   registerMultiThemeRoutes(app, deps);
+  registerBaseThemeRoutes(app, deps);
 
   return app;
 }
