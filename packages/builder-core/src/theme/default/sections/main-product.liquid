@@ -1,0 +1,14 @@
+<main class="rt pdp">
+  {% assign img = image_url | default: images.first.url %}
+  <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ title | escape }}">{% endif %}</div>
+  <div>
+    <h1>{{ title | escape }}</h1>
+    <div class="price">{{ price | money }}{% if compare_at_price and compare_at_price > price %} <s class="was">{{ compare_at_price | money }}</s>{% endif %}</div>
+    {% if description %}<div class="rte"><p>{{ description | escape }}</p></div>{% endif %}
+    <form class="atc" method="post" action="/cart/add">
+      <input type="hidden" name="variantId" value="{{ variant_id | default: variants.first.id | escape }}">
+      <input type="hidden" name="handle" value="{{ handle | escape }}">
+      <button type="submit" class="btn atc-btn">Add to cart</button>
+    </form>
+  </div>
+</main>

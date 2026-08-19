@@ -1,0 +1,22 @@
+{
+  "dataSources": {
+    "main": {
+      "type": "COLLECTION_BY_HANDLES",
+      "params": {
+        "handles": ["{{params.handle}}"],
+        "productLimit": 12,
+        "filters": [
+          {
+            "available": false
+          }
+        ]
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "main-collection",
+      "dataSourceKey": "main"
+    }
+  ]
+}

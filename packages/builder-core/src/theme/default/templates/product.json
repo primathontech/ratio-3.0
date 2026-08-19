@@ -1,0 +1,16 @@
+{
+  "dataSources": {
+    "main": {
+      "type": "PRODUCT",
+      "params": {
+        "handle": "{{params.handle}}"
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "main-product",
+      "dataSourceKey": "main"
+    }
+  ]
+}

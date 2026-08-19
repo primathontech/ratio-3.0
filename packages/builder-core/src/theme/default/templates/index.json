@@ -1,0 +1,49 @@
+{
+  "dataSources": {
+    "featured": {
+      "type": "PRODUCTS",
+      "params": {
+        "first": 8
+      }
+    },
+    "latest": {
+      "type": "PRODUCTS",
+      "params": {
+        "first": 8,
+        "sortKey": "CREATED_AT",
+        "reverse": true
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "hero",
+      "data": {
+        "heading": "Everything you love, in one place",
+        "subheading": "Discover our full range of curated products — quality picks, honest prices, delivered to your door.",
+        "cta_label": "Browse all collections",
+        "cta_href": "/collections/all"
+      }
+    },
+    {
+      "type": "promo"
+    },
+    {
+      "type": "collection-row",
+      "dataSourceKey": "featured",
+      "data": {
+        "heading": "Featured products"
+      }
+    },
+    {
+      "type": "collection-row",
+      "dataSourceKey": "latest",
+      "data": {
+        "heading": "New arrivals"
+      }
+    },
+    {
+      "type": "brand-story"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+<main class="rt">
+  <h1 class="heading">Collection</h1>
+  <div class="grid">
+    {% for p in products %}
+    {% assign img = p.image_url | default: p.images.first.url %}
+    <div class="card">
+      <a class="card-link" href="/products/{{ p.handle | escape }}">
+        <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
+        <div class="body">
+          <div>{{ p.title | escape }}</div>
+          <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</main>
