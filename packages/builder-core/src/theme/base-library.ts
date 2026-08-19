@@ -161,17 +161,32 @@ export function ensureDefaultBaseTheme(
 // The caller owns the "should I publish?" decision: `ensureTheme` is create-only (a no-op that keeps
 // any existing overrides), but `publish` ALWAYS cuts a new version and repoints live — so only call
 // this when a store has no live theme yet (onboarding, or backfill filtering `live_theme_id IS NULL`).
-export async function adoptAndPublishDefaultTheme(
+// `baseThemeId` picks which registry base to adopt (default = the platform Default). Rejects an
+// unknown base id (via ensureSeededBaseById) before creating anything.
+export async function adoptAndPublishBaseTheme(
   store: ThemeStore,
   tenantId: string,
   themeId: string,
-  opts: { compile: CompileFn; name?: string; by?: string }
+  opts: { compile: CompileFn; baseThemeId?: string; name?: string; by?: string }
 ): Promise<{ version: number }> {
-  const base = await ensureDefaultBaseTheme(store, { compile: opts.compile });
+  const base = await ensureSeededBaseById(store, opts.baseThemeId ?? DEFAULT_BASE_THEME_ID, {
+    compile: opts.compile,
+  });
   await store.ensureTheme(tenantId, themeId, opts.name ?? 'Theme', base);
   const { version } = await store.publish(
     { themeId, tenantId },
     { compile: opts.compile, makeLive: true, by: opts.by }
   );
   return { version };
+}
+
+// Back-compat alias: adopt the platform Default base. New callers that pick a base use
+// adoptAndPublishBaseTheme with a baseThemeId.
+export function adoptAndPublishDefaultTheme(
+  store: ThemeStore,
+  tenantId: string,
+  themeId: string,
+  opts: { compile: CompileFn; name?: string; by?: string }
+): Promise<{ version: number }> {
+  return adoptAndPublishBaseTheme(store, tenantId, themeId, opts);
 }

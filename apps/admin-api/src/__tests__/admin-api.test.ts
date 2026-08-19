@@ -98,6 +98,15 @@ test('POST /stores creates the store and makes the caller its owner', async () =
   assert.strictEqual((await getMembership(ALICE, ID))!.role, 'owner');
 });
 
+test('POST /stores rejects an unknown baseThemeId (400) rather than silently defaulting', async () => {
+  const r = await call('POST', '/stores', alice, {
+    name: 'BadBase',
+    host: 'bad-base.localhost',
+    baseThemeId: 'library-nope',
+  });
+  assert.strictEqual(r.status, 400);
+});
+
 test('POST /stores with no id generates one server-side and still makes the caller owner', async () => {
   const r = await call('POST', '/stores', alice, {
     name: 'Auto',

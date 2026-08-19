@@ -1,7 +1,7 @@
 import type { Hono } from 'hono';
 import { onboardStore, deleteStore, listDomains } from '@ratio/data-provisioning';
 import { forTenant } from '@ratio/data-repo';
-import { buildCustomClient, commerceUrlsFromEnv } from '@ratio/builder-core';
+import { buildCustomClient, commerceUrlsFromEnv, baseThemeDef } from '@ratio/builder-core';
 import { config } from '../config';
 import {
   isPlatformAdmin,
@@ -124,15 +124,23 @@ export function registerStoresRoutes(app: Hono<Vars>, deps: RouteDeps) {
   // Create a store. The authenticated caller becomes its owner — the membership is
   // written in the same transaction as the tenant, so a store always has an owner.
   app.post('/stores', denyNarrowedScope, async (c) => {
-    const { id, name, host, color, merchantId } = (await c.req.json().catch(() => ({}))) as {
+    const { id, name, host, color, merchantId, baseThemeId } = (await c.req
+      .json()
+      .catch(() => ({}))) as {
       id?: string;
       name?: string;
       host?: string;
       color?: string;
       merchantId?: string;
+      baseThemeId?: string;
     };
     if (!name || !host) {
       return c.json({ error: 'name and host are required' }, 400);
+    }
+    // The "start from" base the store adopts (optional; defaults to the platform Default). Reject an
+    // unknown id up front so onboarding fails loud rather than silently falling back to the default.
+    if (baseThemeId !== undefined && !baseThemeDef(baseThemeId)) {
+      return c.json({ error: 'unknown base theme' }, 400);
     }
     // The gokwik merchant id (data-layer). Optional at create; identifies the store's catalog.
     if (merchantId !== undefined && !/^[A-Za-z0-9_-]{1,64}$/.test(merchantId)) {
@@ -181,7 +189,7 @@ export function registerStoresRoutes(app: Hono<Vars>, deps: RouteDeps) {
     // must not fail an otherwise-successful onboarding. No page-builder scaffold: the bundle theme is
     // the single renderer, so scaffolding page-builder pages only produced a confusing, never-shown
     // (or degrade-only) parallel storefront.
-    await publishStoreThemeOnOnboard(tenantId).catch((e) => {
+    await publishStoreThemeOnOnboard(tenantId, baseThemeId).catch((e) => {
       console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
     });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).

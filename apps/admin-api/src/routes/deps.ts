@@ -12,7 +12,7 @@ export interface RouteDeps {
   themes: BundleThemeStore | null;
   mainThemeId: (tenantId: string) => string;
   ensureStoreTheme: (tenantId: string) => Promise<void>;
-  publishStoreThemeOnOnboard: (tenantId: string) => Promise<void>;
+  publishStoreThemeOnOnboard: (tenantId: string, baseThemeId?: string) => Promise<void>;
   assertThemeInStore: (themeId: string, storeId: string) => Promise<void>;
   identityCompile: (s: ThemeFiles) => ThemeFiles;
   bundle503: (c: Context<Vars>) => Response;
