@@ -56,6 +56,13 @@ export function storefrontUrl(store: Store, isLocal: boolean): string | null {
   const real = hosts.find((h) => !h.endsWith('.localhost'));
   return real ? `https://${real}` : null;
 }
+
+// The host to SHOW for the storefront (address-bar text, "live on …" labels) — the same target the
+// "View store" link opens, minus the scheme. In local dev that's the .localhost:8080 alias, so the
+// displayed host matches where the link actually goes. Null when there's no reachable host.
+export function storefrontHost(store: Store, isLocal: boolean): string | null {
+  return storefrontUrl(store, isLocal)?.replace(/^https?:\/\//, '') ?? null;
+}
 export function resolveStore(stores: Store[], param: string | undefined): Store | undefined {
   if (!param) return undefined;
   return stores.find((s) => s.host === param || s.hosts?.includes(param) || s.id === param);

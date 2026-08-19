@@ -1,7 +1,13 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { ThemeSettingsPanel } from '../features/theme/theme-settings';
 import { PageHeader } from '../common/page-header';
-import { storeSlug, storefrontUrl, useMerchant, useStoreData } from '../common/store-context';
+import {
+  storeSlug,
+  storefrontUrl,
+  storefrontHost,
+  useMerchant,
+  useStoreData,
+} from '../common/store-context';
 
 // Theme customize = brand settings (brand colour, typography, layout) for one theme, edited in that
 // theme's draft and published via the bundle. Version history + code editing live behind "Edit code".
@@ -14,14 +20,16 @@ export function ThemePage() {
   if (!themeId) return null;
   // The "View store" button is the single storefront link — reachable at the .localhost edge in local
   // dev, the real domain in prod. Hidden when there's no reachable host for this environment.
-  const liveUrl = storefrontUrl(store, !!me?.isLocal);
+  const isLocal = !!me?.isLocal;
+  const liveUrl = storefrontUrl(store, isLocal);
+  const displayHost = storefrontHost(store, isLocal);
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <PageHeader
         title={`${store.name} theme`}
         description={
-          store.host
-            ? `Brand, typography and layout · ${store.host}`
+          displayHost
+            ? `Brand, typography and layout · ${displayHost}`
             : 'Brand, typography and layout for your storefront.'
         }
         onBack={() => navigate(`/stores/${storeSlug(store)}/themes`)}
