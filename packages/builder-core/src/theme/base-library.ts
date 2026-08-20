@@ -6,6 +6,8 @@
 import { bundleId, type ThemeFiles } from './bundle';
 import { defaultBundleTheme } from './default-theme';
 import { editorialBundleTheme } from './editorial-theme';
+import { novaBundleTheme } from './nova-theme';
+import { auraBundleTheme } from './aura-theme';
 import type { ThemeStore, CompileFn } from './theme-store';
 import { pool } from '@ratio/data-db';
 
@@ -25,20 +27,34 @@ export interface BaseThemeDef {
   files: () => ThemeFiles;
 }
 
+// Stable ids (a store's base_theme_id references these — never rename an id). Display names live below.
 export const EDITORIAL_BASE_THEME_ID = 'library-editorial';
+export const NOVA_BASE_THEME_ID = 'library-nova';
+export const AURA_BASE_THEME_ID = 'library-aura';
 
 export const BASE_THEMES: BaseThemeDef[] = [
   {
-    id: DEFAULT_BASE_THEME_ID,
-    name: 'Default',
-    description: 'A clean, flexible storefront that suits most stores.',
+    id: DEFAULT_BASE_THEME_ID, // Forma — the flagship, kept as library-default for lineage stability.
+    name: 'Forma',
+    description: 'Clean, universal — the all-purpose flagship that suits most stores.',
     files: defaultBundleTheme,
   },
   {
-    id: EDITORIAL_BASE_THEME_ID,
-    name: 'Editorial',
-    description:
-      'Serif type, generous whitespace, and a story-first home — for brands with a point of view.',
+    id: NOVA_BASE_THEME_ID,
+    name: 'Nova',
+    description: 'Bold, modern — made for D2C & fashion.',
+    files: novaBundleTheme,
+  },
+  {
+    id: AURA_BASE_THEME_ID,
+    name: 'Aura',
+    description: 'Elegant, visual — made for beauty & lifestyle.',
+    files: auraBundleTheme,
+  },
+  {
+    id: EDITORIAL_BASE_THEME_ID, // Atelier — kept as library-editorial for lineage stability.
+    name: 'Atelier',
+    description: 'Editorial, premium — made for luxury & fashion.',
     files: editorialBundleTheme,
   },
 ];
