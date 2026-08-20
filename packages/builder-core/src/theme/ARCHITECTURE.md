@@ -32,6 +32,51 @@ flowchart LR
   end
 ```
 
+> **Compose-over-Forma is optional, not the model.** A theme is free to be **completely standalone** —
+> its own home, header, footer, collection page, product page, sections, and CSS. Themes share **only
+> the contract below** (the data shapes + render slots), never the UI. Forma just happens to be authored
+> as a full standalone theme, and Nova/Aura/Atelier reuse its chrome as a shortcut because they're light
+> variants today; a genuinely distinct theme should be a **full directory** (see the last section).
+
+---
+
+## What every theme shares: the contract, not the chrome
+
+The ONLY things a theme must honor are the render contract and the data shapes. Everything visual is
+per-theme. This is the "same data format, different UI" you get across themes.
+
+**1. Render / layout contract** (enforced by `theme-render.ts`; a standalone theme MUST provide these):
+
+| File                                                      | Role                                                                                   |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `layout/theme.liquid`                                     | owns the whole `<!doctype html>` document. Must include the slots below                |
+| `templates/index.json`, `collection.json`, `product.json` | each lists section instances + `dataSources`                                           |
+| `sections/<type>.liquid`                                  | every `type` a template references                                                     |
+| `sections/header.liquid`, `sections/footer.liquid`        | chrome — origin renders them into `{{ header }}` / `{{ footer }}` with the store's nav |
+| `sections/order.liquid`                                   | the thank-you page (checkout integration hydrates its line-items)                      |
+| `config/tokens.json`, `assets/base.css`                   | brand tokens + the theme's own stylesheet                                              |
+
+Layout slots the origin fills: `{{ content_for_layout }}` (the page's sections), `{{ header }}`,
+`{{ footer }}`, `{{ base_css }}` / `{{ token_css }}` / `{{ theme_css }}`, `{{ content_for_header }}`
+(islands runtime + security), `{{ content_for_body_end }}`, and escaped `page_title` / `site_name`.
+
+**2. Data contract** — sections bind to a `dataSourceKey`; the resolver injects **canonical, flat** data
+regardless of backend. A theme's Liquid reads these fields; the _layout_ around them is entirely yours:
+
+| dataSource type                    | injects                  | shape the section reads                                                                                    |
+| ---------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `PRODUCTS` / `PRODUCTS_BY_HANDLES` | `{ products: [...] }`    | each product: `id, title, handle, price` (paise), `compare_at_price?`, `image_url`/`images`, `description` |
+| `COLLECTION_BY_HANDLES`            | `{ products: [...] }`    | same product shape, filtered to the collection                                                             |
+| `PRODUCT`                          | a flat product           | `title, handle, price, compare_at_price?, description, image_url/images, variant_id?/variants`             |
+| `COLLECTIONS`                      | `{ collections: [...] }` | each: `handle, title`                                                                                      |
+
+**3. Filters** — merchant/theme Liquid is untrusted; only `money` (paise → ₹), `escape`, `default` are
+available. Prices are always paise; render with `| money`.
+
+So: **build any header/home/collection/PDP you like** — as long as the layout has the slots, templates
+reference real sections, and your Liquid reads the canonical product/collection fields, it renders on
+the same data as every other theme.
+
 ---
 
 ## Layer A — how a base is built and seeded (author-time)
@@ -134,15 +179,33 @@ never Aura/Atelier/Forma stores.
   shared file and adds its own. The failure mode is the opposite (inheriting a shared section you don't
   use), which is harmless (unused sections don't render).
 
-### If you want themes fully independent in _source_ too
+## Standalone themes (the recommended shape for distinct themes)
 
-That's a valid alternative: make each theme a **full directory** (its own copy of every file, like
-`forma/`), and have its `*-theme.ts` just return its own files (no `...forma`). Trade-off:
+A distinct theme — different home, header, footer, collection page, product page — should be a **full
+standalone directory** like `forma/`: its own copy of every file, and a `*-theme.ts` that just returns
+its own files (no `...forma`). It shares nothing but the [contract above](#what-every-theme-shares-the-contract-not-the-chrome).
 
-- ➕ Zero source coupling — editing Forma never affects another theme, even before seeding.
-- ➖ Shared chrome is duplicated ×N; a shared bug (footer, PDP, cart) must be fixed in every theme.
-- ⚖️ Runtime behaviour is **identical** either way (both produce a complete seeded theme).
+```mermaid
+flowchart TD
+  contract["SHARED: render contract + data shapes + filters<br/>(engine: theme-render / theme-compose / resolver)"]
+  contract --> forma["forma/  — full theme (home, header, footer, collection, PDP)"]
+  contract --> luxe["luxe/   — full theme, totally different UI, SAME data"]
+  contract --> zine["zine/   — full theme, totally different UI, SAME data"]
+  forma -. no cross-theme sharing .- luxe
+  luxe  -. no cross-theme sharing .- zine
+```
 
-Current choice is **compose-over-Forma** because the four bases share ~90% chrome and differ mainly in
-home layout + tokens. If a theme grows to diverge everywhere, promote it to a full directory. See
-[`library/README.md`](./library/README.md) for the how-to.
+**When to use which:**
+
+- **Full standalone directory (default for a real, distinct theme).** Own everything. ➕ zero coupling —
+  editing one theme never affects another; every page can look completely different. ➖ shared chrome is
+  duplicated, so a cross-theme fix is per-theme (acceptable — distinct themes _want_ to diverge).
+- **Compose-over-Forma (shortcut, for a light variant only).** Reuse Forma's chrome and change just
+  tokens + a couple of sections (what Nova/Aura/Atelier do today). Use this only when a theme really is
+  "Forma with a different home + palette." The moment it wants its own header/footer/collection/PDP,
+  promote it to a full directory.
+
+Runtime behaviour is **identical** either way — both produce a complete, seeded, self-contained theme.
+The choice is purely about how much source you copy vs. inherit.
+
+See [`library/README.md`](./library/README.md) for the step-by-step (both shapes).
