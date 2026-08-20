@@ -75,7 +75,8 @@ test(
     const bytes = await store.getAsset(bref, entry.hash);
     assert.equal(new TextDecoder().decode(bytes ?? new Uint8Array()), css);
 
-    // identical base bytes hash identically across tenants → the edge caches ONE file for all stores
+    // identical base bytes hash identically across tenants → same /assets/<hash> URL (the prerequisite
+    // for cross-tenant edge caching, if the edge cache key ignores the host)
     const other = { themeId: `t_base2_${Date.now()}`, tenantId: 't_ts2' };
     await store.saveDraft(other, { ...files, 'assets/base.css': css });
     const r2 = await store.freezeBundles(other, { compile: identity });

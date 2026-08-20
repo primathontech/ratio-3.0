@@ -50,12 +50,14 @@ export function bundlePageName(canon: string, matched: RouteMatch | null): strin
 
 // Storefront pages carry no first-party JS, so a strict CSP (script-src 'none') is the backstop that
 // contains any HTML/color injection that slips through content validation; inline <style> is the
-// theme's, so style-src allows it. This is the DEFAULT for every storefront response; an enabled
-// external integration (see @ratio/gokwik) merges its own hosts onto this base, per request.
+// theme's, so style-src allows 'unsafe-inline', and 'self' authorizes the CDN-linked base stylesheet
+// (/assets/<hash>, OFCE-701) — an external <link> is governed by style-src and 'unsafe-inline' alone
+// does NOT permit it. This is the DEFAULT for every storefront response; an enabled external
+// integration (see @ratio/gokwik) merges its own hosts onto this base, per request.
 export const STOREFRONT_BASE_CSP: CspDirectives = {
   'default-src': ["'none'"],
   'script-src': ["'none'"],
-  'style-src': ["'unsafe-inline'"],
+  'style-src': ["'self'", "'unsafe-inline'"],
   'img-src': ['https:', 'data:'],
   'font-src': ["'self'", 'data:'],
   'base-uri': ["'none'"],

@@ -262,11 +262,12 @@ export class ThemeStore {
   }
 
   // OFCE-701: promote the shared base stylesheet (assets/base.css) into the asset manifest as an
-  // immutable, content-hashed object so the layout can CDN-link it (<link href="/assets/<hash>">) once,
-  // cross-tenant cached, instead of inlining the same bytes on every page of every store. Stores the
-  // bytes at the theme's asset key (like any binary asset) and records a text/css manifest entry. The
-  // base.css text file stays in the bundle too, so preview/local (which don't hit the manifest) inline
-  // it as a fallback. Identical base bytes → identical hash → the edge caches one file for all tenants.
+  // immutable, content-hashed object so the layout can CDN-link it (<link href="/assets/<hash>">)
+  // instead of inlining the same bytes on every page. The guaranteed win: the browser + edge cache the
+  // immutable /assets/<hash> once and reuse it across every page of the store (vs re-sending inline CSS
+  // per page). Bytes are stored under the theme's own asset key (per-tenant, like any binary asset);
+  // cross-TENANT reuse additionally requires the edge cache key to ignore the host — a separate edge
+  // config, not proven here. base.css stays in the bundle too, so preview/local (no manifest) inline it.
   private async promoteBaseCss(ref: ThemeRef, compiled: ThemeFiles): Promise<ThemeFiles> {
     const css = compiled['assets/base.css'];
     if (typeof css !== 'string' || css === '') return compiled;
