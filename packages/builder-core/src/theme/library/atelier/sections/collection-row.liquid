@@ -1,24 +1,29 @@
-<section class="rt">
-  <h2 class="heading">{{ heading | default: 'Products' | escape }}</h2>
-  <div class="grid">
-    {% for p in products %}
-    {% assign img = p.image_url | default: p.images.first.url %}
-    <div class="card">
-      <a class="card-link" href="/products/{{ p.handle | escape }}">
-        <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
-        <div class="body">
-          <div>{{ p.title | escape }}</div>
-          <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
-        </div>
-      </a>
-      <div class="card-atc">
-        <form class="atc" method="post" action="/cart/add">
-          <input type="hidden" name="handle" value="{{ p.handle | escape }}">
-          <button type="submit" class="btn">Add to cart</button>
-        </form>
+<section class="sec">
+  <div class="rt">
+    <div class="sec-head">
+      <div>
+        <span class="eyebrow">Curated</span>
+        <h2 class="heading" style="margin: 6px 0 0;">{{ heading | default: 'The Edit' | escape }}</h2>
       </div>
+      {% if cta_href %}<a class="link-u" href="{{ cta_href | escape }}">View all</a>{% endif %}
     </div>
-    {% endfor %}
+    <div class="grid">
+      {% for p in products %}
+      {% assign img = p.image_url | default: p.images.first.url %}
+      <div class="card">
+        <a class="card-link" href="/products/{{ p.handle | escape }}">
+          <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
+          <div class="card-name">{{ p.title | escape }}</div>
+          <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
+        </a>
+        <div class="card-atc">
+          <form class="atc" method="post" action="/cart/add">
+            <input type="hidden" name="handle" value="{{ p.handle | escape }}">
+            <button type="submit">Add to bag</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
-  {% if cta_href %}<a class="button" href="{{ cta_href | escape }}">View all</a>{% endif %}
 </section>
