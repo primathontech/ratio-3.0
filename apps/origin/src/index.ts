@@ -238,6 +238,8 @@ app.all('*', async (c) => {
     const paths: string[] = ['/'];
     const tags = [tenantTag(tenantId as string)];
     // A commerce-backend hiccup must not 500 the sitemap — it still lists home + custom pages.
+    // NOTE (OFCE-718 follow-up): first:250 is a single unpaginated page — a catalog larger than that is
+    // truncated. A sitemap-index + cursor pagination is the next step if a store exceeds it.
     const [cols, prods] = await Promise.all([
       resolver
         .fetch({ type: DATA_SOURCE_TYPES.COLLECTIONS, params: { first: 250 } }, rctx)
@@ -248,11 +250,10 @@ app.all('*', async (c) => {
     ]);
     for (const co of (cols?.value as { collections?: { handle?: string }[] })?.collections ?? [])
       if (co.handle) paths.push(`/collections/${co.handle}`);
-    for (const pr of (prods?.value as { products?: { handle?: string; id?: string }[] })
-      ?.products ?? []) {
-      const h = pr.handle ?? pr.id;
-      if (h) paths.push(`/products/${h}`);
-    }
+    // The product route resolves the URL segment as a HANDLE (/products/:handle), so a product with no
+    // handle would 404 — skip it rather than emit a broken /products/<id> loc.
+    for (const pr of (prods?.value as { products?: { handle?: string }[] })?.products ?? [])
+      if (pr.handle) paths.push(`/products/${pr.handle}`);
     tags.push(...(cols?.tags ?? []), ...(prods?.tags ?? []));
     // Published custom Pages (About/FAQ/landing), excluding home which is already listed.
     const pages = await pageStore.listPages(tenantId as string).catch(() => []);
