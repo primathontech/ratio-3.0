@@ -380,6 +380,12 @@ export function createApi(
       req<Record<string, unknown>>('GET', '/base-themes').then((d) =>
         pickArray<BaseThemeOption>(d, 'baseThemes')
       ),
+    // Render a base theme to HTML (sample data) so the picker can preview it before adopting (OFCE-700).
+    previewBaseById: (baseId: string, page = 'index') =>
+      req<{ html?: string; error?: string }>(
+        'GET',
+        `/base-themes/${encodeURIComponent(baseId)}/preview?page=${encodeURIComponent(page)}`
+      ),
     // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
     // the backend isn't wired in this env; verified=true + collectionCount when the id reached it.
     verifyMerchant: (merchantId: string) =>
