@@ -1,10 +1,19 @@
+@layer reset, tokens, base, sections, overrides;
+
+@layer reset {
 *,*::before,*::after{box-sizing:border-box}
+}
+
+@layer tokens {
 :root{
   --accent:#ff4a00;--accent-ink:#fff;--ink:#0f0f10;--muted:#6a6a70;--paper:#fff;
   --wash:#f3f2ef;--line:#e5e4e0;--footer-bg:#0f0f10;--footer-ink:#f5f5f3;
   --maxw:1200px;--base:16px;
   --font:'Helvetica Neue',Arial,sans-serif;--font-heading:var(--font);
 }
+}
+
+@layer base {
 html{-webkit-text-size-adjust:100%;font-size:var(--base)}
 body{margin:0;font-family:var(--font);color:var(--ink);background:var(--wash);line-height:1.5;-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4{font-family:var(--font-heading);margin:0}
@@ -131,3 +140,4 @@ a{color:inherit;text-decoration:none}
 .order-row span:first-child{color:var(--muted)}
 
 @media(min-width:48rem){.nav-none{display:none}.hdr-nav{display:flex}}
+}
