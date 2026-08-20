@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ page_title | default: site_name | default: 'Store' | escape }}</title>
-  <style>{{ base_css }}{{ token_css }}{{ theme_css }}</style>
+  <style>{{ base_css }}</style>
+  <style>@layer tokens { {{ token_css }} }</style>
+  <style>@layer overrides { {{ theme_css }} }</style>
   {{ content_for_header }}
 </head>
 <body>
