@@ -11,20 +11,10 @@
     {
       "type": "editorial-hero",
       "data": {
-        "kicker": "New season",
-        "heading": "Made to be lived in",
-        "subheading": "A considered edit of everyday pieces — thoughtfully designed, honestly priced, and built to last.",
-        "cta_label": "Shop the collection",
-        "cta_href": "/collections/all"
-      }
-    },
-    {
-      "type": "feature",
-      "data": {
-        "kicker": "The story",
-        "heading": "Fewer, better things",
-        "body": "We work with makers we trust to produce in small runs, so every piece earns its place. Tell your own story here.",
-        "cta_label": "About us",
+        "kicker": "The Winter Collection — 2026",
+        "heading": "Quiet luxury, made to last.",
+        "subheading": "Hand-finished pieces in natural fibres, produced in small batches with makers we have known for years.",
+        "cta_label": "Explore the collection",
         "cta_href": "/collections/all"
       }
     },
@@ -32,11 +22,19 @@
       "type": "collection-row",
       "dataSourceKey": "all",
       "data": {
-        "heading": "The edit"
+        "heading": "The Edit",
+        "cta_href": "/collections/all"
       }
     },
     {
-      "type": "brand-story"
+      "type": "feature",
+      "data": {
+        "kicker": "The House",
+        "heading": "A studio, not a factory.",
+        "body": "Every piece is cut and finished by hand in our studio. We make in small runs, so each garment earns its place — considered, unhurried, and built to be worn for years.",
+        "cta_label": "Read our story",
+        "cta_href": "/collections/all"
+      }
     }
   ]
 }
