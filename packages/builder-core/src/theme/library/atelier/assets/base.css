@@ -2,6 +2,9 @@
    store's brand colour. Fonts/size/radius/width come from the theme tokens; everything else is Atelier's.
    MOBILE-FIRST: base rules are the small-screen layout; min-width media queries (Tailwind rem scale —
    md 48rem, lg 64rem) add the larger layouts. No max-width queries. */
+@layer reset, tokens, base, sections, overrides;
+
+@layer tokens {
 :root {
   --paper: #f5f1e8;
   --paper-2: #efe9db;
@@ -20,8 +23,13 @@
   --maxw: 1440px;
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
+}
 
+@layer reset {
 * { box-sizing: border-box; }
+}
+
+@layer base {
 html { -webkit-text-size-adjust: 100%; font-size: var(--base); }
 body {
   margin: 0;
@@ -235,4 +243,5 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
   .feat { grid-template-columns: 1fr 1fr; gap: 64px; }
   .pdp { grid-template-columns: 1.1fr 0.9fr; gap: 56px; }
   .pdp-info { position: sticky; top: 110px; }
+}
 }
