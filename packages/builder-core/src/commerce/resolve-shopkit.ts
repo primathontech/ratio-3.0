@@ -27,6 +27,11 @@ function productList(data: unknown): RawProduct[] {
   if (Array.isArray(data)) return data as RawProduct[];
   return ((data as { products?: RawProduct[] })?.products ?? []) as RawProduct[];
 }
+type RawCollection = Record<string, unknown> & { handle?: string };
+function collectionList(data: unknown): RawCollection[] {
+  if (Array.isArray(data)) return data as RawCollection[];
+  return ((data as { collections?: RawCollection[] })?.collections ?? []) as RawCollection[];
+}
 
 export class ShopkitResolver implements BindingResolver {
   constructor(private clientFor: (ctx: ResolveContext) => ICommerceClient | null) {}
@@ -61,6 +66,14 @@ export class ShopkitResolver implements BindingResolver {
             : await client.getProducts(params as never, options);
         const products = productList(res.data);
         return { value: { products }, tags: products.map((p) => `prod:${p.id}`) };
+      }
+      case DATA_SOURCE_TYPES.COLLECTIONS: {
+        const res: IResponse = await client.getCollections(params as never, options);
+        const collections = collectionList(res.data); // canonical, unmodified
+        return {
+          value: { collections },
+          tags: ['col:*', ...collections.map((col) => `col:${col.handle ?? ''}`)],
+        };
       }
       case DATA_SOURCE_TYPES.PRODUCT: {
         const res: IResponse = await client.getProduct(params as never, options);

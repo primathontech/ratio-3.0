@@ -45,6 +45,13 @@ for (const base of BASE_THEMES) {
     assert.match(col.html, /href="\/products\/sample-1"/, `${base.id} collection page works`);
     const prod = await page(files, 'product', { handle: 'air-max-90' });
     assert.match(prod.html, /Add to (cart|bag)/, `${base.id} product page works`);
+    const cols = await page(files, 'list-collections');
+    assert.match(
+      cols.html,
+      /href="\/collections\/collection-1"/,
+      `${base.id} collections-list page links each collection`
+    );
+    assert.match(cols.html, /Collection 1/, `${base.id} collections-list shows collection titles`);
   });
 }
 

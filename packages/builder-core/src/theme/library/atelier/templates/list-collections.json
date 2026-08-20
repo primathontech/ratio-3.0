@@ -1,0 +1,20 @@
+{
+  "dataSources": {
+    "all": {
+      "type": "COLLECTIONS",
+      "params": {
+        "first": 50
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "list-collections",
+      "dataSourceKey": "all",
+      "data": {
+        "heading": "The Collections",
+        "subheading": "Browse the house by edit — each a considered group of pieces."
+      }
+    }
+  ]
+}
