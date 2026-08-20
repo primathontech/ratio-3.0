@@ -24,6 +24,19 @@ export interface ThemeTokens {
   elevation?: string; // key of ELEVATION (theme-owned; only themes that bridge --elevation honour it)
 }
 
+// The canonical set of merchant-overridable token keys — the SINGLE allowlist both the backend and the
+// editor filter against (tokens.json read/write, and which schema control ids are accepted), so an
+// arbitrary key can never persist into a bundle or drive an unknown control.
+export const MERCHANT_TOKEN_KEYS = [
+  'color',
+  'bodyFont',
+  'headingFont',
+  'baseSize',
+  'radius',
+  'container',
+  'elevation',
+] as const satisfies readonly (keyof ThemeTokens)[];
+
 // ── Value maps (merchant picks a KEY → the CSS value). Self-hostable / websafe stacks (no CDN font). ──
 export const FONTS: Record<string, string> = {
   system: `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`,

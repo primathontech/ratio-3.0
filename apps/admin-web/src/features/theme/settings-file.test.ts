@@ -29,9 +29,16 @@ describe('settingsFromFiles', () => {
       [SETTINGS_PATH]: JSON.stringify({
         settings: [
           control,
-          { id: 'x', type: 'range', label: 'X', default: '1' }, // unsupported type
-          { id: 'y', type: 'select', label: 'Y', default: 'a', options: [] }, // no options
+          { id: 'baseSize', type: 'range', label: 'X', default: '1' }, // unsupported type
+          { id: 'radius', type: 'select', label: 'Y', default: 'a', options: [] }, // no options
           { type: 'select', label: 'Z', default: 'a', options: [{ value: 'a', label: 'A' }] }, // no id
+          {
+            id: 'bogusKey',
+            type: 'select',
+            label: 'B',
+            default: 'a',
+            options: [{ value: 'a', label: 'A' }],
+          }, // unknown token key
         ],
       }),
     };

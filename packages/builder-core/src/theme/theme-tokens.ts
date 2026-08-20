@@ -6,18 +6,11 @@
 // they touch CSS by `storefrontHead`/`rootVars`, so this layer only shapes and never trusts.
 import type { ThemeFiles } from './bundle';
 import type { ThemeTokens } from '../storefront/storefront';
+import { MERCHANT_TOKEN_KEYS } from '@ratio/design-tokens';
 
 export const TOKENS_PATH = 'config/tokens.json';
 
-const TOKEN_KEYS = [
-  'color',
-  'bodyFont',
-  'headingFont',
-  'baseSize',
-  'radius',
-  'container',
-  'elevation',
-] as const satisfies readonly (keyof ThemeTokens)[];
+const TOKEN_KEYS = MERCHANT_TOKEN_KEYS;
 
 // Parse a theme's tokens file into a plain, string-valued token subset. Absent, malformed, non-object,
 // or wrong-typed input yields {} (never throws mid-render); only the known token keys with string

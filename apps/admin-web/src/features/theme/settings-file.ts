@@ -3,9 +3,11 @@
 // loads the theme's draft files, so it reads the schema straight out of them — no extra API call.
 // Mirrors packages/builder-core/src/theme/theme-settings.ts (admin-web can't import builder-core). OFCE-711.
 import type { ThemeFiles } from '../../common/api';
-import type { ThemeSettingControl } from '@ratio/design-tokens';
+import { MERCHANT_TOKEN_KEYS, type ThemeSettingControl } from '@ratio/design-tokens';
 
 export const SETTINGS_PATH = 'config/settings.json';
+
+const KEYS = MERCHANT_TOKEN_KEYS as readonly string[];
 
 function parseControl(raw: unknown): ThemeSettingControl | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -13,6 +15,9 @@ function parseControl(raw: unknown): ThemeSettingControl | null {
   if (typeof c.id !== 'string' || typeof c.label !== 'string' || typeof c.default !== 'string') {
     return null;
   }
+  // A control may only drive a known merchant token key — otherwise the editor would render a control
+  // whose value can't persist, and a bad/third-party schema can't introduce arbitrary keys.
+  if (!KEYS.includes(c.id)) return null;
   if (c.type !== 'select' || !Array.isArray(c.options)) return null;
   const options = c.options
     .filter(

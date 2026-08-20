@@ -29,24 +29,31 @@ test('parseThemeSettings tolerates malformed input (never throws)', () => {
   assert.deepEqual(parseThemeSettings(undefined), { version: 1, settings: [] });
   assert.deepEqual(parseThemeSettings('not json {'), { version: 1, settings: [] });
   assert.deepEqual(parseThemeSettings('[]'), { version: 1, settings: [] });
-  // drops controls missing required fields or with an empty/invalid option set
+  // drops controls missing required fields, with an empty/invalid option set, or an unknown token id
   const partial = JSON.stringify({
     version: 1,
     settings: [
       {
-        id: 'ok',
+        id: 'radius',
         type: 'select',
-        label: 'OK',
+        label: 'Corners',
+        default: 'soft',
+        options: [{ value: 'soft', label: 'Soft' }],
+      },
+      { id: 'radius', type: 'select', label: 'X', default: 'a', options: [] }, // no options
+      { id: 'baseSize', type: 'range', label: 'X', default: '1' }, // unsupported type
+      { type: 'select', label: 'noId', default: 'a', options: [{ value: 'a', label: 'A' }] }, // no id
+      {
+        id: 'bogusKey',
+        type: 'select',
+        label: 'B',
         default: 'a',
         options: [{ value: 'a', label: 'A' }],
-      },
-      { id: 'noOptions', type: 'select', label: 'X', default: 'a', options: [] },
-      { id: 'wrongType', type: 'range', label: 'X', default: '1' },
-      { label: 'noId', type: 'select', default: 'a', options: [{ value: 'a', label: 'A' }] },
+      }, // unknown token key
     ],
   });
   assert.deepEqual(
     parseThemeSettings(partial).settings.map((c) => c.id),
-    ['ok']
+    ['radius']
   );
 });

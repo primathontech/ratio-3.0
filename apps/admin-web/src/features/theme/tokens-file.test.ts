@@ -35,4 +35,9 @@ describe('filesWithTokens', () => {
     const tokens = { color: '#3F53FE', bodyFont: 'serif', baseSize: 'l' };
     expect(tokensFromFiles(filesWithTokens({}, tokens))).toEqual(tokens);
   });
+
+  test('persists only known token keys (an unexpected key never reaches the bundle)', () => {
+    const out = filesWithTokens({}, { color: '#111827', bogusKey: 'x' } as never);
+    expect(JSON.parse(out[TOKENS_PATH])).toEqual({ color: '#111827' });
+  });
 });

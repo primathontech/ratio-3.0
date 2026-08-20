@@ -4,9 +4,15 @@
 // reads the schema directly — no extra API surface. Untrusted input: a bundle's settings.json is
 // tolerated and shaped here (never throws), and the values it drives are still sanitized by rootVars.
 import type { ThemeFiles } from './bundle';
-import type { ThemeSettingsSchema, ThemeSettingControl } from '@ratio/design-tokens';
+import {
+  MERCHANT_TOKEN_KEYS,
+  type ThemeSettingsSchema,
+  type ThemeSettingControl,
+} from '@ratio/design-tokens';
 
 export const SETTINGS_PATH = 'config/settings.json';
+
+const KEYS = MERCHANT_TOKEN_KEYS as readonly string[];
 
 function parseControl(raw: unknown): ThemeSettingControl | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -14,6 +20,9 @@ function parseControl(raw: unknown): ThemeSettingControl | null {
   if (typeof c.id !== 'string' || typeof c.label !== 'string' || typeof c.default !== 'string') {
     return null;
   }
+  // A control may only drive a known merchant token key — otherwise the editor would render a control
+  // whose value can't persist, and a bad/third-party schema can't introduce arbitrary keys.
+  if (!KEYS.includes(c.id)) return null;
   if (c.type !== 'select' || !Array.isArray(c.options)) return null;
   const options = c.options
     .filter(

@@ -3,18 +3,11 @@
 // helpers read the tokens out of the draft's files and write them back, leaving every other file (the
 // merchant's Liquid/CSS) untouched. Mirrors packages/builder-core/src/theme-tokens.ts. OFCE-616.
 import type { StoreTheme, ThemeFiles } from '../../common/api';
+import { MERCHANT_TOKEN_KEYS } from '@ratio/design-tokens';
 
 export const TOKENS_PATH = 'config/tokens.json';
 
-const TOKEN_KEYS = [
-  'color',
-  'bodyFont',
-  'headingFont',
-  'baseSize',
-  'radius',
-  'container',
-  'elevation',
-] as const satisfies readonly (keyof StoreTheme)[];
+const TOKEN_KEYS = MERCHANT_TOKEN_KEYS;
 
 // Read the brand tokens a theme carries in its bundle. Tolerant: absent, malformed, non-object, or
 // wrong-typed input yields {} (the panel then falls back to its defaults); only known string keys
@@ -41,5 +34,11 @@ export function tokensFromFiles(files: ThemeFiles): StoreTheme {
 // file — the settings panel and the code editor share one draft, so a token save must never drop the
 // merchant's Liquid.
 export function filesWithTokens(files: ThemeFiles, tokens: StoreTheme): ThemeFiles {
-  return { ...files, [TOKENS_PATH]: `${JSON.stringify(tokens, null, 2)}\n` };
+  // Persist only known token keys — mirrors the read side, so a schema-driven control with an
+  // unexpected id can never write an arbitrary key into the bundle's tokens file.
+  const clean: StoreTheme = {};
+  for (const k of TOKEN_KEYS) {
+    if (typeof tokens[k] === 'string') clean[k] = tokens[k];
+  }
+  return { ...files, [TOKENS_PATH]: `${JSON.stringify(clean, null, 2)}\n` };
 }

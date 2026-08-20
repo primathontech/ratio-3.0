@@ -255,7 +255,7 @@ export function ThemeControls({
           <div className="ts-label">Theme options</div>
           {settings.map((ctrl) => {
             const key = ctrl.id as keyof StoreTheme;
-            const value = theme[key] ?? ctrl.default;
+            const value = theme[key] || ctrl.default;
             const labels = Object.fromEntries(ctrl.options.map((o) => [o.value, o.label]));
             const options = ctrl.options.map((o) => o.value);
             return (
