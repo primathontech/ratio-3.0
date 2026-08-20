@@ -1,0 +1,16 @@
+<main class="rt">
+  <h1 class="heading">{{ heading | default: 'Collections' | escape }}</h1>
+  <div class="grid">
+    {% for c in collections %}
+    {% assign img = c.image_url | default: c.image.src | default: c.image.url %}
+    <div class="card">
+      <a class="card-link" href="/collections/{{ c.handle | escape }}">
+        <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ c.title | escape }}">{% endif %}</div>
+        <div class="body">
+          <div>{{ c.title | escape }}</div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+</main>

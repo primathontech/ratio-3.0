@@ -20,8 +20,15 @@ test('static page → self-keyed page doc at the concrete path', () => {
 
 test('unknown paths do not match (exact-page lane / 404 handles them)', () => {
   assert.strictEqual(matchRoute('/about'), null); // not under /pages/
-  assert.strictEqual(matchRoute('/collections'), null); // no handle segment
   assert.strictEqual(matchRoute('/collections/'), null); // empty handle
+});
+
+test('collections index (no handle) → list-collections template', () => {
+  assert.deepStrictEqual(matchRoute('/collections'), {
+    templateKey: '/collections',
+    pageType: 'list-collections',
+    params: {},
+  });
 });
 
 test('collection URL → collection template + handle param', () => {

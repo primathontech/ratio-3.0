@@ -187,7 +187,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 .order-row span:first-child { color: var(--muted); }
 
 /* ---- Footer (fixed dark) ---- */
-.ftr { background: var(--footer-bg); color: var(--footer-ink); margin-top: 8px; }
+.ftr { background: var(--footer-bg); color: var(--footer-ink); margin-top: clamp(56px, 7vw, 96px); }
 .news { text-align: center; padding: 60px 24px 52px; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }
 .news .eyebrow { color: rgba(255, 255, 255, 0.55); }
 .news h3 { font-size: clamp(1.6rem, 4vw, 2.3rem); margin: 10px 0 20px; color: var(--footer-ink); }

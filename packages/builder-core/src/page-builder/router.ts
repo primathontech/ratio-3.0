@@ -8,7 +8,7 @@
 // flat and the collection-nested product URL load the same Product template (decision: one template
 // per type); the nested form just carries an extra `collection` param for breadcrumbs/back-nav.
 
-export type PageType = 'home' | 'collection' | 'product' | 'page';
+export type PageType = 'home' | 'collection' | 'list-collections' | 'product' | 'page';
 
 export interface RouteMatch {
   templateKey: string; // pages-table key to load (the canonical template path)
@@ -41,6 +41,7 @@ const ROUTES: CompiledRoute[] = [
   compile('home', '/', null),
   compile('page', '/pages/:handle', null),
   compile('product', '/collections/:collection/products/:handle', '/products/:handle'),
+  compile('list-collections', '/collections', '/collections'),
   compile('collection', '/collections/:handle', '/collections/:handle'),
   compile('product', '/products/:handle', '/products/:handle'),
 ];

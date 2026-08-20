@@ -36,6 +36,8 @@ export function bundlePageName(canon: string, matched: RouteMatch | null): strin
       return 'index';
     case 'collection':
       return 'collection';
+    case 'list-collections':
+      return 'list-collections';
     case 'product':
       return 'product';
     default:
