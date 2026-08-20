@@ -339,6 +339,40 @@ describe('admin api client', () => {
     expect(res).toEqual({ ok: true, revision: 3 });
   });
 
+  test('listBaseThemes unwraps the baseThemes array', async () => {
+    let seen: Request | undefined;
+    const baseThemes = [{ id: 'library-default', name: 'Default', description: 'd' }];
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { baseThemes }, (r) => (seen = r))
+    );
+    expect(await api.listBaseThemes()).toEqual(baseThemes);
+    expect(new URL(seen!.url).pathname).toBe('/base-themes');
+  });
+
+  test('createTheme forwards baseThemeId when given', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(200, { id: 's1-x' }, (r) => (seen = r))
+    );
+    await api.createTheme('s1', { name: 'Mag', baseThemeId: 'library-editorial' });
+    expect(await seen!.json()).toEqual({ name: 'Mag', baseThemeId: 'library-editorial' });
+  });
+
+  test('createStore forwards baseThemeId when given', async () => {
+    let seen: Request | undefined;
+    const api = createApi(
+      'http://api',
+      async () => 't',
+      fakeFetch(201, { id: 't_x', url: 'https://x' }, (r) => (seen = r))
+    );
+    await api.createStore({ name: 'X', host: 'x.ratiodev.in', baseThemeId: 'library-editorial' });
+    expect((await seen!.json()).baseThemeId).toBe('library-editorial');
+  });
+
   test('listThemes unwraps the themes array', async () => {
     let seen: Request | undefined;
     const themes = [

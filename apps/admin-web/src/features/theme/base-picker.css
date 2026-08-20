@@ -1,0 +1,37 @@
+.base-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.base-opt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.base-opt:hover {
+  border-color: var(--text-3);
+}
+.base-opt.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.base-opt-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+.base-opt-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.4;
+}

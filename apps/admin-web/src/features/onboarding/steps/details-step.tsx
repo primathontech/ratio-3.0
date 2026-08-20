@@ -1,16 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Field, Spinner } from '../../../common/ui';
-import { ApiError } from '../../../common/api';
+import { ApiError, type BaseThemeOption } from '../../../common/api';
+import { BasePicker } from '../../theme/base-picker';
 import { suggestHost, PLATFORM_DOMAIN } from '../host';
 import type { StepProps } from '../types';
 
-// Step 2 — store details. Name + a platform subdomain (auto-suggested from the name). Continuing
-// CREATES the store as a draft (not live) so the Design + Launch steps can work on a real theme with
-// the merchant's real products; the wizard publishes it at the end.
+// Step 2 — store details. Name + a platform subdomain (auto-suggested from the name) + the "start
+// from" base theme. Continuing CREATES the store as a draft (not live) on that base so the Design +
+// Launch steps can work on a real theme with the merchant's real products; the wizard publishes it at
+// the end. The base is locked once the store exists (a theme's base is immutable).
 export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hostTouched, setHostTouched] = useState(false);
+  const [bases, setBases] = useState<BaseThemeOption[]>([]);
+
+  // Load the start-from bases once; default the selection to the first (the platform Default) unless
+  // the merchant already picked one (e.g. restored/navigated back). Best-effort — a failure just hides
+  // the picker. Deps are [api] only: patch/data change identity each render and would refetch in a loop.
+  useEffect(() => {
+    api
+      .listBaseThemes()
+      .then((list) => {
+        setBases(list);
+        if (!data.baseThemeId && list[0]) patch({ baseThemeId: list[0].id });
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
 
   function onName(name: string) {
     // Keep the subdomain in sync with the name until the merchant edits it themselves.
@@ -42,6 +59,7 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
         name: data.name.trim(),
         host: data.host.trim().toLowerCase(),
         merchantId: mid || undefined,
+        baseThemeId: data.baseThemeId || undefined,
       });
       patch({
         storeId: res.id,
@@ -92,6 +110,16 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
           }}
         />
       </Field>
+
+      {!created && bases.length > 1 && (
+        <Field label="Start from" info="Your theme's starting design. You can customise it next.">
+          <BasePicker
+            options={bases}
+            value={data.baseThemeId}
+            onChange={(id) => patch({ baseThemeId: id })}
+          />
+        </Field>
+      )}
 
       {created && (
         <div className="note note-ok" role="status">
