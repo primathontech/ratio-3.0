@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseThemeSettings, resolveThemeSettings, SETTINGS_PATH } from '../theme/theme-settings';
 import { FORMA_THEME_FILES } from '../theme/library/forma-theme.generated';
 import { NOVA_THEME_FILES } from '../theme/library/nova-theme.generated';
+import { AURA_THEME_FILES } from '../theme/library/aura-theme.generated';
 
 test('Forma ships a settings schema declaring its theme-owned controls', () => {
   const controls = resolveThemeSettings(FORMA_THEME_FILES);
@@ -17,6 +18,15 @@ test('Forma ships a settings schema declaring its theme-owned controls', () => {
   assert.deepEqual(
     elevation?.options.map((o) => o.value),
     ['flat', 'soft', 'lifted']
+  );
+});
+
+test('Aura declares a radius control (its --r scale is bridged); no elevation (flat cards)', () => {
+  const controls = resolveThemeSettings(AURA_THEME_FILES);
+  assert.deepEqual(
+    controls.map((c) => c.id),
+    ['radius'],
+    'Aura exposes corners only — its cards are flat by design'
   );
 });
 
