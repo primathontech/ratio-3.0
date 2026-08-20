@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { STOREFRONT_BASE_CSS, tokenCss } from '../storefront/storefront';
 import { AURA_THEME_FILES } from '../theme/library/aura-theme.generated';
+import { ATELIER_THEME_FILES } from '../theme/library/atelier-theme.generated';
+import { NOVA_THEME_FILES } from '../theme/library/nova-theme.generated';
 
 // Resolve a CSS custom property through the cascade: collect every `--name: value` declaration in
 // document order (later wins, like the cascade for same-specificity :root rules — and rootVars is
@@ -51,3 +53,17 @@ test('radius knob flows into Aura (--r) and stays byte-identical by default', ()
     'rounded reaches the var Aura rules consume'
   );
 });
+
+// Nova and Atelier own their corner shape as part of the theme identity, so they must NOT read the
+// merchant --radius knob at all (opt out by design, not via an unused token that could later collide).
+for (const [name, files] of [
+  ['Nova', NOVA_THEME_FILES],
+  ['Atelier', ATELIER_THEME_FILES],
+] as const) {
+  test(`${name} opts out of the radius knob — never reads var(--radius)`, () => {
+    assert.ok(
+      !files['assets/base.css'].includes('var(--radius)'),
+      `${name} must not consume the merchant --radius token`
+    );
+  });
+}
