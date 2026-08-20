@@ -38,12 +38,19 @@ export function parseThemeTokens(raw: string | undefined | null): Partial<ThemeT
   return out;
 }
 
-// The brand tokens for the storefront head: the live theme's own tokens win, the tenant-level theme
-// fills any key the theme leaves unset. So a theme fully owns its look once it sets every token, and a
-// store keeps its onboarding brand colour until a theme overrides it.
+// The brand tokens for the storefront head (OFCE-699): the live theme's own tokens are the DEFAULT
+// look — a store adopting a theme gets that theme's palette/fonts — and an EXPLICIT merchant token in
+// `tenants.theme` overrides it per key. So switching to Nova shows Nova's accent, unless the merchant
+// actually chose a brand colour, which still wins. Only non-empty tenant values override (a blank must
+// not shadow the theme). Untrusted input: values are still sanitized downstream by rootVars/storefrontHead.
 export function resolveThemeTokens(
   compiled: ThemeFiles | null | undefined,
   tenantTheme: ThemeTokens | undefined
 ): ThemeTokens {
-  return { ...(tenantTheme ?? {}), ...parseThemeTokens(compiled?.[TOKENS_PATH]) };
+  const overrides: Partial<ThemeTokens> = {};
+  for (const k of TOKEN_KEYS) {
+    const v = tenantTheme?.[k];
+    if (typeof v === 'string' && v.trim() !== '') overrides[k] = v;
+  }
+  return { ...parseThemeTokens(compiled?.[TOKENS_PATH]), ...overrides };
 }

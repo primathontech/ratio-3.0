@@ -7,7 +7,7 @@ export const ATELIER_THEME_FILES: ThemeFiles = {
   'assets/theme.css':
     "/* Your store's custom CSS — overrides the theme defaults. Example:\n   .hdr-brand { letter-spacing: .04em; }\n   .hero h1 { font-size: 3rem; }\n*/\n",
   'config/tokens.json':
-    '{\n  "bodyFont": "sans",\n  "headingFont": "serif",\n  "baseSize": "m",\n  "radius": "square",\n  "container": "normal"\n}\n',
+    '{\n  "color": "#7a5c28",\n  "bodyFont": "sans",\n  "headingFont": "serif",\n  "baseSize": "m",\n  "radius": "square",\n  "container": "normal"\n}\n',
   'layout/theme.liquid':
     '<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>{{ page_title | default: site_name | default: \'Store\' | escape }}</title>\n  <style>{{ base_css }}{{ token_css }}{{ theme_css }}</style>\n  {{ content_for_header }}\n</head>\n<body>\n{{ header }}\n{{ content_for_layout }}\n{{ footer }}\n{{ content_for_body_end }}\n</body>\n</html>\n',
   'sections/collection-row.liquid':
