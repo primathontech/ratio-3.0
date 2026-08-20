@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Api, BaseThemeStatus, BaseRebasePlan, BaseRebaseOutcome } from '../../common/api';
+import type {
+  Api,
+  BaseThemeStatus,
+  BaseRebasePlan,
+  BaseRebaseOutcome,
+  BaseThemeOption,
+} from '../../common/api';
 import { ApiError } from '../../common/api';
 import { Spinner, Dialog, useToast } from '../../common/ui';
 import { BaseThemeTable } from './base-theme-table';
@@ -32,14 +38,27 @@ export function BaseThemeConsole({ api }: { api: Api }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [bases, setBases] = useState<BaseThemeOption[]>([]);
+  const [baseId, setBaseId] = useState(''); // '' = the platform Default base
   const toast = useToast();
 
   useEffect(() => {
     api
-      .getBaseTheme()
+      .listBaseThemes()
+      .then(setBases)
+      .catch(() => {});
+  }, [api]);
+
+  // (Re)load the status for the selected base and clear any preview/selection from the previous base.
+  useEffect(() => {
+    setPlan(null);
+    setSelected(new Set());
+    setOutcomes(null);
+    api
+      .getBaseTheme(baseId || undefined)
       .then(setStatus)
       .catch((e) => setError(errorText(e)));
-  }, [api]);
+  }, [api, baseId]);
 
   const selectableIds = useMemo(
     () => (plan?.targets ?? []).filter((t) => !t.blocked && !t.error).map((t) => t.themeId),
@@ -52,7 +71,7 @@ export function BaseThemeConsole({ api }: { api: Api }) {
     setOutcomes(null);
     setSelected(new Set());
     try {
-      setPlan(await api.previewBasePropagation());
+      setPlan(await api.previewBasePropagation({ baseThemeId: baseId || undefined }));
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -98,7 +117,7 @@ export function BaseThemeConsole({ api }: { api: Api }) {
       setSelected(new Set());
       // Refresh the behind-count so applied stores drop out of the headline number.
       api
-        .getBaseTheme()
+        .getBaseTheme(baseId || undefined)
         .then(setStatus)
         .catch(() => {});
     } catch (e) {
@@ -132,9 +151,27 @@ export function BaseThemeConsole({ api }: { api: Api }) {
           <h1>Base theme</h1>
           <p>Pull the latest base into stores that are behind, without losing their edits.</p>
         </div>
-        <button className="btn btn-primary" onClick={runPreview} disabled={busy}>
-          {busy && !confirming ? 'Loading…' : plan ? 'Refresh preview' : 'Preview propagation'}
-        </button>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {bases.length > 1 && (
+            <select
+              className="input"
+              style={{ width: 'auto' }}
+              aria-label="Base theme"
+              value={baseId || bases[0]?.id || ''}
+              onChange={(e) => setBaseId(e.target.value)}
+              disabled={busy}
+            >
+              {bases.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          )}
+          <button className="btn btn-primary" onClick={runPreview} disabled={busy}>
+            {busy && !confirming ? 'Loading…' : plan ? 'Refresh preview' : 'Preview propagation'}
+          </button>
+        </div>
       </div>
 
       {error && (
