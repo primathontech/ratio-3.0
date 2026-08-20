@@ -27,6 +27,7 @@ export * from './page-builder/store-pg';
 
 // Storefront (chrome + first-party section rendering)
 export * from './storefront/storefront';
+export * from './storefront/seo';
 export * from './storefront/chrome';
 export * from './storefront/footer';
 export * from './storefront/nav';
