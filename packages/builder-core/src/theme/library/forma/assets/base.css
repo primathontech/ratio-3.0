@@ -85,7 +85,7 @@
     --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.14);
 
     /* layout */
-    --maxw: 1180px;
+    --maxw: 1440px;
   }
 }
 
@@ -476,6 +476,11 @@
     grid-template-columns: repeat(2, 1fr);
     gap: 18px;
   }
+  /* OFCE-701 progressive @scope: isolate the product-card section to within a .card subtree so its
+     rules can't leak into other sections. Native @scope, no build; needs a 2024+ browser (older
+     browsers drop this block — the accepted modern-browser floor). Every card-* class lives inside
+     .card (see collection-row.liquid), so scoping is behaviour-preserving. Pattern for the rest. */
+  @scope (.card) {
   .card {
     background: var(--paper);
     border: var(--border-width) solid var(--line);
@@ -544,6 +549,7 @@
   }
   .card-atc button:hover {
     filter: brightness(1.06);
+  }
   }
   @media (min-width: 48rem) {
     .grid {
