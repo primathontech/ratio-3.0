@@ -1,4 +1,4 @@
-import type { ThemeFiles } from './bundle';
+import type { ThemeFiles } from '../bundle';
 import { formaBundleTheme } from './forma-theme';
 import { ATELIER_THEME_FILES } from './atelier-theme.generated';
 

@@ -1,4 +1,4 @@
-import type { ThemeFiles } from './bundle';
+import type { ThemeFiles } from '../bundle';
 import { formaBundleTheme } from './forma-theme';
 import { AURA_THEME_FILES } from './aura-theme.generated';
 

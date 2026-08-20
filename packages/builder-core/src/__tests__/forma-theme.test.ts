@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { formaBundleTheme } from '../theme/forma-theme';
+import { formaBundleTheme } from '../theme/library/forma-theme';
 import { storefrontHead } from '../storefront/storefront';
 import { renderThemePage } from '../theme/theme-render';
 import { StubResolver } from '../commerce/resolve';

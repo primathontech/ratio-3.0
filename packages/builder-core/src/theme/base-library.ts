@@ -4,10 +4,10 @@
 // no domain and no live theme of its own; it exists only as the immutable base other themes compose
 // over. Publishing it is what turns the (already-built) base⊕overrides composition on for real.
 import { bundleId, type ThemeFiles } from './bundle';
-import { formaBundleTheme } from './forma-theme';
-import { novaBundleTheme } from './nova-theme';
-import { auraBundleTheme } from './aura-theme';
-import { atelierBundleTheme } from './atelier-theme';
+import { formaBundleTheme } from './library/forma-theme';
+import { novaBundleTheme } from './library/nova-theme';
+import { auraBundleTheme } from './library/aura-theme';
+import { atelierBundleTheme } from './library/atelier-theme';
 import type { ThemeStore, CompileFn } from './theme-store';
 import { pool } from '@ratio/data-db';
 
