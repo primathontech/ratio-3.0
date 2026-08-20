@@ -10,6 +10,7 @@ import { islandsRuntimeScript, IslandRegistry } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
 import { S3ObjectStore, CdnReadObjectStore } from '@ratio/data-objects';
 import { ThemeStore } from '@ratio/builder-core';
+import { robotsTxt, sitemapXml, tenantTag, DATA_SOURCE_TYPES } from '@ratio/builder-core';
 import { config } from './config';
 import { resolveEdgeSecret } from '@ratio/edge-core';
 import { withSpan, withRequestSpan, SpanKind } from '@ratio/observability-tracing';
@@ -219,6 +220,50 @@ app.all('*', async (c) => {
   if (tenant.status !== 'active') {
     c.header('x-cache', 'no-store');
     return c.text('unknown tenant', 404);
+  }
+
+  // SEO (OFCE-718): robots.txt + sitemap.xml. Tenant-scoped, edge-cacheable (tenant + data tags).
+  if (path === '/robots.txt') {
+    const origin = new URL(c.req.url).origin;
+    c.header('x-tenant', tenantId as string);
+    c.header('x-handler', 'robots');
+    c.header('content-type', 'text/plain; charset=utf-8');
+    c.header('cache-control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    c.header('x-surrogate-keys', tenantTag(tenantId as string));
+    return c.body(robotsTxt(origin));
+  }
+  if (path === '/sitemap.xml') {
+    const origin = new URL(c.req.url).origin;
+    const rctx = { tenantId: tenantId as string, routeParams: {}, commerce: tenant.commerce };
+    const paths: string[] = ['/'];
+    const tags = [tenantTag(tenantId as string)];
+    // A commerce-backend hiccup must not 500 the sitemap — it still lists home + custom pages.
+    // NOTE (OFCE-718 follow-up): first:250 is a single unpaginated page — a catalog larger than that is
+    // truncated. A sitemap-index + cursor pagination is the next step if a store exceeds it.
+    const [cols, prods] = await Promise.all([
+      resolver
+        .fetch({ type: DATA_SOURCE_TYPES.COLLECTIONS, params: { first: 250 } }, rctx)
+        .catch(() => null),
+      resolver
+        .fetch({ type: DATA_SOURCE_TYPES.PRODUCTS, params: { first: 250 } }, rctx)
+        .catch(() => null),
+    ]);
+    for (const co of (cols?.value as { collections?: { handle?: string }[] })?.collections ?? [])
+      if (co.handle) paths.push(`/collections/${co.handle}`);
+    // The product route resolves the URL segment as a HANDLE (/products/:handle), so a product with no
+    // handle would 404 — skip it rather than emit a broken /products/<id> loc.
+    for (const pr of (prods?.value as { products?: { handle?: string }[] })?.products ?? [])
+      if (pr.handle) paths.push(`/products/${pr.handle}`);
+    tags.push(...(cols?.tags ?? []), ...(prods?.tags ?? []));
+    // Published custom Pages (About/FAQ/landing), excluding home which is already listed.
+    const pages = await pageStore.listPages(tenantId as string).catch(() => []);
+    for (const pg of pages) if (pg.published && pg.path && pg.path !== '/') paths.push(pg.path);
+    c.header('x-tenant', tenantId as string);
+    c.header('x-handler', 'sitemap');
+    c.header('content-type', 'application/xml; charset=utf-8');
+    c.header('cache-control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    c.header('x-surrogate-keys', tags.join(' '));
+    return c.body(sitemapXml(origin, paths));
   }
 
   // Island hydration: the per-user fragment behind a shell placeholder. The runtime fetches this

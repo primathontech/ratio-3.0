@@ -124,3 +124,27 @@ test('a suspended tenant is not served (OFCE-410)', async () => {
     await pool.query("DELETE FROM tenants WHERE id='t_susp'");
   }
 });
+
+test('/robots.txt allows crawling, blocks transactional routes, links the sitemap (OFCE-718)', async () => {
+  const res = await call('/robots.txt', edge({ 'x-ratio-tenant': ACME }));
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type') ?? '', /text\/plain/);
+  const body = await res.text();
+  assert.match(body, /User-agent: \*/);
+  assert.match(body, /Disallow: \/cart/);
+  assert.match(body, /Sitemap: http:\/\/origin\/sitemap\.xml/);
+});
+
+test('/sitemap.xml returns a valid urlset including home (OFCE-718)', async () => {
+  const res = await call('/sitemap.xml', edge({ 'x-ratio-tenant': ACME }));
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type') ?? '', /application\/xml/);
+  const body = await res.text();
+  assert.match(body, /<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/);
+  assert.match(body, /<loc>http:\/\/origin\/<\/loc>/);
+});
+
+test('robots/sitemap require a resolved tenant (unknown -> 404)', async () => {
+  const res = await call('/robots.txt', edge({ 'x-ratio-tenant': 't_nope_seo' }));
+  assert.strictEqual(res.status, 404);
+});

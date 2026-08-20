@@ -36,3 +36,39 @@ export function seoHead({ url, siteName }: SeoHeadInput): string {
   tags.push('<meta name="twitter:card" content="summary_large_image">');
   return tags.join('');
 }
+
+function escXml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// robots.txt — allow crawling, keep the transactional/private + API routes out, and point crawlers at
+// the store's sitemap. `origin` is the request origin (scheme + host) so it's correct on any domain.
+export function robotsTxt(origin: string): string {
+  return [
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /cart',
+    'Disallow: /checkout',
+    'Disallow: /account',
+    'Disallow: /api/',
+    `Sitemap: ${origin}/sitemap.xml`,
+    '',
+  ].join('\n');
+}
+
+// sitemap.xml from a list of site-relative paths (e.g. '/', '/collections/shoes', '/products/x'). Paths
+// are de-duplicated (order preserved) and joined to `origin`; every <loc> is XML-escaped. The caller
+// gathers the paths (home + collections + products + published pages) so this stays pure + testable.
+export function sitemapXml(origin: string, paths: string[]): string {
+  const seen = new Set<string>();
+  const body = paths
+    .filter((p) => !seen.has(p) && (seen.add(p), true))
+    .map((p) => `  <url><loc>${escXml(origin + p)}</loc></url>`)
+    .join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
+}
