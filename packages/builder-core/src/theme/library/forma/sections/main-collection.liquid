@@ -1,21 +1,26 @@
-<main class="rt">
-  <h1 class="heading">Collection</h1>
+<main class="rt sec">
+  <div class="sec-head">
+    <div><h2>{{ heading | default: 'Products' | escape }}</h2></div>
+    <span class="count-txt">{{ products.size }} product{% if products.size != 1 %}s{% endif %}</span>
+  </div>
   <div class="grid">
     {% for p in products %}
     {% assign img = p.image_url | default: p.images.first.url %}
     <div class="card">
       <a class="card-link" href="/products/{{ p.handle | escape }}">
         <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
-        <div class="body">
-          <div>{{ p.title | escape }}</div>
-          <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
-        </div>
       </a>
-      <div class="card-atc">
-        <form class="atc" method="post" action="/cart/add">
-          <input type="hidden" name="handle" value="{{ p.handle | escape }}">
-          <button type="submit" class="btn">Add to cart</button>
-        </form>
+      <div class="b">
+        <a class="card-link" href="/products/{{ p.handle | escape }}"><div class="card-name">{{ p.title | escape }}</div></a>
+        <div class="foot">
+          <span class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</span>
+          <div class="card-atc">
+            <form class="atc" method="post" action="/cart/add">
+              <input type="hidden" name="handle" value="{{ p.handle | escape }}">
+              <button type="submit">Add</button>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
     {% endfor %}

@@ -294,19 +294,15 @@ test('default theme home fills product rows for a connected store that lacks the
   }
 });
 
-test('default theme home shows the single All products row out of the box', async () => {
+test('default theme home shows the single featured product row out of the box', async () => {
   const { html } = await renderPage('index');
-  // Target the collection-row section heading specifically (<h2 class="heading">…), NOT incidental
-  // promo-tile copy — asserting a bare /All products/ passes on other marketing text even if the
-  // product row disappears, which would mask a real regression.
-  assert.match(
-    html,
-    /<h2 class="heading">All products<\/h2>/,
-    'the All products row heading renders'
-  );
+  // Target the collection-row section heading specifically, NOT incidental marketing copy — asserting
+  // a bare /Featured products/ could pass on other text even if the product row disappears.
+  assert.match(html, /<h2>Featured products<\/h2>/, 'the featured products row heading renders');
   assert.match(html, /Sample product 1/, 'products render on the home page');
   assert.match(html, /₹499\.00/, 'home prices are formatted to rupees');
-  // Exactly one product row renders as a .grid card layout (only collection-row uses .grid).
+  // Exactly one product row renders as a .grid card layout (only collection-row uses .grid; the
+  // category row uses .cats).
   assert.equal(
     (html.match(/class="grid"/g) ?? []).length,
     1,

@@ -5,30 +5,50 @@
       "params": {
         "first": 8
       }
+    },
+    "cats": {
+      "type": "COLLECTIONS",
+      "params": {
+        "first": 6
+      }
     }
   },
   "sections": [
     {
-      "type": "hero",
+      "type": "forma-hero",
       "data": {
-        "heading": "Everything you love, in one place",
-        "subheading": "Discover our full range of curated products — quality picks, honest prices, delivered to your door.",
-        "cta_label": "Browse all collections",
-        "cta_href": "/collections/all"
+        "kicker": "★ Rated 4.9 by 12,000+ customers",
+        "heading": "Everything you need, delivered fast.",
+        "subheading": "Quality products at fair prices, shipped across India in 2–4 days. Shop with confidence — easy returns, secure checkout.",
+        "cta_label": "Shop all products",
+        "cta_href": "/collections/all",
+        "cta2_label": "Browse collections",
+        "cta2_href": "/collections",
+        "badge_title": "Free delivery",
+        "badge_sub": "On orders over ₹999"
       }
     },
     {
-      "type": "promo"
+      "type": "forma-benefits"
     },
     {
       "type": "collection-row",
       "dataSourceKey": "all",
       "data": {
-        "heading": "All products"
+        "heading": "Featured products",
+        "subheading": "Handpicked favourites, back in stock.",
+        "cta_href": "/collections/all"
       }
     },
     {
-      "type": "brand-story"
+      "type": "forma-categories",
+      "dataSourceKey": "cats",
+      "data": {
+        "heading": "Shop by category"
+      }
+    },
+    {
+      "type": "forma-band"
     }
   ]
 }

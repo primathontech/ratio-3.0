@@ -1,0 +1,15 @@
+<section class="rt hero">
+  <div class="hero-text">
+    {% if kicker %}<span class="hero-pill">{{ kicker | escape }}</span>{% endif %}
+    <h1>{{ heading | escape }}</h1>
+    {% if subheading %}<p>{{ subheading | escape }}</p>{% endif %}
+    <div class="cta-row">
+      {% if cta_label %}<a class="btn" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
+      {% if cta2_label %}<a class="btn btn-ghost" href="{{ cta2_href | default: '/collections/all' | escape }}">{{ cta2_label | escape }}</a>{% endif %}
+    </div>
+  </div>
+  <div class="hero-card">
+    {% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% endif %}
+    {% if badge_title %}<div class="tagcard"><b>{{ badge_title | escape }}</b><span>{{ badge_sub | escape }}</span></div>{% endif %}
+  </div>
+</section>

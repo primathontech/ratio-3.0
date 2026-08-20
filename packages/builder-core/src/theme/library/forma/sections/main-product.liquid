@@ -1,7 +1,8 @@
 <main class="rt pdp">
   {% assign img = image_url | default: images.first.url %}
   <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ title | escape }}">{% endif %}</div>
-  <div>
+  <div class="pdp-info">
+    <div class="crumb">Home / {{ title | escape }}</div>
     <h1>{{ title | escape }}</h1>
     <div class="price">{{ price | money }}{% if compare_at_price and compare_at_price > price %} <s class="was">{{ compare_at_price | money }}</s>{% endif %}</div>
     {# description is merchant catalogue HTML, rendered raw (not escaped) like Shopify's product.description.
@@ -13,5 +14,10 @@
       <input type="hidden" name="handle" value="{{ handle | escape }}">
       <button type="submit" class="btn atc-btn">Add to cart</button>
     </form>
+    <div class="trust">
+      <div><svg viewBox="0 0 24 24"><path d="M3 7h11v8H3zM14 10h4l3 3v2h-7z"></path><circle cx="7" cy="17" r="2"></circle><circle cx="17" cy="17" r="2"></circle></svg>Free 2–4 day shipping</div>
+      <div><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"></path><path d="M3 5v4h4"></path></svg>7-day returns</div>
+      <div><svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"></path></svg>Secure checkout</div>
+    </div>
   </div>
 </main>

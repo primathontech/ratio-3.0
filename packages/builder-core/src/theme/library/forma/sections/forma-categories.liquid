@@ -1,10 +1,5 @@
-<main class="rt sec">
-  <div class="sec-head">
-    <div>
-      <h2>{{ heading | default: 'Collections' | escape }}</h2>
-      {% if subheading %}<p>{{ subheading | escape }}</p>{% endif %}
-    </div>
-  </div>
+<section class="rt sec">
+  <div class="sec-head"><div><h2>{{ heading | default: 'Shop by category' | escape }}</h2></div></div>
   <div class="cats">
     {% for c in collections %}
     {% assign img = c.image_url | default: c.image.src | default: c.image.url %}
@@ -14,4 +9,4 @@
     </a>
     {% endfor %}
   </div>
-</main>
+</section>
