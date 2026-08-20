@@ -1,212 +1,181 @@
-# Theme system architecture
+# How the theme system works
 
-This explains how base themes, stores, and rendering fit together — and answers the common question:
-**"if Nova extends Forma, are the themes really separate?"**
+A **theme** is the _look_ of a shop — its home page, header, footer, product page, colours and fonts.
 
-> **Yes. Each base theme is a complete, self-contained theme at runtime.** "Extends Forma" happens only
-> in the _source_, at build time, to avoid copy-pasting shared chrome. The built output is a full theme.
-
-There are **two different composition steps** that are easy to conflate. Keep them apart:
-
-|          | Layer A — author-time                                | Layer B — runtime                                         |
-| -------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| What     | `novaBundleTheme() = { ...forma, ...novaOverrides }` | `store live theme = base@version ⊕ store edits`           |
-| When     | when we author/generate a base's SEED                | on every storefront render, per store                     |
-| Purpose  | DRY source — don't duplicate shared chrome           | multi-tenant lineage — a store keeps only its diffs       |
-| Result   | a **complete** ThemeFiles set (all files)            | the store's **full** composed page                        |
-| Coupling | Nova's _source_ reads Forma's _source_               | a store tracks its base by `base_theme_id`/`base_version` |
+We have four themes today. **Each one is a full, complete theme on its own.**
 
 ```mermaid
 flowchart LR
-  subgraph A["Layer A — author-time (source → seed)"]
-    forma[forma/ files] --> compose1["{...forma, ...novaOverrides}"]
-    novaSrc[nova/ distinctive files] --> compose1
-    compose1 --> full["novaBundleTheme() = COMPLETE theme"]
-    full --> seed[(library-nova @v1<br/>in _library tenant)]
-  end
-  subgraph B["Layer B — runtime (base + store overrides)"]
-    seed -. adopted by .-> store
-    store[store theme<br/>base_theme_id=library-nova] --> composeR["composeTheme(base@v, overrides)"]
-    edits[store's own edits] --> composeR
-    composeR --> live["live compiled page"]
-  end
+  forma[Forma]
+  nova[Nova]
+  aura[Aura]
+  atelier[Atelier]
 ```
 
-> **All four bases are full standalone directories.** Each owns every file (its own home, header,
-> footer, collection page, product page, sections, and CSS) and shares **only the contract below** (the
-> data shapes + render slots), never the UI. Compose-over-Forma (Layer A's diagram) is an _optional_
-> authoring shortcut for a light variant — **no theme currently uses it**; each `*-theme.ts` just returns
-> its own files. See the last section for when to reach for the shortcut.
-
 ---
 
-## What every theme shares: the contract, not the chrome
+## What do themes share? Only the data and the page rules — not the look
 
-The ONLY things a theme must honor are the render contract and the data shapes. Everything visual is
-per-theme. This is the "same data format, different UI" you get across themes.
+Themes do **not** share their look. Every theme can look totally different.
+They share just two things:
 
-**1. Render / layout contract** (enforced by `theme-render.ts`; a standalone theme MUST provide these):
-
-| File                                                      | Role                                                                                   |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `layout/theme.liquid`                                     | owns the whole `<!doctype html>` document. Must include the slots below                |
-| `templates/index.json`, `collection.json`, `product.json` | each lists section instances + `dataSources`                                           |
-| `sections/<type>.liquid`                                  | every `type` a template references                                                     |
-| `sections/header.liquid`, `sections/footer.liquid`        | chrome — origin renders them into `{{ header }}` / `{{ footer }}` with the store's nav |
-| `sections/order.liquid`                                   | the thank-you page (checkout integration hydrates its line-items)                      |
-| `config/tokens.json`, `assets/base.css`                   | brand tokens + the theme's own stylesheet                                              |
-
-Layout slots the origin fills: `{{ content_for_layout }}` (the page's sections), `{{ header }}`,
-`{{ footer }}`, `{{ base_css }}` / `{{ token_css }}` / `{{ theme_css }}`, `{{ content_for_header }}`
-(islands runtime + security), `{{ content_for_body_end }}`, and escaped `page_title` / `site_name`.
-
-**2. Data contract** — sections bind to a `dataSourceKey`; the resolver injects **canonical, flat** data
-regardless of backend. A theme's Liquid reads these fields; the _layout_ around them is entirely yours:
-
-| dataSource type                    | injects                  | shape the section reads                                                                                    |
-| ---------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| `PRODUCTS` / `PRODUCTS_BY_HANDLES` | `{ products: [...] }`    | each product: `id, title, handle, price` (paise), `compare_at_price?`, `image_url`/`images`, `description` |
-| `COLLECTION_BY_HANDLES`            | `{ products: [...] }`    | same product shape, filtered to the collection                                                             |
-| `PRODUCT`                          | a flat product           | `title, handle, price, compare_at_price?, description, image_url/images, variant_id?/variants`             |
-| `COLLECTIONS`                      | `{ collections: [...] }` | each: `handle, title`                                                                                      |
-
-**3. Filters** — merchant/theme Liquid is untrusted; only `money` (paise → ₹), `escape`, `default` are
-available. Prices are always paise; render with `| money`.
-
-So: **build any header/home/collection/PDP you like** — as long as the layout has the slots, templates
-reference real sections, and your Liquid reads the canonical product/collection fields, it renders on
-the same data as every other theme.
-
----
-
-## Layer A — how a base is built and seeded (author-time)
-
-Every base is a **full directory** — `forma/`, `nova/`, `aura/`, `atelier/` each ship every file
-(layout, sections incl. header/footer/order, templates, config, assets). `gen:themes` bakes each dir
-verbatim into `<name>-theme.generated.ts`, and each `*-theme.ts` returns its own files. The diagram
-below shows the _optional_ compose-over-Forma shortcut (unused today) — a theme _may_ ship only its
-distinctive files and merge over Forma at author time, but the recommended shape is a full directory.
+1. **The data** — products and collections (same for every theme).
+2. **The page rules** — where the header, footer and content go (same slots for every theme).
 
 ```mermaid
 flowchart TD
-  subgraph src["src/theme/library/ (editable source)"]
-    fdir["forma/  (full theme:<br/>layout, sections, templates, config, assets)"]
-    ndir["nova/  (distinctive only:<br/>tokens, index.json, nova-hero, tiles, nova.css)"]
-  end
-  fdir -->|gen:themes| fgen[forma-theme.generated.ts<br/>FORMA_THEME_FILES]
-  ndir -->|gen:themes| ngen[nova-theme.generated.ts<br/>NOVA_THEME_FILES]
-  fgen --> fcomp["formaBundleTheme() → full set"]
-  fcomp --> ncomp
-  ngen --> ncomp["novaBundleTheme():<br/>{ ...forma, ...novaFiles,<br/>base.css = forma.css + nova.css }"]
-  ncomp --> reg["BASE_THEMES registry (base-library.ts)"]
-  fcomp --> reg
-  reg -->|ensureSeededBaseById| lib[("_library tenant<br/>library-default @v1 (Forma)<br/>library-nova @v1 (Nova)<br/>…")]
+  shared["SHARED (same for all)<br/>• product / collection data<br/>• page slots (header, footer, content)"]
+  shared --> forma["Forma<br/>(its own look)"]
+  shared --> nova["Nova<br/>(its own look)"]
+  shared --> aura["Aura<br/>(its own look)"]
+  shared --> atelier["Atelier<br/>(its own look)"]
 ```
 
-Key points:
-
-- **The seed is a snapshot.** `ensureSeededBaseById('library-nova')` publishes v1 = the _full_ composed
-  file set. From then on it's **seed-only**: later changes to Forma's code never silently clobber an
-  already-seeded base (see `base-library.ts`).
-- **So each seeded base is independent at runtime** — `library-nova @v1` physically contains every file
-  it needs. It does **not** reach back to Forma to render.
-- The only cross-theme link is at the _source_ level: `novaBundleTheme()` calls `formaBundleTheme()`.
-  That's the DRY shortcut, nothing more.
+So: **same data, different look.** A theme can have a different home, header, footer, collection page and
+product page — only the data behind them is the same.
 
 ---
 
-## Layer B — how a store uses a base (runtime base ⊕ overrides)
+## The one thing that confuses people: two kinds of "mixing"
 
-This is the multi-tenant part, and it's a **different** mechanism from Layer A. A store **adopts** one
-base and stores only its own edits; the base is referenced by id + version.
+The word "mix / combine" is used in **two totally different places**. Please keep them apart.
 
 ```mermaid
 flowchart LR
-  pick["merchant picks a base<br/>(onboarding / new theme)"] --> adopt
-  adopt["ensureTheme(tenant, themeId,<br/>base = {library-nova, v1})"] --> row["theme row:<br/>base_theme_id = library-nova<br/>base_version = 1"]
-  row --> edits["store edits a few files<br/>(saved as OVERRIDES only)"]
-  edits --> render["origin render:<br/>composeTheme(base source, overrides)"]
-  render --> page["full page served"]
+  subgraph K1["Kind 1 — when we BUILD a theme (once, by a developer)"]
+    direction LR
+    a["theme folder"] --> b["one full theme<br/>saved in the library"]
+  end
+  subgraph K2["Kind 2 — when a SHOP uses a theme (on every page view)"]
+    direction LR
+    c["theme from library"] --> e["full page"]
+    d["shop's small changes"] --> e
+  end
 ```
 
-- A store's **draft = only the files it changed**. Files it didn't touch come from the base.
-- `composeTheme(base, overrides)` (see `theme-compose.ts`) merges them at read time; the store's **live
-  compiled** theme (`loadLiveCompiled`) is the complete page. Nothing is missing — untouched files fall
-  through to the base.
-- This is why a store can pull a **base improvement** later without losing its edits → propagation.
+|            | Kind 1 — build time                    | Kind 2 — shop time               |
+| ---------- | -------------------------------------- | -------------------------------- |
+| When       | once, when a developer makes the theme | every time someone opens a shop  |
+| What joins | files in the theme folder → one theme  | the theme + the shop's own edits |
+| Result     | one full theme in the library          | the full page shown to the buyer |
 
-### Render path (origin)
+---
+
+## Kind 1 — how a theme is built and saved
+
+Each theme is just a **folder of files** (home page, header, footer, product page, style, and so on).
+A small script (`npm run gen:themes`) turns that folder into code. The theme is then saved **once** in
+the library as "version 1".
+
+```mermaid
+flowchart LR
+  dir["nova/ folder<br/>(all its files)"] -->|npm run gen:themes| gen["nova-theme.generated.ts<br/>(same files, as code)"]
+  gen --> fn["novaBundleTheme()<br/>returns its own files"]
+  fn --> reg["theme list (base-library.ts)"]
+  reg -->|seed once| lib[("Library<br/>Nova = version 1<br/>Aura = version 1<br/>…")]
+```
+
+Two important points:
+
+- **Saved once, then frozen.** After a theme is saved in the library, it does **not** change by itself.
+- **Each saved theme is complete.** Nova in the library has _all_ its own files. It does not borrow
+  anything from Forma to work.
+
+> Long ago Nova/Aura/Atelier borrowed some files from Forma to save typing. **Not any more** — today
+> every theme is its own full folder. (Borrowing is still allowed for a tiny "just a new home page"
+> theme, but no theme does that now.)
+
+---
+
+## Kind 2 — how a shop uses a theme
+
+A shop **picks one theme**. The shop can change a few files (its own header text, its brand colour).
+The shop saves **only what it changed** — nothing else. When a buyer opens the shop, we join the theme
+and the shop's changes to make the full page.
+
+```mermaid
+flowchart LR
+  pick["shop picks Nova"] --> tag["shop remembers:<br/>theme = Nova, version = 1"]
+  tag --> join
+  edits["shop changed 2 files<br/>(saved as changes only)"] --> join["join: theme + shop changes"]
+  join --> page["full page"]
+```
+
+- The shop saves **only its edits**. Every file it did _not_ touch simply comes from the theme.
+- So nothing is ever missing — untouched files fall back to the theme.
+- This is also why a shop can later get an **improved theme** without losing its own edits (next section).
+
+### Showing a page to a buyer
 
 ```mermaid
 sequenceDiagram
-  participant Edge
-  participant Origin
-  participant DB as Postgres
-  participant Obj as Object store
-  Edge->>Origin: request (cache miss, proxied)
-  Origin->>DB: live_theme_id / version for tenant
-  Origin->>DB: theme.base_theme_id / base_version
-  Origin->>Obj: base source (library-nova @v1) + store overrides
-  Origin->>Origin: composeTheme(base, overrides) → render Liquid
-  Origin-->>Edge: full HTML page
+  participant Buyer
+  participant Edge as Edge (just forwards)
+  participant Origin as Origin (builds the page)
+  participant Store as Storage
+  Buyer->>Edge: open the shop
+  Edge->>Origin: forward the request
+  Origin->>Store: get the shop's theme + version
+  Origin->>Store: get the shop's own changes
+  Origin->>Origin: join them → build the page
+  Origin-->>Buyer: full HTML page
 ```
 
-### Propagation (improve a base, roll it into its stores)
+### Improving a theme later (and pushing it to shops)
 
-Because every store records which base + version it tracks, improving a base is a version bump the
-stores can pull in — keeping their own edits (only files they didn't override advance).
+If we make a theme better, we save it as a **new version**. Shops using that theme can pull the new
+version in. Each shop keeps its own edits (only the files it did not change get updated).
 
 ```mermaid
 flowchart LR
-  editbase["platform admin edits<br/>library-nova → publishes v2"] --> plan["planBaseRebase(library-nova)"]
-  plan --> targets["stores with base_theme_id=library-nova<br/>and base_version < 2"]
-  targets --> apply["applyBaseRebase → each store<br/>base_version 1 → 2 (edits kept)"]
-  apply --> purge["edge purge → new page served"]
+  edit["improve Nova → save version 2"] --> find["find shops on Nova, still on version 1"]
+  find --> push["update them to version 2<br/>(their own edits stay)"]
+  push --> fresh["new page shown"]
 ```
 
-Note this scopes **per base** (`WHERE base_theme_id = $1`) — a Nova improvement only touches Nova stores,
-never Aura/Atelier/Forma stores.
+This only touches shops on **that** theme. Improving Nova never touches Aura, Atelier or Forma shops.
 
 ---
 
-## "Are the themes separate?" — the precise answer
+## The data every theme gets (the "same data")
 
-- **At runtime: fully separate.** Each seeded base is a complete root theme; each store renders from its
-  own adopted base @version ⊕ its own edits. Forma is not consulted when rendering a Nova store.
-- **At source: Nova/Aura/Atelier share Forma's chrome by composition.** This is a deliberate DRY choice:
-  fix the footer once in `forma/`, and every theme that doesn't override it gets the fix at its next
-  seed. A theme diverges by dropping its own file in its dir (it wins over the inherited one).
-- **You never get "missing" files.** Composing over Forma makes a theme a _superset_ — it inherits every
-  shared file and adds its own. The failure mode is the opposite (inheriting a shared section you don't
-  use), which is harmless (unused sections don't render).
+Every theme reads the **same, simple data**. The look around it is the theme's own choice.
 
-## Standalone themes (the recommended shape for distinct themes)
+| The theme asks for   | It gets                              | Each item has                                                                  |
+| -------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
+| products / a listing | a list of products                   | `title`, `price` (in paise), `image`, `handle`, old price (if any), short text |
+| a collection         | a list of that collection's products | same product fields                                                            |
+| one product          | one product                          | `title`, `price`, images, description, variant                                 |
+| collections          | a list of collections                | `title`, `handle`                                                              |
 
-A distinct theme — different home, header, footer, collection page, product page — should be a **full
-standalone directory** like `forma/`: its own copy of every file, and a `*-theme.ts` that just returns
-its own files (no `...forma`). It shares nothing but the [contract above](#what-every-theme-shares-the-contract-not-the-chrome).
+Price is always in **paise**. Show it with the `money` filter to get `₹499.00`.
+Only three filters are allowed in theme code: `money`, `escape`, `default`.
+
+---
+
+## What every theme must have
+
+A theme is free in its **look**, but it must include these files so the system can render it:
 
 ```mermaid
 flowchart TD
-  contract["SHARED: render contract + data shapes + filters<br/>(engine: theme-render / theme-compose / resolver)"]
-  contract --> forma["forma/  — full theme (home, header, footer, collection, PDP)"]
-  contract --> luxe["luxe/   — full theme, totally different UI, SAME data"]
-  contract --> zine["zine/   — full theme, totally different UI, SAME data"]
-  forma -. no cross-theme sharing .- luxe
-  luxe  -. no cross-theme sharing .- zine
+  theme["a theme folder must have"] --> layout["layout/theme.liquid<br/>(the full page shell + slots)"]
+  theme --> chrome["sections/header.liquid<br/>sections/footer.liquid<br/>sections/order.liquid"]
+  theme --> tpl["templates/index.json<br/>templates/collection.json<br/>templates/product.json<br/>(+ the sections they use)"]
+  theme --> style["config/tokens.json<br/>assets/base.css"]
 ```
 
-**When to use which:**
+The page shell (`layout/theme.liquid`) must leave **slots** the system fills in: the page content
+(`content_for_layout`), the header and footer, the styles, and a couple of system slots
+(`content_for_header`, `content_for_body_end`).
 
-- **Full standalone directory (default for a real, distinct theme).** Own everything. ➕ zero coupling —
-  editing one theme never affects another; every page can look completely different. ➖ shared chrome is
-  duplicated, so a cross-theme fix is per-theme (acceptable — distinct themes _want_ to diverge).
-- **Compose-over-Forma (shortcut, for a light variant only).** Reuse Forma's chrome and change just
-  tokens + a couple of sections (what Nova/Aura/Atelier do today). Use this only when a theme really is
-  "Forma with a different home + palette." The moment it wants its own header/footer/collection/PDP,
-  promote it to a full directory.
+---
 
-Runtime behaviour is **identical** either way — both produce a complete, seeded, self-contained theme.
-The choice is purely about how much source you copy vs. inherit.
+## "Are the themes really separate?" — yes
 
-See [`library/README.md`](./library/README.md) for the step-by-step (both shapes).
+- **When a buyer opens a shop:** fully separate. Each theme is complete and stands on its own. A Nova
+  shop never looks at Forma.
+- **The only shared thing** is the data and the page slots above — never the look.
+- **Nothing is ever missing.** Each theme carries all its own files.
+
+Want the step-by-step to make a new theme? See [`library/README.md`](./library/README.md).

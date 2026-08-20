@@ -1,23 +1,41 @@
-# Base themes — how to add one
+# How to add a new theme
 
-A **base theme** ("start from" option) is what a merchant picks when they onboard a store or create a
-new theme. Each base is seeded into the `_library` tenant as a root theme; a store adopts one and
-records it via `theme.base_theme_id`, so [base propagation](../base-propagation.ts) can later roll a
-base's improvements out to the stores on it.
+A **theme** is a "start from" look a shop owner picks when they open a store (or make a new theme).
+This folder keeps the **themes** (`forma`, `nova`, `aura`, `atelier`). The **engine** (the code that
+runs themes) lives one folder up. Please keep them apart — put theme files here, not engine code.
 
-This folder holds the **theme content** (the four bases today: `forma`, `nova`, `aura`, `atelier`); the
-theme **engine** lives one level up in `../` (`bundle`, `theme-compose`, `theme-render`, `theme-store`,
-`base-library`, …). Keep that separation — put theme files here, not engine code.
+Big picture — first read [`../ARCHITECTURE.md`](../ARCHITECTURE.md). In one line:
 
-## The shape: each theme is a full standalone directory
+> **Every theme is its own full folder.** It has its own home, header, footer, collection page,
+> product page and style. Themes share only the data and the page slots — never the look.
 
-Every base is a **complete, self-contained theme** — its own `layout/`, `sections/` (including `header`,
-`footer`, `order`), `templates/` (index, collection, product), `config/tokens.json`, and
-`assets/base.css`. All four (`forma`, `nova`, `aura`, `atelier`) own every file; they share **nothing**
-but the render contract + data shapes (see [`../ARCHITECTURE.md`](../ARCHITECTURE.md)). That's what lets
-a theme differ on **every** page — its own header, footer, collection grid, and product page.
+## The steps (example: a theme called `luxe`)
 
-Its `*-theme.ts` is a one-line passthrough returning the theme's own files:
+```mermaid
+flowchart TD
+  s1["1. Copy forma/ → luxe/<br/>change the files you want"] --> s2["2. Add luxe-theme.ts<br/>(one line: return its own files)"]
+  s2 --> s3["3. Add luxe to the list in<br/>scripts/gen-themes.ts"]
+  s3 --> s4["4. Run: npm run gen:themes"]
+  s4 --> s5["5. Add luxe to BASE_THEMES<br/>in base-library.ts (id + name)"]
+  s5 --> s6["6. Add luxe/ to .prettierignore"]
+  s6 --> s7["7. Run tests (auto-covers it)"]
+```
+
+**1. Make the theme folder.** Copy `forma/` to `luxe/` and change what you want, page by page. Keep
+these files (the system needs them):
+
+- `layout/theme.liquid` — the full page shell, with the slots kept.
+- `sections/header.liquid`, `sections/footer.liquid`, `sections/order.liquid`.
+- `templates/index.json`, `templates/collection.json`, `templates/product.json` — and the sections they
+  use.
+- `config/tokens.json` — font, corner shape, text size. Do **not** put a brand colour here; the shop
+  gives that.
+- `assets/base.css` — the theme's **own full** style file.
+
+Design each page however you like — just read the same product/collection fields, and keep the slots.
+Keep at least one product row on the home page so a new shop is never empty.
+
+**2. Add the small file** `luxe-theme.ts` — just one line that returns the theme's own files:
 
 ```ts
 import type { ThemeFiles } from '../bundle';
@@ -27,71 +45,57 @@ export function luxeBundleTheme(): ThemeFiles {
 }
 ```
 
-> **Optional shortcut (light variant only).** If a theme is truly "Forma with a different home +
-> palette" and nothing else, you _may_ ship only its distinctive files and compose over Forma in the
-> `*-theme.ts` (`{ ...formaBundleTheme(), ...overrides }`). No current theme does this — prefer a full
-> standalone directory unless the duplication really buys nothing.
+**3. Tell the generator about the folder** — add one line to the `THEMES` list in
+`scripts/gen-themes.ts`:
 
-## Steps to add a base (e.g. `luxe`)
+```ts
+{ dir: 'luxe', out: 'luxe-theme.generated.ts', exportName: 'LUXE_THEME_FILES' },
+```
 
-1. **Copy `forma/` to `library/luxe/`** and edit it, page by page. Keep the
-   [contract files](../ARCHITECTURE.md#what-every-theme-shares-the-contract-not-the-chrome)
-   (`layout/theme.liquid` with its slots; `sections/{header,footer,order}.liquid`;
-   `templates/{index,collection,product}.json` + the sections they reference; `config/tokens.json`;
-   `assets/base.css`). Design each page however you like — just read the canonical product/collection
-   fields and keep the layout slots. Notes:
-   - `config/tokens.json` — typography/corners/size. Keys are from the **fixed scales** in
-     `../../storefront/storefront.ts` (`FONTS`, `BASE_SIZE`, `RADIUS`, `CONTAINER`). Do **not** set a
-     brand colour — that comes from the store and applies on top.
-   - `templates/index.json` — keep at least one handle-independent `PRODUCTS` row so a fresh store is
-     never empty.
-   - `assets/base.css` — the theme's **whole** stylesheet (it ships its own, not a diff).
+**4. Build it:** `npm run gen:themes`. This turns your folder into the `luxe-theme.generated.ts` code
+file. Commit that file too.
 
-2. **Add the composer** `library/luxe-theme.ts` — the one-line passthrough shown above.
+**5. Add the theme to the list** in `../base-library.ts`:
 
-3. **Register the dir with the generator** — add an entry to the `THEMES` array in
-   `scripts/gen-themes.ts`:
+```ts
+export const LUXE_BASE_THEME_ID = 'library-luxe'; // id — never change it later
+// …add to BASE_THEMES:
+{ id: LUXE_BASE_THEME_ID, name: 'Luxe', description: 'Clean, high-end — for premium brands.', files: luxeBundleTheme },
+```
 
-   ```ts
-   { dir: 'luxe', out: 'luxe-theme.generated.ts', exportName: 'LUXE_THEME_FILES' },
-   ```
+The picker (in onboarding and the New-theme box) reads the list from the server, so your theme shows up
+on its own — no UI change needed.
 
-4. **Bake it:** `npm run gen:themes` → writes `library/luxe-theme.generated.ts` (inline strings, so
-   builder-core stays runtime-fs-free). Commit the generated file.
+**6. Protect the theme files** — add your folder to `.prettierignore` (see the rules below):
 
-5. **Register the base** in `../base-library.ts`:
+```
+packages/builder-core/src/theme/library/luxe/
+```
 
-   ```ts
-   export const LUXE_BASE_THEME_ID = 'library-luxe'; // stable id — see rules below
-   // …add to BASE_THEMES:
-   { id: LUXE_BASE_THEME_ID, name: 'Luxe', description: 'Understated, high-end — for premium brands.', files: luxeBundleTheme },
-   ```
+**7. Test.** One test file checks the home, collection and product page of **every** theme in the list,
+so your theme is covered as soon as it is added. Run:
 
-   The picker (onboarding + New-theme dialog) reads `GET /base-themes`, so it appears automatically —
-   no admin-web change.
+```
+npm run gen:themes && npm run typecheck && <builder-core tests>
+```
 
-6. **Prettier-ignore the content** — add to `.prettierignore` (theme files are byte-exact, see rules):
+## Simple rules to remember
 
-   ```
-   packages/builder-core/src/theme/library/luxe/
-   ```
+```mermaid
+flowchart LR
+  r1["ID is forever<br/>(shops remember it)"]
+  r2["Files are exact<br/>(any change = new version → shops update)"]
+  r3["Must be a full page<br/>(layout + all sections exist)"]
+  r4["Only 3 filters<br/>(money, escape, default)"]
+```
 
-7. **Test:** the generic pass in `__tests__/base-themes-render.test.ts` renders home/collection/product
-   for **every** registered base, so your base is covered the moment it's in `BASE_THEMES`. Run:
-   ```
-   npm run gen:themes && npm run typecheck && <builder-core tests>
-   ```
-
-## Rules & gotchas
-
-- **Ids are permanent.** `library-<name>` is written into every adopting store's `base_theme_id`. Pick
-  it once; never rename it. The **display name + description are free** to change anytime.
-- **Theme files are byte-exact.** Their bytes are hashed into the base's content version — a change
-  bumps the version and **rebases every store on that base**. That's why the content dirs are in
-  `.prettierignore` (prettier reformatting = a spurious rebase) and why the generator inlines them
-  verbatim. Edit a base's files only when you _intend_ to ship a new base version.
-- **A base must be a valid root theme:** `layout/theme.liquid` owns the whole document (`<!doctype …>`),
-  and every section referenced by a template exists as a file. The render contract lives in
-  `../theme-render.ts`; the generic test enforces it.
-- **Merchant Liquid is untrusted** — only the allowlisted filters (`money`, `escape`, `default`) are
-  available; escape any merchant/store text.
+- **The id is forever.** `library-<name>` is saved inside every shop that uses the theme. Choose it
+  once and never rename it. The **name and description can change** any time.
+- **Theme files are exact.** The file bytes decide the theme's version. If you change a file, the theme
+  gets a new version and **every shop on it gets updated**. That is why theme folders are in
+  `.prettierignore` (so auto-formatting does not cause a surprise update). Change theme files only when
+  you really mean to ship a new version.
+- **It must be a full page.** `layout/theme.liquid` must be a full HTML page (`<!doctype …>`), and every
+  section a template names must exist as a file.
+- **Theme code is not trusted.** Only the `money`, `escape` and `default` filters are allowed. Always
+  `escape` any shop/merchant text.
