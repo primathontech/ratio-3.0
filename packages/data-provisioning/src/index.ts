@@ -44,7 +44,7 @@ export async function onboardStore({
   id,
   name,
   host,
-  color = '#333333',
+  color,
   ownerUserId,
   merchantId,
   local = false,
@@ -63,9 +63,11 @@ export async function onboardStore({
     throw new Error('onboardStore requires name and host');
   }
   host = host.toLowerCase(); // hosts are case-insensitive; store lowercase (M-5)
-  // Colour is interpolated into the storefront's CSS — only a hex value may pass (defence
-  // in depth behind the admin-api boundary; the render layer also falls back safely).
-  if (!/^#[0-9a-f]{3,8}$/i.test(color)) {
+  // Colour is an OPTIONAL explicit brand override (OFCE-699). When the merchant doesn't pick one,
+  // leave tenants.theme.color unset so the adopted theme's own accent shows — don't write a
+  // placeholder that would shadow it forever. When provided it's interpolated into the storefront's
+  // CSS, so only a hex value may pass (defence in depth; the render layer also falls back safely).
+  if (color !== undefined && !/^#[0-9a-f]{3,8}$/i.test(color)) {
     throw new Error('color must be a hex value');
   }
   const client = await pool.connect();
@@ -126,7 +128,7 @@ export async function onboardStore({
       [
         tenantId,
         name,
-        JSON.stringify({ color }),
+        JSON.stringify(color ? { color } : {}),
         merchantId ? JSON.stringify({ merchantId }) : null,
       ]
     );

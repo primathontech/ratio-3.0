@@ -20,16 +20,31 @@ test('parseThemeTokens returns {} for absent, malformed, or non-object input', (
   assert.deepEqual(parseThemeTokens('[1,2,3]'), {});
 });
 
-test('resolveThemeTokens lets the theme win, tenant theme fills the gaps', () => {
+test('resolveThemeTokens: the theme is the default, an explicit merchant token overrides it', () => {
   const compiled = { [TOKENS_PATH]: JSON.stringify({ color: '#111827', radius: 'square' }) };
   const tenant = { color: '#dc2626', bodyFont: 'serif', container: 'wide' };
-  // theme overrides color + radius; tenant supplies bodyFont + container it didn't set.
+  // The merchant explicitly set color/bodyFont/container → those win. radius is only in the theme
+  // → the theme default applies. (OFCE-699: theme = default look, merchant override wins.)
   assert.deepEqual(resolveThemeTokens(compiled, tenant), {
-    color: '#111827',
+    color: '#dc2626',
     radius: 'square',
     bodyFont: 'serif',
     container: 'wide',
   });
+});
+
+test("resolveThemeTokens: the theme's own accent applies when the store set no brand colour", () => {
+  // The crux of OFCE-699 — adopting a theme gives THAT theme's signature accent, not a leftover
+  // tenant colour, when the merchant never chose one.
+  const nova = { [TOKENS_PATH]: JSON.stringify({ color: '#ff4a00', bodyFont: 'sans' }) };
+  assert.deepEqual(resolveThemeTokens(nova, {}), { color: '#ff4a00', bodyFont: 'sans' });
+  assert.deepEqual(resolveThemeTokens(nova, undefined), { color: '#ff4a00', bodyFont: 'sans' });
+});
+
+test('resolveThemeTokens: an empty/blank tenant value does not override the theme', () => {
+  const theme = { [TOKENS_PATH]: JSON.stringify({ color: '#ff4a00' }) };
+  // A tenant row that carries color:'' (or a blank) must not shadow the theme's accent.
+  assert.deepEqual(resolveThemeTokens(theme, { color: '' }), { color: '#ff4a00' });
 });
 
 test('resolveThemeTokens falls back to the tenant theme when the file is absent or the bundle is null', () => {
