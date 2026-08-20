@@ -40,4 +40,19 @@ for (const [name, files] of THEMES) {
       `${name} layout must inject token_css inside @layer tokens`
     );
   });
+
+  test(`${name} defines the uniform semantic --color-* token tier (OFCE-702)`, () => {
+    const base = files['assets/base.css'];
+    for (const v of [
+      '--color-accent',
+      '--color-accent-ink',
+      '--color-ink',
+      '--color-muted',
+      '--color-surface',
+      '--color-bg',
+      '--color-line',
+    ]) {
+      assert.match(base, new RegExp(`${v}\\s*:`), `${name} defines the semantic ${v}`);
+    }
+  });
 }

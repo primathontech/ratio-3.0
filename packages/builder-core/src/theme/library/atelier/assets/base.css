@@ -14,6 +14,14 @@
   --line: #ded6c6;
   --line-soft: #e7e0d1;
   --accent: #7a5c28; /* default antique bronze — the store's brand colour overrides this */
+  /* semantic names alias the raw palette so components can consume one vocabulary (OFCE-702) */
+  --color-accent: var(--accent);
+  --color-accent-ink: #fff;
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-surface: var(--card);
+  --color-bg: var(--paper);
+  --color-line: var(--line);
   --footer-bg: #1b1712; /* footer is a fixed dark panel — never flips */
   --footer-ink: #f6f2e9;
   /* Fallbacks; the theme's token CSS (from tokens.json + store brand) overrides these. */

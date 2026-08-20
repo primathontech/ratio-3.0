@@ -8,6 +8,9 @@
 :root{
   --accent:#c17f92;--accent-ink:#fff;--ink:#3b333a;--muted:#9c9098;--paper:#fff;
   --wash:#f8f3f4;--blush:#f3e9ec;--soft:#f4edef;--line:#ece2e6;
+  /* semantic names alias the raw brand vars so components can consume one vocabulary (OFCE-702) */
+  --color-accent:var(--accent);--color-accent-ink:var(--accent-ink);--color-ink:var(--ink);
+  --color-muted:var(--muted);--color-surface:var(--paper);--color-bg:var(--wash);--color-line:var(--line);
   --maxw:1160px;--base:16px;--r:var(--radius,20px);
   --font:'Helvetica Neue',Arial,sans-serif;--font-heading:var(--font);
 }
