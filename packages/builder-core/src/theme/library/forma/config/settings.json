@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "settings": [
+    {
+      "id": "radius",
+      "type": "select",
+      "label": "Corners",
+      "default": "soft",
+      "options": [
+        { "value": "square", "label": "Square" },
+        { "value": "soft", "label": "Soft" },
+        { "value": "rounded", "label": "Rounded" }
+      ]
+    },
+    {
+      "id": "elevation",
+      "type": "select",
+      "label": "Card elevation",
+      "default": "flat",
+      "options": [
+        { "value": "flat", "label": "Flat" },
+        { "value": "soft", "label": "Soft" },
+        { "value": "lifted", "label": "Lifted" }
+      ]
+    }
+  ]
+}

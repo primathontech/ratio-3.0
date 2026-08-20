@@ -8,6 +8,7 @@ import type { Api, Store, StoreTheme, ThemeFiles } from '../../common/api';
 import { ApiError, canManageStore } from '../../common/api';
 import { Spinner, useToast } from '../../common/ui';
 import { tokensFromFiles, filesWithTokens } from './tokens-file';
+import { settingsFromFiles } from './settings-file';
 import { PreviewFrame } from './preview-frame';
 import { ThemeControls, resolve } from './theme-controls';
 import './theme-settings.css';
@@ -19,6 +20,7 @@ const CHANGE_LABELS: Partial<Record<keyof StoreTheme, string>> = {
   bodyFont: 'font',
   baseSize: 'base text size',
   radius: 'corner roundness',
+  elevation: 'card elevation',
 };
 const CHANGE_ORDER = Object.keys(CHANGE_LABELS) as (keyof StoreTheme)[];
 
@@ -87,6 +89,10 @@ export function ThemeSettingsPanel({
     return () => clearTimeout(previewTimer.current);
   }, [api, store.id, themeId, files, theme]);
 
+  // The active theme's own controls (corners, card elevation …) come from its shipped config/settings.json,
+  // already present in the loaded draft files — so the editor shows exactly the knobs this theme honours.
+  const settings = useMemo(() => (files ? settingsFromFiles(files) : []), [files]);
+
   const changes = useMemo(() => {
     if (!theme || !saved) return [] as (keyof StoreTheme)[];
     const a = resolve(theme);
@@ -144,7 +150,7 @@ export function ThemeSettingsPanel({
   return (
     <div className="ts">
       <div className="ts-grid">
-        <ThemeControls theme={theme} onChange={setTheme} />
+        <ThemeControls theme={theme} onChange={setTheme} settings={settings} />
 
         <div className="ts-preview">
           <div className="ts-preview-bar">

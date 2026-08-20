@@ -483,6 +483,9 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    /* resting elevation bridges the theme-owned card-elevation knob (rootVars emits --elevation);
+       cards rest flat by default, so this is `none` until a merchant lifts them. */
+    box-shadow: var(--elevation, none);
     transition:
       box-shadow 0.16s,
       transform 0.16s;

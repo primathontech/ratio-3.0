@@ -21,7 +21,21 @@ export interface ThemeTokens {
   baseSize?: string; // key of BASE_SIZE
   radius?: string; // key of RADIUS
   container?: string; // key of CONTAINER
+  elevation?: string; // key of ELEVATION (theme-owned; only themes that bridge --elevation honour it)
 }
+
+// The canonical set of merchant-overridable token keys — the SINGLE allowlist both the backend and the
+// editor filter against (tokens.json read/write, and which schema control ids are accepted), so an
+// arbitrary key can never persist into a bundle or drive an unknown control.
+export const MERCHANT_TOKEN_KEYS = [
+  'color',
+  'bodyFont',
+  'headingFont',
+  'baseSize',
+  'radius',
+  'container',
+  'elevation',
+] as const satisfies readonly (keyof ThemeTokens)[];
 
 // ── Value maps (merchant picks a KEY → the CSS value). Self-hostable / websafe stacks (no CDN font). ──
 export const FONTS: Record<string, string> = {
@@ -58,6 +72,22 @@ export const CONTAINER: Record<string, string> = {
   wide: '1200px',
 };
 
+// Card elevation — a THEME-OWNED knob. rootVars emits --elevation; a theme opts in by consuming
+// `var(--elevation, <its resting default>)` on its cards. Values re-point to the theme's own shadow
+// scale. Forma's cards rest flat, so 'flat' (the default) resolves to none → byte-identical until the
+// merchant lifts them.
+export const ELEVATION: Record<string, string> = {
+  flat: 'none',
+  soft: 'var(--shadow-sm)',
+  lifted: 'var(--shadow-md)',
+};
+export const ELEVATION_LABELS: Record<string, string> = {
+  flat: 'Flat',
+  soft: 'Soft',
+  lifted: 'Lifted',
+};
+export const ELEVATION_ORDER = ['flat', 'soft', 'lifted'] as const;
+
 // ── Editor: defaults + "Start from" presets + brand swatches ────────────────────────────────────
 export const THEME_DEFAULTS: Required<ThemeTokens> = {
   color: '#2563eb',
@@ -66,6 +96,7 @@ export const THEME_DEFAULTS: Required<ThemeTokens> = {
   baseSize: 'm',
   radius: 'soft',
   container: 'normal',
+  elevation: 'flat',
 };
 
 export interface ThemePreset {
@@ -91,6 +122,7 @@ export const THEME_PRESETS: ThemePreset[] = [
       baseSize: 'm',
       radius: 'square',
       container: 'normal',
+      elevation: 'flat',
     },
     desc: 'Serif · square',
   },
@@ -104,11 +136,33 @@ export const THEME_PRESETS: ThemePreset[] = [
       baseSize: 'm',
       radius: 'rounded',
       container: 'normal',
+      elevation: 'flat',
     },
     desc: 'Sans · round',
   },
 ];
 export const BRAND_SWATCHES = ['#2563eb', '#131927', '#E88B00', '#217005', '#1A2C44'];
+
+// ── Per-theme settings schema (OFCE-710/711) ─────────────────────────────────────────────────────
+// A theme ships config/settings.json declaring the THEME-OWNED controls the editor renders for it —
+// e.g. corners and card elevation for Forma. Global knobs (colour/font/size/width) stay pinned in the
+// editor; only these schema-declared keys vary per theme, so a control is shown only where it applies.
+export type ThemeSettingType = 'select';
+export interface ThemeSettingOption {
+  value: string;
+  label: string;
+}
+export interface ThemeSettingControl {
+  id: string; // a ThemeTokens key the control drives, e.g. 'radius' | 'elevation'
+  type: ThemeSettingType;
+  label: string;
+  options: ThemeSettingOption[];
+  default: string;
+}
+export interface ThemeSettingsSchema {
+  version: number;
+  settings: ThemeSettingControl[];
+}
 
 // ── Primitive scales ────────────────────────────────────────────────────────────────────────────
 export const PRIMITIVES = {
