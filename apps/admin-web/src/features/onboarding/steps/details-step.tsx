@@ -15,8 +15,9 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
   const [hostTouched, setHostTouched] = useState(false);
   const [bases, setBases] = useState<BaseThemeOption[]>([]);
 
-  // Load the start-from bases; default the selection to the first (the platform Default) unless the
-  // merchant already picked one (e.g. navigated back). Best-effort — a failure just hides the picker.
+  // Load the start-from bases once; default the selection to the first (the platform Default) unless
+  // the merchant already picked one (e.g. restored/navigated back). Best-effort — a failure just hides
+  // the picker. Deps are [api] only: patch/data change identity each render and would refetch in a loop.
   useEffect(() => {
     api
       .listBaseThemes()
@@ -25,7 +26,8 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
         if (!data.baseThemeId && list[0]) patch({ baseThemeId: list[0].id });
       })
       .catch(() => {});
-  }, [api, data.baseThemeId, patch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
 
   function onName(name: string) {
     // Keep the subdomain in sync with the name until the merchant edits it themselves.
