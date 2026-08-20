@@ -1,5 +1,5 @@
 import type { ThemeFiles } from './bundle';
-import { DEFAULT_THEME_FILES } from './default-theme.generated';
+import { FORMA_THEME_FILES } from './forma-theme.generated';
 
 // The starter theme a brand-new store adopts (base ⊕ overrides). A real, editable e-commerce home —
 // hero, promo posters, two product rows bound to collections (New Arrivals / Trending), and a brand
@@ -26,6 +26,6 @@ import { DEFAULT_THEME_FILES } from './default-theme.generated';
 // Liquid context (COLLECTION_BY_HANDLES → { products }, PRODUCT → a flat product). A merchant changes
 // which collection a row shows by editing its handle, then Publish → live. Only allowlisted Liquid
 // filters (money, escape, default) — a store's Liquid is treated as untrusted.
-export function defaultBundleTheme(): ThemeFiles {
-  return { ...DEFAULT_THEME_FILES };
+export function formaBundleTheme(): ThemeFiles {
+  return { ...FORMA_THEME_FILES };
 }

@@ -4,10 +4,10 @@
 // no domain and no live theme of its own; it exists only as the immutable base other themes compose
 // over. Publishing it is what turns the (already-built) base⊕overrides composition on for real.
 import { bundleId, type ThemeFiles } from './bundle';
-import { defaultBundleTheme } from './default-theme';
-import { editorialBundleTheme } from './editorial-theme';
+import { formaBundleTheme } from './forma-theme';
 import { novaBundleTheme } from './nova-theme';
 import { auraBundleTheme } from './aura-theme';
+import { atelierBundleTheme } from './atelier-theme';
 import type { ThemeStore, CompileFn } from './theme-store';
 import { pool } from '@ratio/data-db';
 
@@ -37,7 +37,7 @@ export const BASE_THEMES: BaseThemeDef[] = [
     id: DEFAULT_BASE_THEME_ID, // Forma — the flagship, kept as library-default for lineage stability.
     name: 'Forma',
     description: 'Clean, universal — the all-purpose flagship that suits most stores.',
-    files: defaultBundleTheme,
+    files: formaBundleTheme,
   },
   {
     id: NOVA_BASE_THEME_ID,
@@ -55,7 +55,7 @@ export const BASE_THEMES: BaseThemeDef[] = [
     id: EDITORIAL_BASE_THEME_ID, // Atelier — kept as library-editorial for lineage stability.
     name: 'Atelier',
     description: 'Editorial, premium — made for luxury & fashion.',
-    files: editorialBundleTheme,
+    files: atelierBundleTheme,
   },
 ];
 

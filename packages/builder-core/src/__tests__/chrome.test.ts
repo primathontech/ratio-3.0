@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
 import { renderChrome, chromeLinks } from '../storefront/chrome';
-import { defaultBundleTheme } from '../theme/default-theme';
+import { formaBundleTheme } from '../theme/forma-theme';
 import type { NavMenu, NavItem } from '../storefront/nav';
 
 // The untrusted renderer the origin uses; here the trusted engine is fine — the chrome sections only
@@ -40,7 +40,7 @@ const menu: NavMenu = {
 };
 
 test('renderChrome renders the theme header/footer with the store name and nav', async () => {
-  const { header, footer } = await renderChrome(defaultBundleTheme(), renderer, {
+  const { header, footer } = await renderChrome(formaBundleTheme(), renderer, {
     menu,
     footer: null,
     siteName: 'Acme',
@@ -55,7 +55,7 @@ test('renderChrome renders the theme header/footer with the store name and nav',
 });
 
 test('renderChrome reflects an edit to the theme header (editability)', async () => {
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
   files['sections/header.liquid'] =
     '<header class="hdr">MY CUSTOM HEADER {{ site_name | escape }}</header>';
   const { header } = await renderChrome(files, renderer, { menu, footer: null, siteName: 'Acme' });

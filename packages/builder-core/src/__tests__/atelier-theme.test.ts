@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { editorialBundleTheme } from '../theme/editorial-theme';
+import { atelierBundleTheme } from '../theme/atelier-theme';
 import { renderThemePage } from '../theme/theme-render';
 import { StubResolver } from '../commerce/resolve';
 import type { SectionRenderer } from '../theme/theme-render';
@@ -11,14 +11,14 @@ import type { SectionRenderer } from '../theme/theme-render';
 const theme: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
 const renderPage = (page: string, routeParams: Record<string, string> = {}) =>
   renderThemePage(
-    editorialBundleTheme(),
+    atelierBundleTheme(),
     page,
     { theme },
     { resolver: new StubResolver(), ctx: { tenantId: 't1', routeParams } }
   );
 
 test('editorial base is a valid root theme: owns the layout, all templates reference existing sections', () => {
-  const files = editorialBundleTheme();
+  const files = atelierBundleTheme();
   assert.match(
     files['layout/theme.liquid'],
     /\{\{\s*content_for_layout\s*\}\}/,
@@ -42,7 +42,7 @@ test('editorial base is a valid root theme: owns the layout, all templates refer
 });
 
 test('editorial base carries serif + square tokens and its section styles atop the shared base.css', () => {
-  const files = editorialBundleTheme();
+  const files = atelierBundleTheme();
   const tokens = JSON.parse(files['config/tokens.json']) as { bodyFont: string; radius: string };
   assert.equal(tokens.bodyFont, 'serif');
   assert.equal(tokens.radius, 'square');

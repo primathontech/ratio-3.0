@@ -1,0 +1,8 @@
+<section class="aura-hero">
+  <div class="rt aura-hero-in">
+    {% if kicker %}<span class="aura-kicker">{{ kicker | escape }}</span>{% endif %}
+    <h1 class="aura-title">{{ heading | escape }}</h1>
+    {% if subheading %}<p class="aura-sub">{{ subheading | escape }}</p>{% endif %}
+    {% if cta_label %}<a class="btn aura-cta" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
+  </div>
+</section>

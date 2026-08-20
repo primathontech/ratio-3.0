@@ -8,5 +8,8 @@ db/migrations/*.sql
 apps/admin
 
 # The base theme source files are byte-exact (a change bumps the base content hash → store rebases).
-# Prettier must NOT reformat them; the codegen (scripts/gen-default-theme.ts) inlines them verbatim.
-packages/builder-core/src/theme/default/
+# Prettier must NOT reformat them; the codegen (scripts/gen-themes.ts) inlines them verbatim.
+packages/builder-core/src/theme/forma/
+packages/builder-core/src/theme/nova/
+packages/builder-core/src/theme/aura/
+packages/builder-core/src/theme/atelier/

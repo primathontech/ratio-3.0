@@ -1,0 +1,8 @@
+<section class="nova-hero">
+  <div class="rt nova-hero-in">
+    {% if kicker %}<span class="nova-kicker">{{ kicker | escape }}</span>{% endif %}
+    <h1 class="nova-title">{{ heading | escape }}</h1>
+    {% if subheading %}<p class="nova-sub">{{ subheading | escape }}</p>{% endif %}
+    {% if cta_label %}<a class="btn nova-cta" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
+  </div>
+</section>

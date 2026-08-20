@@ -1,0 +1,42 @@
+{
+  "dataSources": {
+    "all": {
+      "type": "PRODUCTS",
+      "params": {
+        "first": 8
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "editorial-hero",
+      "data": {
+        "kicker": "New season",
+        "heading": "Made to be lived in",
+        "subheading": "A considered edit of everyday pieces — thoughtfully designed, honestly priced, and built to last.",
+        "cta_label": "Shop the collection",
+        "cta_href": "/collections/all"
+      }
+    },
+    {
+      "type": "feature",
+      "data": {
+        "kicker": "The story",
+        "heading": "Fewer, better things",
+        "body": "We work with makers we trust to produce in small runs, so every piece earns its place. Tell your own story here.",
+        "cta_label": "About us",
+        "cta_href": "/collections/all"
+      }
+    },
+    {
+      "type": "collection-row",
+      "dataSourceKey": "all",
+      "data": {
+        "heading": "The edit"
+      }
+    },
+    {
+      "type": "brand-story"
+    }
+  ]
+}

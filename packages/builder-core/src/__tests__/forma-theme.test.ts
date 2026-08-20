@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { defaultBundleTheme } from '../theme/default-theme';
+import { formaBundleTheme } from '../theme/forma-theme';
 import { storefrontHead } from '../storefront/storefront';
 import { renderThemePage } from '../theme/theme-render';
 import { StubResolver } from '../commerce/resolve';
@@ -13,7 +13,7 @@ import type { SectionRenderer } from '../theme/theme-render';
 const theme: SectionRenderer = (liquid, data) => render(liquid, data, { trusted: true });
 const renderPage = (page: string, routeParams: Record<string, string> = {}) =>
   renderThemePage(
-    defaultBundleTheme(),
+    formaBundleTheme(),
     page,
     { theme },
     {
@@ -27,7 +27,7 @@ const renderPage = (page: string, routeParams: Record<string, string> = {}) =>
 // content_for_header slice) and <body> (header/footer chrome slots + content_for_layout + the platform
 // content_for_body_end slice).
 test('default theme layout owns the whole document (doctype, head, platform slices, chrome slots)', () => {
-  const layout = defaultBundleTheme()['layout/theme.liquid'];
+  const layout = formaBundleTheme()['layout/theme.liquid'];
   assert.match(layout, /<!doctype html>/i, 'the layout is a full HTML document');
   assert.match(layout, /<html/i);
   assert.match(layout, /<head>/i);
@@ -51,7 +51,7 @@ test('default theme layout owns the whole document (doctype, head, platform slic
 });
 
 test('default theme ships the design-system CSS as an editable asset (assets/base.css)', () => {
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
   assert.ok('assets/base.css' in files, 'the theme ships assets/base.css');
   assert.match(
     files['assets/base.css'],
@@ -62,7 +62,7 @@ test('default theme ships the design-system CSS as an editable asset (assets/bas
 });
 
 test('default theme: layout holds content_for_layout and templates reference existing sections', () => {
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
 
   assert.match(files['layout/theme.liquid'], /\{\{\s*content_for_layout\s*\}\}/);
 
@@ -87,7 +87,7 @@ test('starter theme collection sources request the full catalog (available:false
   // The commerce backend filters to available-only by default, which is EMPTY for a store that
   // doesn't flag product availability — the row then renders blank though the collection has
   // products. The requirement lives in the theme config (what to fetch), not in the resolver.
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
   for (const t of ['templates/index.json', 'templates/collection.json']) {
     const doc = JSON.parse(files[t]) as {
       dataSources?: Record<string, { type: string; params?: { filters?: unknown } }>;
@@ -105,7 +105,7 @@ test('starter theme collection sources request the full catalog (available:false
 });
 
 test('starter theme ships an editable CSS file, injected into the head AFTER the base styles', () => {
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
   assert.ok('assets/theme.css' in files, 'the theme ships an editable assets/theme.css');
   const head = storefrontHead({}, '/*CUSTOM_MARKER*/');
   assert.match(head, /CUSTOM_MARKER/, 'the custom CSS reaches the head');
@@ -138,7 +138,7 @@ test("a store's brand token override wins over the base defaults (cascade order)
 });
 
 test('starter theme ships an editable order (thank-you) section with the hydration hook intact', async () => {
-  const files = defaultBundleTheme();
+  const files = formaBundleTheme();
   const liquid = files['sections/order.liquid'];
   assert.ok(liquid, 'the theme ships an editable sections/order.liquid');
   // The origin renders it with the order context (total in paise → money filter).
@@ -219,7 +219,7 @@ test('default theme PDP renders the product description as rich HTML, not escape
     },
   };
   const { html } = await renderThemePage(
-    defaultBundleTheme(),
+    formaBundleTheme(),
     'product',
     { theme },
     { resolver: htmlResolver as never, ctx: { tenantId: 't1', routeParams: { handle: 'rich' } } }
@@ -266,7 +266,7 @@ test('default theme home fills product rows for a connected store that lacks the
     },
   };
   const { html } = await renderThemePage(
-    defaultBundleTheme(),
+    formaBundleTheme(),
     'index',
     { theme },
     {

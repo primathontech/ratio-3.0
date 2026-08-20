@@ -11,7 +11,7 @@ export * from './theme/theme-tokens';
 export * from './theme/theme-store';
 export * from './theme/base-library';
 export * from './theme/base-propagation';
-export * from './theme/default-theme';
+export * from './theme/forma-theme';
 
 // Page-builder (PageDoc content-model render engine)
 export * from './page-builder/doc';

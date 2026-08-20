@@ -1,0 +1,63 @@
+/* Nova base sections */
+.nova-hero {
+  background: var(--ink);
+  color: #fff;
+  padding: 104px 0;
+}
+.nova-hero-in {
+  max-width: 820px;
+}
+.nova-kicker {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-bottom: 16px;
+}
+.nova-title {
+  font-size: clamp(2.8rem, 8vw, 5.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  margin: 0 0 18px;
+  text-wrap: balance;
+}
+.nova-sub {
+  font-size: 1.2rem;
+  opacity: 0.82;
+  max-width: 46ch;
+  margin: 0 0 28px;
+}
+.nova-cta {
+  background: #fff;
+  color: var(--ink);
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  padding: 6px 0 36px;
+}
+.tile {
+  aspect-ratio: 4/3;
+  display: flex;
+  align-items: flex-end;
+  padding: 18px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 1.15rem;
+  transition: filter 0.15s;
+}
+.tile:hover {
+  filter: brightness(0.97);
+}
+@media (max-width: 720px) {
+  .tiles {
+    grid-template-columns: 1fr;
+  }
+  .nova-hero {
+    padding: 72px 0;
+  }
+}
