@@ -1,5 +1,5 @@
-<main class="rt sec">
-  <div class="sec-head"><h2>{{ heading | default: 'Collections' | escape }}</h2></div>
+<section class="rt sec">
+  <div class="sec-head"><h2>{{ heading | default: 'Shop by Category' | escape }}</h2></div>
   <div class="blocks">
     {% for c in collections %}
     {% assign img = c.image_url | default: c.image.src | default: c.image.url %}
@@ -9,4 +9,4 @@
     </a>
     {% endfor %}
   </div>
-</main>
+</section>
