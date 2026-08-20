@@ -1,0 +1,4 @@
+<footer class="ftr"><div class="rt ftr-in">
+  {% if footer.size > 0 %}<div class="ftr-cols">{% for col in footer %}<div class="ftr-col"><a class="ftr-col-h" href="{{ col.href | escape }}"{% if col.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ col.title | escape }}</a>{% if col.items.size > 0 %}<ul>{% for l in col.items %}<li><a href="{{ l.href | escape }}"{% if l.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ l.title | escape }}</a></li>{% endfor %}</ul>{% endif %}</div>{% endfor %}</div>{% endif %}
+  <div class="ftr-legal">© {{ site_name | default: 'Store' | escape }} · powered by Ratio</div>
+</div></footer>

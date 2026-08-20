@@ -32,11 +32,11 @@ flowchart LR
   end
 ```
 
-> **Compose-over-Forma is optional, not the model.** A theme is free to be **completely standalone** —
-> its own home, header, footer, collection page, product page, sections, and CSS. Themes share **only
-> the contract below** (the data shapes + render slots), never the UI. Forma just happens to be authored
-> as a full standalone theme, and Nova/Aura/Atelier reuse its chrome as a shortcut because they're light
-> variants today; a genuinely distinct theme should be a **full directory** (see the last section).
+> **All four bases are full standalone directories.** Each owns every file (its own home, header,
+> footer, collection page, product page, sections, and CSS) and shares **only the contract below** (the
+> data shapes + render slots), never the UI. Compose-over-Forma (Layer A's diagram) is an _optional_
+> authoring shortcut for a light variant — **no theme currently uses it**; each `*-theme.ts` just returns
+> its own files. See the last section for when to reach for the shortcut.
 
 ---
 
@@ -81,10 +81,11 @@ the same data as every other theme.
 
 ## Layer A — how a base is built and seeded (author-time)
 
-`forma/` is the **full flagship** theme (every file). `nova` / `aura` / `atelier` ship **only the files
-that differ** and are composed over Forma in code, so shared chrome (header, footer, layout, collection
-& product pages) isn't duplicated across four folders. The composed **output is still a complete root
-theme** — it has all of Forma's files plus the theme's own.
+Every base is a **full directory** — `forma/`, `nova/`, `aura/`, `atelier/` each ship every file
+(layout, sections incl. header/footer/order, templates, config, assets). `gen:themes` bakes each dir
+verbatim into `<name>-theme.generated.ts`, and each `*-theme.ts` returns its own files. The diagram
+below shows the _optional_ compose-over-Forma shortcut (unused today) — a theme _may_ ship only its
+distinctive files and merge over Forma at author time, but the recommended shape is a full directory.
 
 ```mermaid
 flowchart TD
