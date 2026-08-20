@@ -5,37 +5,55 @@
       "params": {
         "first": 8
       }
+    },
+    "cats": {
+      "type": "COLLECTIONS",
+      "params": {
+        "first": 6
+      }
     }
   },
   "sections": [
     {
       "type": "aura-hero",
       "data": {
-        "kicker": "Skincare, simplified",
-        "heading": "Glow, gently",
-        "subheading": "Clean formulas and considered rituals for skin that feels like yours.",
-        "cta_label": "Discover the range",
-        "cta_href": "/collections/all"
+        "kicker": "The Glow Edit — New",
+        "heading": "Skin that feels like you.",
+        "subheading": "Gentle, effective formulas made with skin-kind ingredients. Clean, cruelty-free, and quietly luxurious.",
+        "cta_label": "Shop the edit",
+        "cta_href": "/collections/all",
+        "cta2_label": "Take the quiz",
+        "cta2_href": "/collections/all"
       }
     },
     {
-      "type": "duo",
-      "data": {
-        "a_label": "The ritual",
-        "a_href": "/collections/all",
-        "b_label": "Bestsellers",
-        "b_href": "/collections/all"
-      }
+      "type": "aura-promises"
     },
     {
       "type": "collection-row",
       "dataSourceKey": "all",
       "data": {
-        "heading": "The collection"
+        "kicker": "Loved by you",
+        "heading": "Bestsellers",
+        "subheading": "The formulas our community reaches for again and again."
       }
     },
     {
-      "type": "brand-story"
+      "type": "aura-ritual",
+      "data": {
+        "kicker": "The Ritual",
+        "heading": "A quiet moment, every day.",
+        "body": "We believe skincare is a ritual, not a routine. Formulated with dermatologists, made to be savoured — morning and night.",
+        "cta_label": "Discover the ritual",
+        "cta_href": "/collections/all"
+      }
+    },
+    {
+      "type": "aura-categories",
+      "dataSourceKey": "cats",
+      "data": {
+        "heading": "Shop by category"
+      }
     }
   ]
 }

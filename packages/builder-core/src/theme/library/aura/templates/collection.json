@@ -6,12 +6,7 @@
         "handles": [
           "{{params.handle}}"
         ],
-        "productLimit": 12,
-        "filters": [
-          {
-            "available": false
-          }
-        ]
+        "productLimit": 12
       }
     }
   },

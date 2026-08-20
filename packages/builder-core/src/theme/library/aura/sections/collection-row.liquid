@@ -1,24 +1,25 @@
-<section class="rt">
-  <h2 class="heading">{{ heading | default: 'Products' | escape }}</h2>
+<section class="rt sec">
+  <div class="sec-head">
+    {% if kicker %}<span class="k">{{ kicker | escape }}</span>{% endif %}
+    <h2>{{ heading | default: 'Bestsellers' | escape }}</h2>
+    {% if subheading %}<p>{{ subheading | escape }}</p>{% endif %}
+  </div>
   <div class="grid">
     {% for p in products %}
     {% assign img = p.image_url | default: p.images.first.url %}
     <div class="card">
       <a class="card-link" href="/products/{{ p.handle | escape }}">
         <div class="ph">{% if img %}<img src="{{ img | escape }}" alt="{{ p.title | escape }}">{% endif %}</div>
-        <div class="body">
-          <div>{{ p.title | escape }}</div>
-          <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
-        </div>
+        <div class="card-name">{{ p.title | escape }}</div>
+        <div class="price">{{ p.price | money }}{% if p.compare_at_price and p.compare_at_price > p.price %} <s class="was">{{ p.compare_at_price | money }}</s>{% endif %}</div>
       </a>
       <div class="card-atc">
         <form class="atc" method="post" action="/cart/add">
           <input type="hidden" name="handle" value="{{ p.handle | escape }}">
-          <button type="submit" class="btn">Add to cart</button>
+          <button type="submit">Add to bag</button>
         </form>
       </div>
     </div>
     {% endfor %}
   </div>
-  {% if cta_href %}<a class="button" href="{{ cta_href | escape }}">View all</a>{% endif %}
 </section>

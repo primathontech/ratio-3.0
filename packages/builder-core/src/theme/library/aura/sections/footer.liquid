@@ -1,4 +1,23 @@
-<footer class="ftr"><div class="rt ftr-in">
-  {% if footer.size > 0 %}<div class="ftr-cols">{% for col in footer %}<div class="ftr-col"><a class="ftr-col-h" href="{{ col.href | escape }}"{% if col.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ col.title | escape }}</a>{% if col.items.size > 0 %}<ul>{% for l in col.items %}<li><a href="{{ l.href | escape }}"{% if l.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ l.title | escape }}</a></li>{% endfor %}</ul>{% endif %}</div>{% endfor %}</div>{% endif %}
-  <div class="ftr-legal">© {{ site_name | default: 'Store' | escape }} · powered by Ratio</div>
-</div></footer>
+<footer class="ftr">
+  <div class="news">
+    <span class="eyebrow">{{ site_name | default: 'Aura' | escape }} Letters</span>
+    <h3>Join for 10% off your first order.</h3>
+    <form class="field" action="/account/newsletter" method="post">
+      <input type="email" name="email" placeholder="Your email address" aria-label="Email">
+      <button class="go" type="submit">Subscribe</button>
+    </form>
+  </div>
+  <div class="rt ftr-in">
+    <div class="ftr-cols">
+      <div class="ftr-col">
+        <a class="ftr-brand" href="/">{{ site_name | default: 'Aura' | escape }}</a>
+        <p class="ftr-about">Gentle, effective beauty made with skin-kind ingredients.</p>
+      </div>
+      {% if footer.size > 0 %}{% for col in footer %}<div class="ftr-col"><a class="ftr-col-h" href="{{ col.href | escape }}"{% if col.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ col.title | escape }}</a>{% if col.items.size > 0 %}<ul>{% for l in col.items %}<li><a href="{{ l.href | escape }}"{% if l.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ l.title | escape }}</a></li>{% endfor %}</ul>{% endif %}</div>{% endfor %}{% endif %}
+    </div>
+    <div class="ftr-legal">
+      <span>© {{ site_name | default: 'Aura' | escape }} · powered by Ratio</span>
+      <span>UPI · Cards · Net banking</span>
+    </div>
+  </div>
+</footer>
