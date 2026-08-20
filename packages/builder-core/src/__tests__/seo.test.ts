@@ -27,6 +27,20 @@ test('a filtered/sorted/paginated URL is noindex,follow (kept out of the index)'
   assert.ok(!clean.includes('noindex'), 'a clean URL stays indexable');
 });
 
+test('a trailing/double slash canonicalizes to the same URL (no duplicate content)', () => {
+  const canon = 'https://shop.example/collections/shoes';
+  for (const variant of ['/collections/shoes/', '/collections/shoes', '//collections//shoes/']) {
+    const h = seoHead({ url: `https://shop.example${variant}`, siteName: 'S' });
+    assert.ok(h.includes(`<link rel="canonical" href="${canon}">`), `${variant} → ${canon}`);
+  }
+});
+
+test('a crafted path cannot inject markup into the canonical/og attributes', () => {
+  const h = seoHead({ url: 'https://shop.example/a"><script>x</script>', siteName: 'S' });
+  assert.ok(!h.includes('<script>'), 'no raw markup reaches the head');
+  assert.ok(!/href="[^"]*"[^>]*><script/.test(h), 'no attribute breakout');
+});
+
 test('site name is attribute-escaped (no markup injection via the store name)', () => {
   const h = seoHead({ url: 'https://shop.example/', siteName: 'A & B "Co" <x>' });
   assert.ok(h.includes('content="A &amp; B &quot;Co&quot; &lt;x&gt;"'));

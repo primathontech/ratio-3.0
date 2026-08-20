@@ -4,6 +4,7 @@
 // don't split ranking), a robots noindex for those query-string variants, and core Open Graph/Twitter.
 // Entity-specific meta (title, description, image, Product/Breadcrumb JSON-LD) layers on per page type
 // in a later slice. Every interpolated value is attribute-escaped — url/siteName are untrusted-ish.
+import { canonicalPath } from '../page-builder/path';
 
 function esc(s: string): string {
   return s
@@ -18,11 +19,12 @@ export interface SeoHeadInput {
   siteName: string; // the store's display name
 }
 
-// The canonical URL is the request origin + pathname with the query dropped, so /c/shoes,
-// /c/shoes?sort=price and /c/shoes?page=2 all canonicalize to /c/shoes.
+// The canonical URL is the request origin + the NORMALIZED path with the query dropped. Using
+// canonicalPath (the same normalizer routing/cache-tags use — collapses //, strips trailing /, NFC)
+// means /c/shoes, /c/shoes/, /c/shoes?sort=price and /c/shoes?page=2 all converge on ONE canonical.
 export function seoHead({ url, siteName }: SeoHeadInput): string {
   const u = new URL(url);
-  const canonical = `${u.origin}${u.pathname}`;
+  const canonical = `${u.origin}${canonicalPath(u.pathname)}`;
   const tags: string[] = [];
   // Query-string variants (facets/sort/pagination) are near-duplicate content — keep them out of the
   // index but still let crawlers follow links from them.

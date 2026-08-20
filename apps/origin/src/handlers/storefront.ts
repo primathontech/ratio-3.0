@@ -245,7 +245,7 @@ export async function renderStorefront(
           menu,
           footer,
           siteName: tenant.name,
-          headExtra: ix.head,
+          headExtra: ix.head + seoHead({ url: c.req.url, siteName: tenant.name }),
           bodyEnd: ix.bodyEnd,
           islandsRuntimeUrl: islandsUrl,
         })
