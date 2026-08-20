@@ -8,6 +8,7 @@ export * from './theme/validate';
 export * from './theme/theme-compose';
 export * from './theme/theme-render';
 export * from './theme/theme-tokens';
+export * from './theme/token-spec';
 export * from './theme/theme-store';
 export * from './theme/base-library';
 export * from './theme/base-propagation';
