@@ -55,4 +55,17 @@ for (const [name, files] of THEMES) {
       assert.match(base, new RegExp(`${v}\\s*:`), `${name} defines the semantic ${v}`);
     }
   });
+
+  test(`${name} uses the platform default --maxw of 1440px (OFCE-701)`, () => {
+    assert.match(files['assets/base.css'], /--maxw:\s*1440px/, `${name} --maxw default is 1440px`);
+  });
 }
+
+// OFCE-701 (progressive @scope): the product-card section is isolated with native @scope so its rules
+// can't leak into other sections. Proven on Forma first; the pattern extends to other sections/themes.
+test('Forma isolates the product-card section with native @scope', () => {
+  const base = FORMA_THEME_FILES['assets/base.css'];
+  assert.match(base, /@scope\s*\(\.card\)\s*\{/, 'the .card section is wrapped in @scope (.card)');
+  // the scoped rules are still present (behaviour-preserving — every card-* class lives inside .card)
+  assert.match(base, /\.card-atc button\s*\{/, 'card add-to-cart rules remain, now scoped');
+});

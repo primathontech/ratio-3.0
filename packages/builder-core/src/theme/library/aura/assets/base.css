@@ -11,7 +11,7 @@
   /* semantic names alias the raw brand vars so components can consume one vocabulary (OFCE-702) */
   --color-accent:var(--accent);--color-accent-ink:var(--accent-ink);--color-ink:var(--ink);
   --color-muted:var(--muted);--color-surface:var(--paper);--color-bg:var(--wash);--color-line:var(--line);
-  --maxw:1160px;--base:16px;--r:var(--radius,20px);
+  --maxw:1440px;--base:16px;--r:var(--radius,20px);
   --font:'Helvetica Neue',Arial,sans-serif;--font-heading:var(--font);
 }
 }
