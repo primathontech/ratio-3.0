@@ -1,0 +1,41 @@
+{
+  "dataSources": {
+    "all": {
+      "type": "PRODUCTS",
+      "params": {
+        "first": 8
+      }
+    }
+  },
+  "sections": [
+    {
+      "type": "aura-hero",
+      "data": {
+        "kicker": "Skincare, simplified",
+        "heading": "Glow, gently",
+        "subheading": "Clean formulas and considered rituals for skin that feels like yours.",
+        "cta_label": "Discover the range",
+        "cta_href": "/collections/all"
+      }
+    },
+    {
+      "type": "duo",
+      "data": {
+        "a_label": "The ritual",
+        "a_href": "/collections/all",
+        "b_label": "Bestsellers",
+        "b_href": "/collections/all"
+      }
+    },
+    {
+      "type": "collection-row",
+      "dataSourceKey": "all",
+      "data": {
+        "heading": "The collection"
+      }
+    },
+    {
+      "type": "brand-story"
+    }
+  ]
+}

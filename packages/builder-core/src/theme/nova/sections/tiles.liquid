@@ -1,0 +1,8 @@
+<section class="rt">
+  {% if heading %}<h2 class="heading">{{ heading | escape }}</h2>{% endif %}
+  <div class="tiles">
+    <a class="tile" href="{{ t1_href | default: '/collections/all' | escape }}"><span>{{ t1_label | default: 'New in' | escape }}</span></a>
+    <a class="tile" href="{{ t2_href | default: '/collections/all' | escape }}"><span>{{ t2_label | default: 'Bestsellers' | escape }}</span></a>
+    <a class="tile" href="{{ t3_href | default: '/collections/all' | escape }}"><span>{{ t3_label | default: 'Sale' | escape }}</span></a>
+  </div>
+</section>

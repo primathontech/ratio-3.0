@@ -2,7 +2,7 @@
 // first-party section classes render as a real storefront. Brand tokens (accent colour, corner
 // radius) come from the tenant's theme and are sanitized before they touch CSS — a merchant value
 // can never break out of the `:root` block (the storefront CSP already allows inline <style>).
-import { DEFAULT_THEME_FILES } from '../theme/default-theme.generated';
+import { FORMA_THEME_FILES } from '../theme/forma-theme.generated';
 
 // Merchant theme = a handful of GLOBAL knobs, every value chosen from a FIXED scale (consistency by
 // construction). Only the brand colour is free-form; the rest are keys into the maps below, so a
@@ -69,12 +69,12 @@ function rootVars(t: ThemeTokens): string {
 }
 
 // The design-system CSS (the .hdr/.hero/.grid/.card/.pdp/.ftr classes the theme sections are built on).
-// The CSS now lives as a real, editable file (src/theme/default/assets/base.css) that the codegen inlines
-// into DEFAULT_THEME_FILES; the base theme ships it as an editable asset (assets/base.css) and owns it —
+// The CSS now lives as a real, editable file (src/theme/forma/assets/base.css) that the codegen inlines
+// into FORMA_THEME_FILES; the base theme ships it as an editable asset (assets/base.css) and owns it —
 // under full theme ownership the theme's layout inlines this itself (as {{ base_css }}) instead of the
 // origin injecting it. Same string storefrontHead() uses, so the theme-owned head stays byte-for-byte
 // identical to the legacy TS shell.
-export const STOREFRONT_BASE_CSS = DEFAULT_THEME_FILES['assets/base.css'];
+export const STOREFRONT_BASE_CSS = FORMA_THEME_FILES['assets/base.css'];
 
 // The brand-token :root{} overrides for a store's chosen tokens — the MIDDLE CSS layer, between the base
 // defaults and the merchant's own CSS. The origin computes this from the live theme + tenant tokens

@@ -17,7 +17,7 @@ import {
   DEFAULT_BASE_THEME_ID,
   EDITORIAL_BASE_THEME_ID,
 } from '../theme/base-library';
-import { defaultBundleTheme } from '../theme/default-theme';
+import { formaBundleTheme } from '../theme/forma-theme';
 
 // Registry basics — pure, no DB/S3, so they run everywhere (incl. CI without MinIO).
 test('base registry offers the default base and resolves every listed base to files', () => {
@@ -236,7 +236,7 @@ test(
     await store.publish({ themeId: STORE_THEME, tenantId: STORE_TENANT }, { compile: identity }); // makes STORE_THEME live
 
     const composed = await store.loadLiveCompiled(STORE_TENANT);
-    const base = defaultBundleTheme();
+    const base = formaBundleTheme();
     assert.equal(composed?.['sections/hero.liquid'], '<section>MY HERO</section>'); // override wins
     assert.equal(composed?.['sections/promo.liquid'], '<section>PROMO</section>'); // merchant-added
     assert.equal(composed?.['layout/theme.liquid'], base['layout/theme.liquid']); // untouched → base

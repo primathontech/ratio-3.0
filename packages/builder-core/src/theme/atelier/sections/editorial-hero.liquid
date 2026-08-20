@@ -1,0 +1,8 @@
+<section class="ed-hero">
+  <div class="rt ed-hero-in">
+    {% if kicker %}<span class="ed-kicker">{{ kicker | escape }}</span>{% endif %}
+    <h1 class="ed-title">{{ heading | escape }}</h1>
+    {% if subheading %}<p class="ed-sub">{{ subheading | escape }}</p>{% endif %}
+    {% if cta_label %}<a class="btn" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
+  </div>
+</section>
