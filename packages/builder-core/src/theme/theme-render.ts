@@ -198,6 +198,9 @@ export async function renderThemeLayout(
     ...provided,
     // Set AFTER the spread so a caller can never override the bundle-derived CSS or content_for_layout.
     base_css: asCss(compiled[ASSET_BASE_CSS]),
+    // The CDN URL of the promoted base stylesheet (OFCE-701), or '' when it isn't in the manifest
+    // (preview/local/tests) — the layout links it when present, else inlines base_css as a fallback.
+    base_css_url: assetUrlMap(compiled)[ASSET_BASE_CSS] ?? '',
     theme_css: asCss(compiled[ASSET_THEME_CSS]),
     token_css: asCss(token_css),
     asset_urls: assetUrlMap(compiled),

@@ -7,6 +7,7 @@ import { S3Client, CreateBucketCommand, HeadBucketCommand } from '@aws-sdk/clien
 import { S3ObjectStore, type ObjectStore } from '@ratio/data-objects';
 import { ThemeStore, type CompileFn } from '../theme/theme-store';
 import type { ThemeFiles } from '../theme/bundle';
+import { readAssetManifest, assetHash } from '../theme/assets';
 
 const endpoint = process.env.S3_TEST_ENDPOINT;
 const bucket = process.env.S3_TEST_BUCKET ?? 's2poc-test';
@@ -50,6 +51,45 @@ test('saveDraft → readDraft round-trips the files', { skip }, async () => {
   assert.match(hash, /^[0-9a-f]{64}$/);
   assert.deepEqual(await store.readDraft(ref), files);
 });
+
+test(
+  'freezeBundles promotes base.css into the manifest as a CDN-cacheable text/css asset (OFCE-701)',
+  { skip },
+  async () => {
+    const css = '.probe-cdn{color:#0a0b0c}';
+    const bref = { themeId: `t_base_${Date.now()}`, tenantId: ref.tenantId };
+    await store.saveDraft(bref, { ...files, 'assets/base.css': css });
+    const { compiledHash } = await store.freezeBundles(bref, { compile: identity });
+
+    const compiled = (await store.loadCompiled(bref.tenantId, bref.themeId, compiledHash)) ?? {};
+    const entry = readAssetManifest(compiled)['assets/base.css'];
+    assert.ok(entry, 'base.css was promoted into the asset manifest');
+    assert.equal(entry.contentType, 'text/css');
+    assert.equal(
+      entry.hash,
+      assetHash(new TextEncoder().encode(css)),
+      'hash addresses the base bytes'
+    );
+
+    // the bytes are retrievable — this is what the origin /assets/<hash> route serves
+    const bytes = await store.getAsset(bref, entry.hash);
+    assert.equal(new TextDecoder().decode(bytes ?? new Uint8Array()), css);
+
+    // identical base bytes hash identically across tenants → same /assets/<hash> URL (the prerequisite
+    // for cross-tenant edge caching, if the edge cache key ignores the host)
+    const other = { themeId: `t_base2_${Date.now()}`, tenantId: 't_ts2' };
+    await store.saveDraft(other, { ...files, 'assets/base.css': css });
+    const r2 = await store.freezeBundles(other, { compile: identity });
+    const m2 = readAssetManifest(
+      (await store.loadCompiled(other.tenantId, other.themeId, r2.compiledHash)) ?? {}
+    );
+    assert.equal(
+      m2['assets/base.css']?.hash,
+      entry.hash,
+      'same base bytes → same hash cross-tenant'
+    );
+  }
+);
 
 test('freezeBundles writes source + compiled bundles, loadable by hash', { skip }, async () => {
   await store.saveDraft(ref, files);

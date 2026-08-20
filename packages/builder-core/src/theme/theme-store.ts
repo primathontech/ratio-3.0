@@ -7,7 +7,13 @@
 // Publish records the version + flips the store's live pointer (Postgres); loadLiveCompiled is the
 // origin's read path. The lean per-file draft index (theme_file) lands with the editor.
 import { packBundle, unpackBundle, bundleId, type ThemeFiles } from './bundle';
-import { assetHash, isAssetHash, type AssetEntry } from './assets';
+import {
+  assetHash,
+  isAssetHash,
+  readAssetManifest,
+  writeAssetManifest,
+  type AssetEntry,
+} from './assets';
 import { composeTheme, diffFromBase } from './theme-compose';
 import { layoutOwnsDocument } from './theme-render';
 import { tenantTag } from '../tags';
@@ -242,7 +248,7 @@ export class ThemeStore {
     );
 
     const composed = composeTheme(await this.loadBaseSource(ref.themeId), overrides);
-    const compiled = await opts.compile(composed);
+    const compiled = await this.promoteBaseCss(ref, await opts.compile(composed));
     const compiledHash = bundleId(compiled);
     await this.objects.put(
       compiledKey(ref.tenantId, ref.themeId, compiledHash),
@@ -253,6 +259,22 @@ export class ThemeStore {
     );
 
     return { sourceHash, compiledHash };
+  }
+
+  // OFCE-701: promote the shared base stylesheet (assets/base.css) into the asset manifest as an
+  // immutable, content-hashed object so the layout can CDN-link it (<link href="/assets/<hash>">)
+  // instead of inlining the same bytes on every page. The guaranteed win: the browser + edge cache the
+  // immutable /assets/<hash> once and reuse it across every page of the store (vs re-sending inline CSS
+  // per page). Bytes are stored under the theme's own asset key (per-tenant, like any binary asset);
+  // cross-TENANT reuse additionally requires the edge cache key to ignore the host — a separate edge
+  // config, not proven here. base.css stays in the bundle too, so preview/local (no manifest) inline it.
+  private async promoteBaseCss(ref: ThemeRef, compiled: ThemeFiles): Promise<ThemeFiles> {
+    const css = compiled['assets/base.css'];
+    if (typeof css !== 'string' || css === '') return compiled;
+    const entry = await this.putAsset(ref, new TextEncoder().encode(css), 'text/css');
+    const manifest = readAssetManifest(compiled);
+    manifest['assets/base.css'] = entry;
+    return writeAssetManifest(compiled, manifest);
   }
 
   // The base theme's source files (the full base — a base is a root theme, so its frozen source IS
