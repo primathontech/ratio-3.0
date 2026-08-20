@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "settings": [
+    {
+      "id": "radius",
+      "type": "select",
+      "label": "Corners",
+      "default": "rounded",
+      "options": [
+        { "value": "square", "label": "Square" },
+        { "value": "soft", "label": "Soft" },
+        { "value": "rounded", "label": "Rounded" }
+      ]
+    }
+  ]
+}
