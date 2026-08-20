@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
 import { renderChrome, chromeLinks } from '../storefront/chrome';
-import { formaBundleTheme } from '../theme/forma-theme';
+import { formaBundleTheme } from '../theme/library/forma-theme';
 import type { NavMenu, NavItem } from '../storefront/nav';
 
 // The untrusted renderer the origin uses; here the trusted engine is fine — the chrome sections only

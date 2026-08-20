@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { render } from '@ratio/builder-render';
-import { atelierBundleTheme } from '../theme/atelier-theme';
+import { atelierBundleTheme } from '../theme/library/atelier-theme';
 import { renderThemePage } from '../theme/theme-render';
 import { StubResolver } from '../commerce/resolve';
 import type { SectionRenderer } from '../theme/theme-render';

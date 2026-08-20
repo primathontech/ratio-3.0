@@ -2,7 +2,7 @@
 // first-party section classes render as a real storefront. Brand tokens (accent colour, corner
 // radius) come from the tenant's theme and are sanitized before they touch CSS — a merchant value
 // can never break out of the `:root` block (the storefront CSP already allows inline <style>).
-import { FORMA_THEME_FILES } from '../theme/forma-theme.generated';
+import { FORMA_THEME_FILES } from '../theme/library/forma-theme.generated';
 
 // Merchant theme = a handful of GLOBAL knobs, every value chosen from a FIXED scale (consistency by
 // construction). Only the brand colour is free-form; the rest are keys into the maps below, so a

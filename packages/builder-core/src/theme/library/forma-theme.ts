@@ -1,4 +1,4 @@
-import type { ThemeFiles } from './bundle';
+import type { ThemeFiles } from '../bundle';
 import { FORMA_THEME_FILES } from './forma-theme.generated';
 
 // The starter theme a brand-new store adopts (base ⊕ overrides). A real, editable e-commerce home —

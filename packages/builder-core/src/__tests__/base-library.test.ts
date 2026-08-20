@@ -17,7 +17,7 @@ import {
   DEFAULT_BASE_THEME_ID,
   EDITORIAL_BASE_THEME_ID,
 } from '../theme/base-library';
-import { formaBundleTheme } from '../theme/forma-theme';
+import { formaBundleTheme } from '../theme/library/forma-theme';
 
 // Registry basics — pure, no DB/S3, so they run everywhere (incl. CI without MinIO).
 test('base registry offers the default base and resolves every listed base to files', () => {

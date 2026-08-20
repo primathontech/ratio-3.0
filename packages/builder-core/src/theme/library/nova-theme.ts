@@ -1,4 +1,4 @@
-import type { ThemeFiles } from './bundle';
+import type { ThemeFiles } from '../bundle';
 import { formaBundleTheme } from './forma-theme';
 import { NOVA_THEME_FILES } from './nova-theme.generated';
 
