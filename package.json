@@ -11,6 +11,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down -v",
     "migrate": "node --env-file-if-exists=apps/origin/.env --import tsx scripts/migrate.ts",
+    "ensure-bucket": "node --env-file-if-exists=apps/origin/.env --import tsx scripts/ensure-bucket.ts",
     "db:init": "bun run migrate",
     "dev": "node --import tsx dev/all.ts",
     "start": "node --env-file-if-exists=apps/origin/.env --import tsx dev/server.ts",

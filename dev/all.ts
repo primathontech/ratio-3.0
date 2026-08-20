@@ -43,6 +43,10 @@ must('db:up', 'docker', ['compose', 'up', '-d']);
 // The container reports "up" before Postgres accepts connections; migrate is the readiness probe.
 step('applying schema');
 must('migrate', 'bun', ['run', 'migrate'], { retries: 15 });
+// A fresh MinIO volume has no bucket — create it (idempotent) so the first theme publish on a new
+// machine doesn't 404 with NoSuchBucket and hang onboarding's Design step.
+step('ensuring object-store bucket');
+must('ensure-bucket', 'bun', ['run', 'ensure-bucket'], { retries: 10 });
 
 // ── the three services ───────────────────────────────────────────────────────────────────────
 const children: ChildProcess[] = [];
