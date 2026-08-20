@@ -21,6 +21,13 @@ a{color:inherit;text-decoration:none}
 .hdr-nav{display:none;gap:26px}
 .navlink{font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);opacity:.8;white-space:nowrap}
 .navlink:hover{opacity:1;color:var(--accent)}
+.nav-item{position:relative;display:inline-flex;align-items:center}
+.nav-item>.navlink::after{content:'';width:.36em;height:.36em;margin-left:.4em;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-.12em) rotate(45deg);opacity:.5}
+.nav-drop{position:absolute;top:100%;left:0;display:none;background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 34px rgba(60,40,50,.12);padding:10px;min-width:200px;z-index:30}
+.nav-item:hover>.nav-drop,.nav-item:focus-within>.nav-drop{display:block}
+.nav-drop ul{list-style:none;margin:0;padding:0}
+.nav-drop a{display:block;padding:9px 16px;border-radius:999px;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);opacity:.8;white-space:nowrap}
+.nav-drop a:hover{opacity:1;color:var(--accent);background:var(--soft)}
 .hdr-brand{grid-column:2;text-align:center;font-size:1.6rem;font-weight:300;letter-spacing:.34em;text-transform:uppercase;padding-left:.34em}
 .hdr-actions{grid-column:3;display:flex;justify-content:flex-end;align-items:center;gap:18px}
 .icon-link{position:relative;display:inline-flex}
