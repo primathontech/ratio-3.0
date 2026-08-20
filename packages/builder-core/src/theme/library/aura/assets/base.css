@@ -2,7 +2,7 @@
 :root{
   --accent:#c17f92;--accent-ink:#fff;--ink:#3b333a;--muted:#9c9098;--paper:#fff;
   --wash:#f8f3f4;--blush:#f3e9ec;--soft:#f4edef;--line:#ece2e6;
-  --maxw:1160px;--base:16px;--r:20px;
+  --maxw:1160px;--base:16px;--r:var(--radius,20px);
   --font:'Helvetica Neue',Arial,sans-serif;--font-heading:var(--font);
 }
 html{-webkit-text-size-adjust:100%;font-size:var(--base)}

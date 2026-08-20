@@ -48,10 +48,11 @@
     --space-24: 96px;
     --gutter: 24px;
 
-    /* radius — --r kept as an alias of --radius-md so existing rules are unchanged */
+    /* radius — --radius-md bridges the merchant radius knob (rootVars emits --radius); --r stays an
+       alias of --radius-md so every rule follows the knob while the 12px default is unchanged. */
     --radius-none: 0;
     --radius-sm: 8px;
-    --radius-md: 12px;
+    --radius-md: var(--radius, 12px);
     --radius-lg: 20px;
     --radius-full: 999px;
     --r: var(--radius-md);
