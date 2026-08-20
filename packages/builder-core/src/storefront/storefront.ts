@@ -3,35 +3,12 @@
 // radius) come from the tenant's theme and are sanitized before they touch CSS — a merchant value
 // can never break out of the `:root` block (the storefront CSP already allows inline <style>).
 import { FORMA_THEME_FILES } from '../theme/library/forma-theme.generated';
-
-// Merchant theme = a handful of GLOBAL knobs, every value chosen from a FIXED scale (consistency by
-// construction). Only the brand colour is free-form; the rest are keys into the maps below, so a
-// merchant can never emit an arbitrary CSS value. Anything off-scale is ignored → base default.
-export interface ThemeTokens {
-  color?: string; // brand colour — hex only, else ignored
-  bodyFont?: string; // key of FONTS
-  headingFont?: string; // key of FONTS
-  baseSize?: string; // 's' | 'm' | 'l'
-  radius?: string; // 'square' | 'soft' | 'rounded'
-  container?: string; // 'narrow' | 'normal' | 'wide'
-}
-
-// Curated, self-hostable / websafe font stacks (no external CDN — CSP is font-src 'self' data:).
-// Indic-capable self-hosted families are a follow-up; the vocabulary is ready for them.
-export const FONTS: Record<string, string> = {
-  system: `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`,
-  sans: `'Helvetica Neue',Arial,sans-serif`,
-  serif: `Georgia,'Times New Roman',serif`,
-  rounded: `'Trebuchet MS','Segoe UI',system-ui,sans-serif`,
-  mono: `ui-monospace,'SF Mono',Menlo,monospace`,
-};
-export const BASE_SIZE: Record<string, string> = { s: '15px', m: '16px', l: '18px' };
-export const RADIUS: Record<string, string> = { square: '0px', soft: '10px', rounded: '18px' };
-export const CONTAINER: Record<string, string> = {
-  narrow: '960px',
-  normal: '1120px',
-  wide: '1200px',
-};
+// The merchant token vocabulary + fixed scales are the single source of truth in @ratio/design-tokens
+// (shared with the admin-web editor, so backend and editor scales can't drift). Imported for local
+// use (rootVars) and re-exported so existing importers of these from storefront keep working.
+import { FONTS, BASE_SIZE, RADIUS, CONTAINER, type ThemeTokens } from '@ratio/design-tokens';
+export { FONTS, BASE_SIZE, RADIUS, CONTAINER } from '@ratio/design-tokens';
+export type { ThemeTokens } from '@ratio/design-tokens';
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 

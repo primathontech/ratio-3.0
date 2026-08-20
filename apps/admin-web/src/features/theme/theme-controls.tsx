@@ -6,29 +6,24 @@
 // @ratio/builder-core scales, so a merchant can't produce a broken or off-brand result.
 import type { ReactNode } from 'react';
 import type { StoreTheme } from '../../common/api';
+import {
+  FONTS,
+  FONT_LABELS,
+  FONT_ORDER,
+  BASE_SIZE,
+  SIZE_LABELS,
+  RADIUS,
+  RADIUS_LABELS,
+  BRAND_SWATCHES,
+  THEME_DEFAULTS,
+  THEME_PRESETS,
+  type ThemePreset,
+} from '@ratio/design-tokens';
 import './theme-settings.css';
 
-// CSS values per token value — mirror packages/builder-core/src/storefront.ts so previews match render.
-const FONT_STACK: Record<string, string> = {
-  system: `system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`,
-  sans: `'Helvetica Neue',Arial,sans-serif`,
-  serif: `Georgia,'Times New Roman',serif`,
-  rounded: `'Trebuchet MS','Segoe UI',system-ui,sans-serif`,
-  mono: `ui-monospace,'SF Mono',Menlo,monospace`,
-};
-const FONT_LABEL: Record<string, string> = {
-  system: 'System',
-  sans: 'Sans',
-  serif: 'Serif',
-  rounded: 'Rounded',
-  mono: 'Mono',
-};
-const FONT_ORDER = ['system', 'sans', 'serif', 'rounded', 'mono'];
-const SIZE_PX: Record<string, number> = { s: 15, m: 16, l: 18 };
-const SIZE_LABEL: Record<string, string> = { s: 'Small', m: 'Default', l: 'Large' };
-const RADIUS_PX: Record<string, number> = { square: 0, soft: 10, rounded: 18 };
-const RADIUS_LABEL: Record<string, string> = { square: 'Square', soft: 'Soft', rounded: 'Rounded' };
-// Each corner option previews its own shape, so the choice reads at a glance.
+// The token vocabulary + fixed scales come from @ratio/design-tokens — the single source shared with
+// the storefront renderer, so a preview here can't drift from what the backend actually renders. Only
+// the corner-shape icons (JSX, editor-only) live locally.
 const CORNER_ICON: Record<string, ReactNode> = {
   square: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -47,61 +42,9 @@ const CORNER_ICON: Record<string, ReactNode> = {
   ),
 };
 
-const BRAND_SWATCHES = ['#2563eb', '#131927', '#E88B00', '#217005', '#1A2C44'];
-
-// Must match the default bundle theme (packages/builder-core default-theme.ts config/tokens.json) so a
-// fresh store reads as the "Default" preset — otherwise nothing shows selected.
-export const DEFAULTS: Required<StoreTheme> = {
-  color: '#2563eb',
-  headingFont: 'system',
-  bodyFont: 'system',
-  baseSize: 'm',
-  radius: 'soft',
-  container: 'normal',
-};
-
-type Preset = { id: string; name: string; theme: Required<StoreTheme>; desc: string };
-const PRESETS: Preset[] = [
-  {
-    id: 'default',
-    name: 'Default',
-    theme: {
-      color: '#2563eb',
-      headingFont: 'system',
-      bodyFont: 'system',
-      baseSize: 'm',
-      radius: 'soft',
-      container: 'normal',
-    },
-    desc: 'System · soft',
-  },
-  {
-    id: 'editorial',
-    name: 'Editorial',
-    theme: {
-      color: '#131927',
-      headingFont: 'serif',
-      bodyFont: 'serif',
-      baseSize: 'm',
-      radius: 'square',
-      container: 'normal',
-    },
-    desc: 'Serif · square',
-  },
-  {
-    id: 'market',
-    name: 'Market',
-    theme: {
-      color: '#E88B00',
-      headingFont: 'sans',
-      bodyFont: 'sans',
-      baseSize: 'm',
-      radius: 'rounded',
-      container: 'normal',
-    },
-    desc: 'Sans · round',
-  },
-];
+// Must match the default bundle theme so a fresh store reads as the "Default" preset — sourced from the
+// shared token package (the same defaults the backend ships), so it can never drift.
+export const DEFAULTS: Required<StoreTheme> = THEME_DEFAULTS;
 
 export const isHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
 
@@ -197,10 +140,10 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
           aria-pressed={value === key}
           onClick={() => onChange(key)}
         >
-          <span className="ts-font-ag" style={{ fontFamily: FONT_STACK[key] }}>
+          <span className="ts-font-ag" style={{ fontFamily: FONTS[key] }}>
             Ag
           </span>
-          <span className="muted ts-font-label">{FONT_LABEL[key]}</span>
+          <span className="muted ts-font-label">{FONT_LABELS[key]}</span>
         </button>
       ))}
     </div>
@@ -220,13 +163,13 @@ export function ThemeControls({
 }) {
   const r = resolve(theme);
   const ratio = isHex(r.color) ? contrastOnWhite(r.color) : null;
-  const activePreset = PRESETS.find((p) => JSON.stringify(p.theme) === JSON.stringify(r));
+  const activePreset = THEME_PRESETS.find((p) => JSON.stringify(p.theme) === JSON.stringify(r));
   const set = <K extends keyof StoreTheme>(key: K, value: StoreTheme[K]) =>
     onChange({ ...theme, [key]: value });
   // One typeface for the whole storefront: heading and body font stay in sync.
   const setFont = (v: string) => onChange({ ...theme, headingFont: v, bodyFont: v });
   // A preset must not change content width (no control for it) — keep whatever the theme has.
-  const applyPreset = (p: Preset) =>
+  const applyPreset = (p: ThemePreset) =>
     onChange({ ...p.theme, container: theme.container ?? p.theme.container });
 
   return (
@@ -234,7 +177,7 @@ export function ThemeControls({
       <section>
         <div className="ts-label">Start from</div>
         <div className="ts-presets">
-          {PRESETS.map((p) => (
+          {THEME_PRESETS.map((p) => (
             <button
               key={p.id}
               className={activePreset?.id === p.id ? 'ts-preset on' : 'ts-preset'}
@@ -291,14 +234,14 @@ export function ThemeControls({
         <FontPicker value={r.bodyFont} onChange={setFont} />
         <FieldHead
           label="Font Size"
-          value={`${SIZE_PX[r.baseSize]}px`}
+          value={BASE_SIZE[r.baseSize]}
           canReset={r.baseSize !== DEFAULTS.baseSize}
           onReset={() => set('baseSize', DEFAULTS.baseSize)}
         />
         <Choice
           options={['s', 'm', 'l']}
           value={r.baseSize}
-          labels={SIZE_LABEL}
+          labels={SIZE_LABELS}
           onChange={(v) => set('baseSize', v)}
         />
       </section>
@@ -307,14 +250,14 @@ export function ThemeControls({
         <div className="ts-label">Layout</div>
         <FieldHead
           label="Radius"
-          value={`${RADIUS_PX[r.radius]}px`}
+          value={RADIUS[r.radius]}
           canReset={r.radius !== DEFAULTS.radius}
           onReset={() => set('radius', DEFAULTS.radius)}
         />
         <Choice
           options={['square', 'soft', 'rounded']}
           value={r.radius}
-          labels={RADIUS_LABEL}
+          labels={RADIUS_LABELS}
           icons={CORNER_ICON}
           onChange={(v) => set('radius', v)}
         />

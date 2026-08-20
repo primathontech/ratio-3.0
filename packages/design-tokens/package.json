@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/design-tokens",
+  "version": "0.1.0",
+  "description": "Design tokens — the single source of truth for the theme system (primitives + semantic + the editor's merchant vocabulary). Pure, zero-dependency, so both the Node backend (@ratio/builder-core) and the Vite admin-web can import it.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}
