@@ -117,6 +117,7 @@ export function DetailsStep({ api, data, patch, onNext, onBack }: StepProps) {
             options={bases}
             value={data.baseThemeId}
             onChange={(id) => patch({ baseThemeId: id })}
+            api={api}
           />
         </Field>
       )}

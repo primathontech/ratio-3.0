@@ -173,6 +173,21 @@ test('GET /base-themes lists the start-from bases (default + editorial)', async 
   for (const b of baseThemes) assert.ok(b.name && b.description, 'each base has picker text');
 });
 
+test('GET /base-themes/:baseId/preview renders the base to HTML with sample data (OFCE-700)', async () => {
+  // bob has a valid token but NO store membership — previewing a base before adopting it must work
+  // for any signed-in user (there is no store yet during onboarding).
+  const res = await call(app, 'GET', `/base-themes/${EDITORIAL_BASE_THEME_ID}/preview`, bob);
+  assert.strictEqual(res.status, 200);
+  const { html } = (await res.json()) as { html?: string; error?: string };
+  assert.ok(html && /<!doctype html/i.test(html), 'returns a full HTML document');
+  assert.match(html, /Sample product 1/, 'sample-data products render (no store/commerce needed)');
+});
+
+test('GET /base-themes/:baseId/preview rejects an unknown base (400)', async () => {
+  const res = await call(app, 'GET', '/base-themes/library-nope/preview', alice);
+  assert.strictEqual(res.status, 400);
+});
+
 test('create with baseThemeId adopts the chosen base (editorial), not the default', async () => {
   const { status, id } = await createTheme({ name: 'Mag', baseThemeId: EDITORIAL_BASE_THEME_ID });
   assert.strictEqual(status, 200);

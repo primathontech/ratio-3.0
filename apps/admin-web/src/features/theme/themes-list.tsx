@@ -284,7 +284,7 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
               </Field>
               {bases.length > 1 && (
                 <Field label="Start from">
-                  <BasePicker options={bases} value={newBase} onChange={setNewBase} />
+                  <BasePicker options={bases} value={newBase} onChange={setNewBase} api={api} />
                 </Field>
               )}
               <p className="muted" style={{ fontSize: 13 }}>

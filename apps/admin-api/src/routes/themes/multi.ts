@@ -6,6 +6,7 @@ import {
   baseThemeDef,
   listBaseThemes,
   DEFAULT_BASE_THEME_ID,
+  LIBRARY_TENANT_ID,
   tenantTag,
 } from '@ratio/builder-core';
 import { requireMembership, requireRole } from '../../middleware/auth';
@@ -16,11 +17,42 @@ import { assertVersionOwnsDocument } from './bundle';
 // is live. Every theme-scoped route calls assertThemeInStore after the auth guard, so a member of
 // store A can never touch store B's theme by passing its id (404, indistinguishable from missing).
 export function registerMultiThemeRoutes(app: Hono<Vars>, deps: RouteDeps) {
-  const { themes, assertThemeInStore, identityCompile, bundle503, purgeEdgeTags } = deps;
+  const {
+    themes,
+    assertThemeInStore,
+    identityCompile,
+    bundle503,
+    purgeEdgeTags,
+    renderThemePreview,
+  } = deps;
 
   // The "start from" bases a store can adopt (name + description for the picker). Not store-scoped —
   // any signed-in user building a store may list them.
   app.get('/base-themes', async (c) => c.json({ baseThemes: listBaseThemes() }));
+
+  // Render a base theme to HTML so the picker can preview it BEFORE the store adopts it (OFCE-700).
+  // Sample data only — a base is previewed before any store/merchant exists (onboarding), so there is
+  // no commerce context to bind. Same guard as GET /base-themes (any signed-in user), rendered from
+  // the registry def so it works even before the base is seeded into the object store.
+  app.get('/base-themes/:baseId/preview', async (c) => {
+    const def = baseThemeDef(c.req.param('baseId'));
+    if (!def) return c.json({ error: 'unknown base theme' }, 400);
+    try {
+      const { html } = await renderThemePreview(
+        def.files(),
+        c.req.query('page') || 'index',
+        LIBRARY_TENANT_ID,
+        undefined,
+        undefined,
+        def.name
+      );
+      return c.json({ html });
+    } catch (e) {
+      // A base's own Liquid/template error shouldn't 500 the picker — surface it as { error }.
+      console.error('[admin-api] base theme preview failed:', e);
+      return c.json({ error: e instanceof Error ? e.message : 'preview failed' });
+    }
+  });
 
   // List the store's themes (which is live, each theme's latest published version).
   app.get('/stores/:id/themes', requireMembership, async (c) => {
