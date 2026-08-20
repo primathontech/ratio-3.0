@@ -1,0 +1,10 @@
+<section class="rt sec">
+  <div class="band">
+    <h3>{{ heading | default: 'Get 10% off your first order' | escape }}</h3>
+    <p>{{ subheading | default: 'Join our newsletter for new arrivals, offers and more.' | escape }}</p>
+    <form class="field" action="/account/newsletter" method="post">
+      <input type="email" name="email" placeholder="Your email address" aria-label="Email">
+      <button class="go" type="submit">Subscribe</button>
+    </form>
+  </div>
+</section>
