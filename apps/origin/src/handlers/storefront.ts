@@ -193,8 +193,11 @@ export async function renderStorefront(
     }
   }
 
-  // Page-builder render path — the sole renderer. A published PageDoc for the URL (exact or a
-  // shared template) is served; a URL with none is a 404 (there is no legacy fallback).
+  // Page-builder render path — the DEGRADE-ONLY fallback (OFCE-616 / ADR-013 §14.6). The bundle theme
+  // above is the primary renderer; we only reach here when the store has no live bundle theme (or its
+  // bundle render hiccuped). A published PageDoc for the URL (exact or a shared template) is served —
+  // this is what powers custom "Pages" (About/FAQ/landing) authored in the admin/assistant; a URL with
+  // none is a 404. Onboarded bundle stores scaffold no PageDoc, so for them this branch 404s.
   {
     const canon = canonicalPath(path);
     // Routing (ADR-013): the router labels the URL (home / page / collection / product) and picks
