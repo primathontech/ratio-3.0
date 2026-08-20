@@ -469,7 +469,7 @@ test('theme: composed page ships the storefront stylesheet + a content wrapper',
   const page = await composePage(doc, reg);
   assert.match(
     page.html,
-    /<style>[^]*\.hero\{[^]*<\/style>/,
+    /<style>[^]*\.hero\s*\{[^]*<\/style>/,
     'base storefront CSS injected into head'
   );
   assert.match(page.html, /<main class="rt">/, 'content wrapped for layout');
