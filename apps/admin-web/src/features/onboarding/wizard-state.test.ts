@@ -30,6 +30,7 @@ const state: WizardState = {
     name: 'Store A',
     host: 'store-a.ratiodev.in',
     color: '#2563eb',
+    baseThemeId: 'library-default',
     storeId: 't_abc',
     storeUrl: 'https://store-a.ratiodev.in',
     themeId: 't_abc-main',

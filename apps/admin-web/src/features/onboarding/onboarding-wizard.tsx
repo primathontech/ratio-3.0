@@ -18,6 +18,7 @@ const EMPTY: WizardData = {
   name: '',
   host: '',
   color: '#2563eb',
+  baseThemeId: '',
   storeId: null,
   storeUrl: null,
   themeId: null,

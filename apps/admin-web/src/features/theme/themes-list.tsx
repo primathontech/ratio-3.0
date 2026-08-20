@@ -4,12 +4,14 @@ import {
   ApiError,
   canManageStore,
   type Api,
+  type BaseThemeOption,
   type Store,
   type ThemeSummary,
 } from '../../common/api';
 import { Dialog, EmptyState, Field, Icon, Spinner, useToast } from '../../common/ui';
 import { PageHeader } from '../../common/page-header';
 import { storeSlug, storefrontUrl, storefrontHost, useStoreData } from '../../common/store-context';
+import { BasePicker } from './base-picker';
 import { ThemeCard, type Preview } from './theme-card';
 import './themes-list.css';
 
@@ -42,6 +44,8 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
   const [duplicateName, setDuplicateName] = useState('');
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('New theme');
+  const [bases, setBases] = useState<BaseThemeOption[]>([]);
+  const [newBase, setNewBase] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -62,6 +66,17 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
       });
   }, [api, store.id]);
   useEffect(load, [load]);
+
+  // The start-from bases for the New theme dialog (best-effort; picker hides itself with <2 bases).
+  useEffect(() => {
+    api
+      .listBaseThemes()
+      .then((list) => {
+        setBases(list);
+        setNewBase((b) => b || list[0]?.id || '');
+      })
+      .catch(() => {});
+  }, [api]);
 
   // Render each theme's saved home page (no files → saved state) into its card thumbnail. Keyed on the
   // set of theme ids, so it only refetches when a theme is added/removed, not on every render.
@@ -168,7 +183,10 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const { id } = await api.createTheme(store.id, { name: newName.trim() || 'New theme' });
+      const { id } = await api.createTheme(store.id, {
+        name: newName.trim() || 'New theme',
+        baseThemeId: newBase || undefined,
+      });
       setCreating(false);
       navigate(`/stores/${slug}/themes/${id}/editor`, { state: { fromApp: true } });
     } catch (e) {
@@ -264,8 +282,13 @@ export function ThemesList({ api, store }: { api: Api; store: Store }) {
                   autoFocus
                 />
               </Field>
+              {bases.length > 1 && (
+                <Field label="Start from">
+                  <BasePicker options={bases} value={newBase} onChange={setNewBase} />
+                </Field>
+              )}
               <p className="muted" style={{ fontSize: 13 }}>
-                Starts from the shared default theme. You'll drop straight into the code editor.
+                You'll drop straight into the code editor.
               </p>
             </div>
             <div className="actions">

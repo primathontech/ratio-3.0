@@ -19,6 +19,7 @@ export interface WizardData {
   name: string;
   host: string;
   color: string;
+  baseThemeId: string; // the "start from" base the store adopts (locked once the store is created)
   storeId: string | null;
   storeUrl: string | null;
   themeId: string | null;

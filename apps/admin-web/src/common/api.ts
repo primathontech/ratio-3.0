@@ -52,6 +52,12 @@ export interface ThemeSummary {
   latestVersion: number | null;
   createdAt: string;
 }
+// A "start from" base theme option shown in the create pickers (onboarding + new theme).
+export interface BaseThemeOption {
+  id: string;
+  name: string;
+  description: string;
+}
 // A bundle theme's files, keyed by path (e.g. 'index.liquid' → its source). The code editor's model.
 export type ThemeFiles = Record<string, string>;
 // --- Page builder (section/block PageDoc) ---
@@ -345,8 +351,18 @@ export function createApi(
         '/admin/base-theme/edit/reset',
         {}
       ),
-    createStore: (s: { name: string; host: string; color?: string; merchantId?: string }) =>
-      req<{ id: string; url: string }>('POST', '/stores', s),
+    createStore: (s: {
+      name: string;
+      host: string;
+      color?: string;
+      merchantId?: string;
+      baseThemeId?: string;
+    }) => req<{ id: string; url: string }>('POST', '/stores', s),
+    // The "start from" base themes a new store/theme can adopt (name + description for the picker).
+    listBaseThemes: () =>
+      req<Record<string, unknown>>('GET', '/base-themes').then((d) =>
+        pickArray<BaseThemeOption>(d, 'baseThemes')
+      ),
     // Verify a commerce merchant id before a store exists (onboarding step 1). configured=false when
     // the backend isn't wired in this env; verified=true + collectionCount when the id reached it.
     verifyMerchant: (merchantId: string) =>
@@ -369,9 +385,11 @@ export function createApi(
       req<Record<string, unknown>>('GET', `/stores/${id}/themes`).then((d) =>
         pickArray<ThemeSummary>(d, 'themes')
       ),
-    // Create from the shared Default base, or duplicate an existing theme's overrides.
-    createTheme: (id: string, body: { name?: string; duplicateOf?: string } = {}) =>
-      req<{ id: string }>('POST', `/stores/${id}/themes`, body),
+    // Create from a chosen base (default = the platform Default), or duplicate an existing theme.
+    createTheme: (
+      id: string,
+      body: { name?: string; duplicateOf?: string; baseThemeId?: string } = {}
+    ) => req<{ id: string }>('POST', `/stores/${id}/themes`, body),
     renameTheme: (id: string, themeId: string, name: string) =>
       req<{ ok: boolean }>('PATCH', `/stores/${id}/themes/${themeId}`, { name }),
     deleteTheme: (id: string, themeId: string) =>
