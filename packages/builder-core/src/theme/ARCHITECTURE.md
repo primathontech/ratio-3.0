@@ -162,7 +162,7 @@ flowchart TD
   theme["a theme folder must have"] --> layout["layout/theme.liquid<br/>(the full page shell + slots)"]
   theme --> chrome["sections/header.liquid<br/>sections/footer.liquid<br/>sections/order.liquid"]
   theme --> tpl["templates/index.json<br/>templates/collection.json<br/>templates/product.json<br/>(+ the sections they use)"]
-  theme --> style["config/tokens.json<br/>assets/base.css"]
+  theme --> styles["config/tokens.json<br/>assets/base.css"]
 ```
 
 The page shell (`layout/theme.liquid`) must leave **slots** the system fills in: the page content
