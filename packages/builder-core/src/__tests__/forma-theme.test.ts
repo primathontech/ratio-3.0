@@ -58,7 +58,23 @@ test('default theme ships the design-system CSS as an editable asset (assets/bas
     /\.hdr\b/,
     'carries the component classes sections depend on'
   );
-  assert.match(files['assets/base.css'], /:root\{/, 'carries the base brand-token defaults');
+  assert.match(files['assets/base.css'], /:root\s*\{/, 'carries the base brand-token defaults');
+});
+
+test('Forma skeleton: cascade layers + design-token scale are wired (theme-skeleton POC)', () => {
+  const files = formaBundleTheme();
+  const css = files['assets/base.css'];
+  // The fixed layer order — a later layer always beats an earlier one, so a merchant `overrides`
+  // rule can never lose to a base rule on specificity.
+  assert.match(css, /@layer\s+reset,\s*tokens,\s*base,\s*sections,\s*overrides\s*;/);
+  // The expanded, Tailwind-like token scale is present (spacing / radius / type / shadow / layout).
+  for (const v of ['--space-4', '--radius-md', '--text-lg', '--shadow-md', '--gutter'])
+    assert.ok(css.includes(v), `base.css defines ${v}`);
+  // The layout injects store tokens + merchant CSS INTO their layers (so store tokens sit in `tokens`
+  // and merchant CSS in `overrides`, which wins).
+  const layout = files['layout/theme.liquid'];
+  assert.match(layout, /@layer tokens\s*\{\s*\{\{\s*token_css\s*\}\}/);
+  assert.match(layout, /@layer overrides\s*\{\s*\{\{\s*theme_css\s*\}\}/);
 });
 
 test('default theme: layout holds content_for_layout and templates reference existing sections', () => {
@@ -131,9 +147,11 @@ test("a store's brand token override wins over the base defaults (cascade order)
   // they MUST be emitted AFTER the base or the default silently wins and the brand colour never applies.
   const head = storefrontHead({ color: '#ff0000' });
   assert.match(head, /--accent:#ff0000/, 'the brand colour override is present');
+  // Format-tolerant: the base default may be written as `--accent: #2563eb` (spaced) in the layered
+  // base.css; compare the hex positions — the override must come AFTER the base default so it wins.
   assert.ok(
-    head.lastIndexOf('--accent:#ff0000') > head.indexOf('--accent:#2563eb'),
-    'the override comes after the base default --accent, so it wins the cascade'
+    head.lastIndexOf('#ff0000') > head.indexOf('#2563eb'),
+    'the override comes after the base default accent, so it wins the cascade'
   );
 });
 
