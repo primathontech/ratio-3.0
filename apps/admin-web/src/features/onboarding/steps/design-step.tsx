@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Field, Spinner } from '../../../common/ui';
 import { ApiError, type StoreTheme, type ThemeFiles } from '../../../common/api';
 import { tokensFromFiles, filesWithTokens } from '../../theme/tokens-file';
+import { settingsFromFiles } from '../../theme/settings-file';
 import { ThemeControls, resolve } from '../../theme/theme-controls';
 import { PreviewFrame } from '../../theme/preview-frame';
 import { readFeatured, mapFeaturedCollections } from '../featured';
@@ -51,6 +52,9 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
     const withTokens = filesWithTokens(files, resolve(tokens));
     return mapFeaturedCollections(withTokens, { newArrivals });
   }, [files, tokens, newArrivals]);
+
+  // The theme's own controls (from its config/settings.json in the loaded draft).
+  const settings = useMemo(() => (files ? settingsFromFiles(files) : []), [files]);
 
   // Live preview, debounced so dragging the colour picker doesn't hammer the render.
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -118,7 +122,7 @@ export function DesignStep({ api, data, patch, onNext, onBack }: StepProps) {
 
       <div className="ts">
         <div className="ts-grid">
-          <ThemeControls theme={tokens} onChange={setTokens}>
+          <ThemeControls theme={tokens} onChange={setTokens} settings={settings}>
             <section>
               <div className="ts-label ds-section-label">Homepage Products</div>
               {collections.length > 0 ? (

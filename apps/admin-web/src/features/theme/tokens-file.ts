@@ -13,6 +13,7 @@ const TOKEN_KEYS = [
   'baseSize',
   'radius',
   'container',
+  'elevation',
 ] as const satisfies readonly (keyof StoreTheme)[];
 
 // Read the brand tokens a theme carries in its bundle. Tolerant: absent, malformed, non-object, or

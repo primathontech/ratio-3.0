@@ -36,6 +36,7 @@ export interface StoreTheme {
   baseSize?: string;
   radius?: string;
   container?: string;
+  elevation?: string;
 }
 export interface ThemeVersion {
   version: number;

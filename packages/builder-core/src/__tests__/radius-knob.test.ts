@@ -44,6 +44,32 @@ test('radius knob flows into Forma (--radius-md) and stays byte-identical by def
   assert.equal(resolveVar(base + tokenCss({ radius: 'square' }), 'radius-md'), '0px');
 });
 
+// Card-elevation is a theme-owned knob: Forma's .card rests on `var(--elevation, none)`. rootVars only
+// emits --elevation when the merchant chooses one, so cards stay flat by default (byte-identical).
+test('card-elevation knob flows into Forma (--elevation) and stays flat by default', () => {
+  const base = STOREFRONT_BASE_CSS;
+  assert.ok(
+    base.includes('var(--elevation'),
+    'Forma cards consume --elevation (the bridge exists)'
+  );
+  assert.equal(
+    resolveVar(base + tokenCss({}), 'elevation'),
+    '',
+    'no --elevation emitted by default'
+  );
+  assert.equal(
+    resolveVar(base + tokenCss({ elevation: 'lifted' }), 'elevation'),
+    resolveVar(base, 'shadow-md'),
+    'lifted re-points --elevation to the theme shadow scale'
+  );
+  assert.equal(
+    resolveVar(base + tokenCss({ elevation: 'soft' }), 'elevation'),
+    resolveVar(base, 'shadow-sm'),
+    'soft re-points to the smaller theme shadow'
+  );
+  assert.equal(resolveVar(base + tokenCss({ elevation: 'flat' }), 'elevation'), 'none');
+});
+
 test('radius knob flows into Aura (--r) and stays byte-identical by default', () => {
   const base = AURA_THEME_FILES['assets/base.css'];
   assert.equal(resolveVar(base + tokenCss({}), 'r'), '20px', 'default corner unchanged');

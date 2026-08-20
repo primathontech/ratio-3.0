@@ -12,12 +12,11 @@ import {
   FONT_ORDER,
   BASE_SIZE,
   SIZE_LABELS,
-  RADIUS,
-  RADIUS_LABELS,
   BRAND_SWATCHES,
   THEME_DEFAULTS,
   THEME_PRESETS,
   type ThemePreset,
+  type ThemeSettingControl,
 } from '@ratio/design-tokens';
 import './theme-settings.css';
 
@@ -73,6 +72,7 @@ export function resolve(t: StoreTheme): Required<StoreTheme> {
     baseSize: t.baseSize || DEFAULTS.baseSize,
     radius: t.radius || DEFAULTS.radius,
     container: t.container || DEFAULTS.container,
+    elevation: t.elevation || DEFAULTS.elevation,
   };
 }
 
@@ -155,10 +155,14 @@ function FontPicker({ value, onChange }: { value: string; onChange: (v: string) 
 export function ThemeControls({
   theme,
   onChange,
+  settings = [],
   children,
 }: {
   theme: StoreTheme;
   onChange: (next: StoreTheme) => void;
+  // The active theme's own controls (from its config/settings.json). Global knobs above always show;
+  // these theme-owned controls render only where the theme declares them, so nothing is ever inert.
+  settings?: ThemeSettingControl[];
   children?: ReactNode;
 }) {
   const r = resolve(theme);
@@ -246,22 +250,34 @@ export function ThemeControls({
         />
       </section>
 
-      <section>
-        <div className="ts-label">Layout</div>
-        <FieldHead
-          label="Radius"
-          value={RADIUS[r.radius]}
-          canReset={r.radius !== DEFAULTS.radius}
-          onReset={() => set('radius', DEFAULTS.radius)}
-        />
-        <Choice
-          options={['square', 'soft', 'rounded']}
-          value={r.radius}
-          labels={RADIUS_LABELS}
-          icons={CORNER_ICON}
-          onChange={(v) => set('radius', v)}
-        />
-      </section>
+      {settings.length > 0 && (
+        <section>
+          <div className="ts-label">Theme options</div>
+          {settings.map((ctrl) => {
+            const key = ctrl.id as keyof StoreTheme;
+            const value = theme[key] ?? ctrl.default;
+            const labels = Object.fromEntries(ctrl.options.map((o) => [o.value, o.label]));
+            const options = ctrl.options.map((o) => o.value);
+            return (
+              <div key={ctrl.id}>
+                <FieldHead
+                  label={ctrl.label}
+                  value={labels[value] ?? value}
+                  canReset={value !== ctrl.default}
+                  onReset={() => set(key, ctrl.default)}
+                />
+                <Choice
+                  options={options}
+                  value={value}
+                  labels={labels}
+                  icons={ctrl.id === 'radius' ? CORNER_ICON : undefined}
+                  onChange={(v) => set(key, v)}
+                />
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {children}
     </div>

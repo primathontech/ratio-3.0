@@ -16,6 +16,7 @@ const TOKEN_KEYS = [
   'baseSize',
   'radius',
   'container',
+  'elevation',
 ] as const satisfies readonly (keyof ThemeTokens)[];
 
 // Parse a theme's tokens file into a plain, string-valued token subset. Absent, malformed, non-object,
