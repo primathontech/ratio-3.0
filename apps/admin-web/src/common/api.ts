@@ -208,6 +208,11 @@ function pickArray<T>(obj: unknown, key: string): T[] {
   return v as T[];
 }
 
+// The `?base=<id>` query the base-theme editor endpoints take (omitted → the platform Default base).
+function baseQ(base?: string): string {
+  return base ? `?base=${encodeURIComponent(base)}` : '';
+}
+
 // A binary theme asset as the editor's Assets view sees it: the path the theme references + the
 // content address / type / size from the draft manifest (OFCE-632).
 export interface ThemeAsset {
@@ -320,7 +325,11 @@ export function createApi(
         pickArray<PlatformUser>(d, 'users')
       ),
     // Platform-admin only: base-theme propagation (OFCE-633). Status, dry-run plan, and apply-to-a-set.
-    getBaseTheme: () => req<BaseThemeStatus>('GET', '/admin/base-theme'),
+    getBaseTheme: (baseThemeId?: string) =>
+      req<BaseThemeStatus>(
+        'GET',
+        `/admin/base-theme${baseThemeId ? `?baseThemeId=${encodeURIComponent(baseThemeId)}` : ''}`
+      ),
     previewBasePropagation: (body: { toVersion?: number; baseThemeId?: string } = {}) =>
       req<BaseRebasePlan>('POST', '/admin/base-theme/propagate/preview', body),
     applyBasePropagation: (targets: { tenantId: string; themeId: string }[], toVersion?: number) =>
@@ -328,27 +337,35 @@ export function createApi(
         targets,
         toVersion,
       }),
-    // Platform-admin only: edit the shared base theme (OFCE-656). Draft read/save, preview, publish
-    // (a new base version), reset to the last published base.
-    getBaseThemeDraft: () =>
-      req<{ files: ThemeFiles; revision: string }>('GET', '/admin/base-theme/edit/draft'),
-    saveBaseThemeDraft: (files: ThemeFiles, revision: string) =>
-      req<{ ok: boolean; hash: string }>('PUT', '/admin/base-theme/edit/draft', {
+    // Platform-admin only: edit a shared base theme (OFCE-656). Draft read/save, preview, publish
+    // (a new base version), reset to the last published base. `base` picks which base (default =
+    // the platform Default).
+    getBaseThemeDraft: (base?: string) =>
+      req<{ files: ThemeFiles; revision: string }>(
+        'GET',
+        `/admin/base-theme/edit/draft${baseQ(base)}`
+      ),
+    saveBaseThemeDraft: (files: ThemeFiles, revision: string, base?: string) =>
+      req<{ ok: boolean; hash: string }>('PUT', `/admin/base-theme/edit/draft${baseQ(base)}`, {
         files,
         revision,
       }),
-    previewBaseTheme: (files: ThemeFiles, page: string) =>
+    previewBaseTheme: (files: ThemeFiles, page: string, base?: string) =>
       req<{ html?: string; sampleData?: boolean; error?: string }>(
         'POST',
-        '/admin/base-theme/edit/preview',
+        `/admin/base-theme/edit/preview${baseQ(base)}`,
         { files, page }
       ),
-    publishBaseTheme: () =>
-      req<{ ok: boolean; version: number }>('POST', '/admin/base-theme/edit/publish', {}),
-    resetBaseThemeDraft: () =>
+    publishBaseTheme: (base?: string) =>
+      req<{ ok: boolean; version: number }>(
+        'POST',
+        `/admin/base-theme/edit/publish${baseQ(base)}`,
+        {}
+      ),
+    resetBaseThemeDraft: (base?: string) =>
       req<{ ok: boolean; files: ThemeFiles; revision: string }>(
         'POST',
-        '/admin/base-theme/edit/reset',
+        `/admin/base-theme/edit/reset${baseQ(base)}`,
         {}
       ),
     createStore: (s: {

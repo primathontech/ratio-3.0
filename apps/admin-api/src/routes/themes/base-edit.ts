@@ -1,7 +1,8 @@
 import type { Context, Hono, MiddlewareHandler } from 'hono';
 import {
   DraftConflict,
-  ensureDefaultBaseTheme,
+  ensureSeededBaseById,
+  baseThemeDef,
   layoutOwnsDocument,
   validateThemeFiles,
   LIBRARY_TENANT_ID,
@@ -12,28 +13,37 @@ import { pool } from '@ratio/data-db';
 import { isPlatformAdmin, denyNarrowedScope } from '../../middleware/auth';
 import type { RouteDeps, Vars } from '../deps';
 
-// Platform-admin editor over the shared BASE theme (`_library` / `library-default`) — OFCE-656. This is
-// the theme every store derives from; improving it here + publishing a new base version is what the
-// propagation console (base.ts) then rolls out to stores. It reuses the store editor's draft/preview/
-// publish machinery pointed at the base, with two differences from a store theme: publish is always
-// makeLive:false (the base is never anyone's live theme), and base authoring is now the source of truth
-// (ensureDefaultBaseTheme is SEED-ONLY, so an edit here is never clobbered by a later deploy).
+// Platform-admin editor over a shared BASE theme (owned by `_library`) — OFCE-656. A base is the theme
+// stores derive from; improving it here + publishing a new base version is what the propagation console
+// (base.ts) then rolls out to stores on THAT base. Which base is edited comes from `?base=<id>`,
+// defaulting to the platform Default (`library-default`); an unknown id is a 400. It reuses the store
+// editor's draft/preview/publish machinery pointed at the base, with two differences from a store theme:
+// publish is always makeLive:false (a base is never anyone's live theme), and base authoring is the
+// source of truth (seed-only, so an edit here is never clobbered by a later deploy).
 //
 // Gated exactly like the propagation routes: denyNarrowedScope + isPlatformAdmin. `_library` has no
 // memberships, so a normal user can't reach it; a platform admin bypasses the membership guard.
-const BASE_REF = { themeId: DEFAULT_BASE_THEME_ID, tenantId: LIBRARY_TENANT_ID };
+type BaseRef = { themeId: string; tenantId: string };
 
-// The latest published base source (the whole tree — the base is a root theme), or null if the base has
-// no published version yet. Used to (re)load the draft from what's actually published.
+// The base being edited: `?base=<id>` (defaults to the platform Default). Returns null for an unknown id
+// so the caller 400s rather than editing a phantom theme.
+function resolveBaseRef(c: Context<Vars>): BaseRef | null {
+  const id = c.req.query('base') || DEFAULT_BASE_THEME_ID;
+  return baseThemeDef(id) ? { themeId: id, tenantId: LIBRARY_TENANT_ID } : null;
+}
+
+// The latest published source of a base (the whole tree — a base is a root theme), or null if it has no
+// published version yet. Used to (re)load the draft from what's actually published.
 async function latestPublishedBaseSource(
-  themes: NonNullable<RouteDeps['themes']>
+  themes: NonNullable<RouteDeps['themes']>,
+  themeId: string
 ): Promise<ThemeFiles | null> {
   const { rows } = await pool.query<{ source_hash: string }>(
     'SELECT source_hash FROM theme_bundle_version WHERE theme_id = $1 ORDER BY version DESC LIMIT 1',
-    [DEFAULT_BASE_THEME_ID]
+    [themeId]
   );
   const hash = rows[0]?.source_hash;
-  return hash ? await themes.loadSource(LIBRARY_TENANT_ID, DEFAULT_BASE_THEME_ID, hash) : null;
+  return hash ? await themes.loadSource(LIBRARY_TENANT_ID, themeId, hash) : null;
 }
 
 const realFileCount = (t: ThemeFiles) => Object.keys(t).filter((k) => k !== '_deletes').length;
@@ -45,22 +55,25 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
     if (!isPlatformAdmin(c.get('userId'))) return c.json({ error: 'forbidden' }, 403);
     return next();
   };
+  const unknownBase = (c: Context<Vars>) => c.json({ error: 'unknown base theme' }, 400);
 
   // The base's composed tree (a root theme, so the draft IS the whole theme) + the revision token the
   // editor round-trips. Seeds the base from the code default on a fresh env so it opens populated.
   app.get('/admin/base-theme/edit/draft', denyNarrowedScope, platformAdminOnly, async (c) => {
     if (!themes) return bundle503(c);
-    await ensureDefaultBaseTheme(themes, { compile: identityCompile });
+    const ref = resolveBaseRef(c);
+    if (!ref) return unknownBase(c);
+    await ensureSeededBaseById(themes, ref.themeId, { compile: identityCompile });
     // Recover a missing draft (DR / bucket migration / a store diverged from code so seed-only's
     // code-matches self-heal doesn't apply): if the draft came back empty but a version IS published,
     // reload the draft from that published source so the editor never opens on a blank base.
-    if (realFileCount(await themes.readDraft(BASE_REF)) === 0) {
-      const published = await latestPublishedBaseSource(themes);
-      if (published && realFileCount(published) > 0) await themes.saveDraft(BASE_REF, published);
+    if (realFileCount(await themes.readDraft(ref)) === 0) {
+      const published = await latestPublishedBaseSource(themes, ref.themeId);
+      if (published && realFileCount(published) > 0) await themes.saveDraft(ref, published);
     }
     const [files, revision] = await Promise.all([
-      themes.readComposed(BASE_REF),
-      themes.draftRevision(BASE_REF),
+      themes.readComposed(ref),
+      themes.draftRevision(ref),
     ]);
     return c.json({ files, revision });
   });
@@ -68,6 +81,8 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
   // Save the base draft. Same reject-on-save validation as a store theme; 409 on a concurrent edit.
   app.put('/admin/base-theme/edit/draft', denyNarrowedScope, platformAdminOnly, async (c) => {
     if (!themes) return bundle503(c);
+    const ref = resolveBaseRef(c);
+    if (!ref) return unknownBase(c);
     const body = (await c.req.json().catch(() => ({}))) as {
       files?: ThemeFiles;
       revision?: string;
@@ -77,7 +92,7 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
     const issues = validateThemeFiles(body.files ?? {});
     if (issues.length) return c.json({ error: 'theme has validation errors', issues }, 400);
     try {
-      const { hash } = await themes.saveOverrides(BASE_REF, body.files ?? {}, {
+      const { hash } = await themes.saveOverrides(ref, body.files ?? {}, {
         expectedRevision: body.revision,
       });
       c.set('auditTenant', LIBRARY_TENANT_ID);
@@ -92,8 +107,10 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
   // Live preview of a base page. No store commerce context — renders with sample data.
   app.post('/admin/base-theme/edit/preview', denyNarrowedScope, platformAdminOnly, async (c) => {
     if (!themes) return bundle503(c);
+    const ref = resolveBaseRef(c);
+    if (!ref) return unknownBase(c);
     const body = (await c.req.json().catch(() => ({}))) as { files?: ThemeFiles; page?: string };
-    const files = body.files ?? (await themes.readComposed(BASE_REF));
+    const files = body.files ?? (await themes.readComposed(ref));
     try {
       const { html, sampleData } = await renderThemePreview(
         files,
@@ -117,7 +134,9 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
   // from, so a body-only base layout would break every derived store.
   app.post('/admin/base-theme/edit/publish', denyNarrowedScope, platformAdminOnly, async (c) => {
     if (!themes) return bundle503(c);
-    const composed = await themes.readComposed(BASE_REF);
+    const ref = resolveBaseRef(c);
+    if (!ref) return unknownBase(c);
+    const composed = await themes.readComposed(ref);
     if (Object.keys(composed).length > 0 && !layoutOwnsDocument(composed['layout/theme.liquid']))
       return c.json(
         {
@@ -128,7 +147,7 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
       );
     let version: number;
     try {
-      ({ version } = await themes.publish(BASE_REF, {
+      ({ version } = await themes.publish(ref, {
         compile: identityCompile,
         makeLive: false,
         by: c.get('userId'),
@@ -152,11 +171,13 @@ export function registerBaseThemeEditRoutes(app: Hono<Vars>, deps: RouteDeps) {
     platformAdminOnly,
     async (c: Context<Vars>) => {
       if (!themes) return bundle503(c);
-      const source = await latestPublishedBaseSource(themes);
-      await themes.saveDraft(BASE_REF, source ?? {});
+      const ref = resolveBaseRef(c);
+      if (!ref) return unknownBase(c);
+      const source = await latestPublishedBaseSource(themes, ref.themeId);
+      await themes.saveDraft(ref, source ?? {});
       const [files, revision] = await Promise.all([
-        themes.readComposed(BASE_REF),
-        themes.draftRevision(BASE_REF),
+        themes.readComposed(ref),
+        themes.draftRevision(ref),
       ]);
       c.set('auditTenant', LIBRARY_TENANT_ID);
       return c.json({ ok: true, files, revision });

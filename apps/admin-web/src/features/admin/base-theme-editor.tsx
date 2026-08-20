@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, type Api, type ThemeFiles } from '../../common/api';
+import { ApiError, type Api, type BaseThemeOption, type ThemeFiles } from '../../common/api';
 import { PageHeader } from '../../common/page-header';
 import { Dialog, Icon, Spinner, useToast } from '../../common/ui';
 import { CodeEditor } from '../theme/code-editor';
@@ -46,6 +46,17 @@ export function BaseThemeEditor({ api }: { api: Api }) {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0); // bump to remount the editor (initial load / reset)
   const [confirmReset, setConfirmReset] = useState(false);
+  // Which base is being edited. '' = the platform Default (the API defaults when no ?base= is sent);
+  // the select shows bases[0] for it. Changing it reloads that base's draft (see `load` deps).
+  const [bases, setBases] = useState<BaseThemeOption[]>([]);
+  const [baseId, setBaseId] = useState('');
+
+  useEffect(() => {
+    api
+      .listBaseThemes()
+      .then(setBases)
+      .catch(() => {});
+  }, [api]);
 
   const [previewPage, setPreviewPage] = useState('index');
   const [previewHtml, setPreviewHtml] = useState('');
@@ -62,7 +73,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
     async (page: string, filesOverride?: ThemeFiles) => {
       setPreviewing(true);
       try {
-        const r = await api.previewBaseTheme(filesOverride ?? filesRef.current, page);
+        const r = await api.previewBaseTheme(filesOverride ?? filesRef.current, page, baseId);
         if (r.error) setPreviewErr(r.error);
         else {
           setPreviewHtml(r.html ?? '');
@@ -74,12 +85,12 @@ export function BaseThemeEditor({ api }: { api: Api }) {
         setPreviewing(false);
       }
     },
-    [api]
+    [api, baseId]
   );
 
   const load = useCallback(() => {
     api
-      .getBaseThemeDraft()
+      .getBaseThemeDraft(baseId)
       .then((d) => {
         setFiles(d.files);
         setRevision(d.revision);
@@ -95,7 +106,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
         void runPreview('index', d.files);
       })
       .catch((e) => setError(errorText(e)));
-  }, [api, runPreview]);
+  }, [api, runPreview, baseId]);
   useEffect(load, [load]);
 
   const templatePages = useMemo(() => {
@@ -114,7 +125,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
     if (!files) return;
     setBusy(true);
     try {
-      const res = await api.saveBaseThemeDraft(files, revision);
+      const res = await api.saveBaseThemeDraft(files, revision, baseId);
       setRevision(res.hash);
       setDirty(false);
       toast('Base draft saved', 'ok');
@@ -134,7 +145,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
     }
     setBusy(true);
     try {
-      const { version } = await api.publishBaseTheme();
+      const { version } = await api.publishBaseTheme(baseId);
       toast(`Published base v${version}. Use “Base theme” to roll it out to stores.`, 'ok');
     } catch (e) {
       toast(errorText(e), 'error');
@@ -146,7 +157,7 @@ export function BaseThemeEditor({ api }: { api: Api }) {
   async function doReset() {
     setBusy(true);
     try {
-      const d = await api.resetBaseThemeDraft();
+      const d = await api.resetBaseThemeDraft(baseId);
       setFiles(d.files);
       setRevision(d.revision);
       setDirty(false);
@@ -174,6 +185,27 @@ export function BaseThemeEditor({ api }: { api: Api }) {
         title="Base theme"
         description="The theme every store starts from. Edit it, then publish a new base version and roll it out from the propagation view."
       >
+        {bases.length > 1 && (
+          <select
+            className="input"
+            style={{ width: 'auto' }}
+            aria-label="Base theme to edit"
+            value={baseId || bases[0]?.id || ''}
+            onChange={(e) => {
+              if (dirty) {
+                toast('Save or reset your changes before switching base.', 'error');
+                return;
+              }
+              setBaseId(e.target.value);
+            }}
+          >
+            {bases.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+        )}
         <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmReset(true)}>
           Reset
         </button>

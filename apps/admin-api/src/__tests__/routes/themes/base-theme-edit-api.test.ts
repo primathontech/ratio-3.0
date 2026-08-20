@@ -151,6 +151,37 @@ test('POST reset: discards the draft back to the published base', async () => {
   );
 });
 
+test('GET base draft ?base=library-editorial edits the editorial base, not the default', async () => {
+  const res = await call(
+    app,
+    'GET',
+    '/admin/base-theme/edit/draft?base=library-editorial',
+    superadmin
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { files: Record<string, string> };
+  assert.ok(body.files['sections/editorial-hero.liquid'], 'the editorial base ships its own hero');
+  assert.match(body.files['templates/index.json'] ?? '', /editorial-hero/);
+});
+
+test('base editor rejects an unknown base id (400)', async () => {
+  const res = await call(app, 'GET', '/admin/base-theme/edit/draft?base=library-nope', superadmin);
+  assert.equal(res.status, 400);
+});
+
+test('publish ?base=library-editorial cuts a version for that base', async () => {
+  const res = await call(
+    app,
+    'POST',
+    '/admin/base-theme/edit/publish?base=library-editorial',
+    superadmin,
+    {}
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { version: number };
+  assert.ok(body.version >= 1);
+});
+
 test('503 when no bundle store is wired', async () => {
   assert.equal(
     (await call(appNoStore, 'GET', '/admin/base-theme/edit/draft', superadmin)).status,
