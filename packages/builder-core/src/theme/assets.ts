@@ -29,6 +29,10 @@ export type AssetManifest = Record<string, AssetEntry>;
 // file (the code editor's draft-save writes config/assets.json), so its content-type is UNTRUSTED at
 // serve time: a hand-edited entry claiming text/html or application/javascript would otherwise be served
 // as active content — stored XSS on the (public, CDN-cached) storefront. svg is excluded (it can script).
+// text/css is allowed (OFCE-701 §4, DECIDED): the compiler promotes the shared base stylesheet into the
+// manifest so it can be CDN-linked + cross-tenant cached. CSS is NON-scriptable under the storefront CSP
+// (script-src 'none'), and CSS-based exfiltration via url() is bounded by the CSP fetch directives
+// (img-src/font-src/connect-src) — so serving a stylesheet cannot execute code, unlike html/js/svg.
 export const ALLOWED_ASSET_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'image/png',
   'image/jpeg',
@@ -38,6 +42,7 @@ export const ALLOWED_ASSET_CONTENT_TYPES: ReadonlySet<string> = new Set([
   'image/x-icon',
   'image/vnd.microsoft.icon',
   'font/woff2',
+  'text/css',
 ]);
 
 // The safe content-type to SERVE an asset with: the manifest's type if it's allowlisted, else
