@@ -2,7 +2,7 @@
 <header class="hdr"><div class="rt hdr-in">
   <a class="hdr-brand" href="/">{{ site_name | default: 'Nova' | escape }}</a>
   <nav class="hdr-nav">
-    {% if menu.size > 0 %}{% for item in menu %}<a class="navlink" href="{{ item.href | escape }}"{% if item.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title | escape }}</a>{% endfor %}{% endif %}
+    {% if menu.size > 0 %}{% for item in menu %}{% if item.items.size > 0 %}<div class="nav-item"><a class="navlink" href="{{ item.href | escape }}"{% if item.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title | escape }}</a><div class="nav-drop"><ul>{% for l in item.items %}<li><a href="{{ l.href | escape }}"{% if l.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ l.title | escape }}</a></li>{% endfor %}</ul></div></div>{% else %}<a class="navlink" href="{{ item.href | escape }}"{% if item.external %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ item.title | escape }}</a>{% endif %}{% endfor %}{% endif %}
   </nav>
   <div class="hdr-actions">
     <a class="icon-link" href="/search" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg></a>

@@ -98,6 +98,13 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 .hdr-actions { display: flex; gap: 20px; align-items: center; justify-content: flex-end; }
 .navlink { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); padding: 4px 0; border-bottom: 1px solid transparent; transition: border-color 0.2s; white-space: nowrap; }
 .navlink:hover { border-color: var(--ink); }
+.nav-item { position: relative; display: inline-flex; align-items: center; }
+.nav-item > .navlink::after { content: ''; width: 0.36em; height: 0.36em; margin-left: 0.42em; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-0.12em) rotate(45deg); opacity: 0.5; }
+.nav-drop { position: absolute; top: 100%; left: 0; display: none; background: var(--paper); border: 1px solid var(--line); padding: 8px; min-width: 210px; z-index: 30; }
+.nav-item:hover > .nav-drop, .nav-item:focus-within > .nav-drop { display: block; }
+.nav-drop ul { list-style: none; margin: 0; padding: 0; }
+.nav-drop a { display: block; padding: 9px 14px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); white-space: nowrap; }
+.nav-drop a:hover { color: var(--accent); }
 .hdr-brand { font-family: var(--font-heading); font-size: 22px; letter-spacing: 0.42em; text-transform: uppercase; text-align: center; padding-left: 0.42em; }
 .icon-link { color: var(--ink); display: inline-grid; place-items: center; width: 26px; height: 26px; position: relative; transition: color 0.2s; }
 .icon-link:hover { color: var(--accent); }

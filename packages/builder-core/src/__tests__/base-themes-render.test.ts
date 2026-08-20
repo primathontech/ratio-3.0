@@ -55,6 +55,32 @@ for (const base of BASE_THEMES) {
   });
 }
 
+test('every base header renders nested (dropdown) menu children', async () => {
+  // The nav menu is a tree: a top-level item can carry `items` (a dropdown). Every theme's header
+  // must render those children — a flat nav silently drops a merchant's submenu. (chrome.test.ts
+  // enforces this on Forma; this covers the whole lineup.)
+  const chrome = {
+    site_name: 'Acme',
+    footer: [],
+    menu: [
+      { title: 'Shop', href: '/collections/shop' },
+      {
+        title: 'Hair',
+        href: '/collections/hair',
+        items: [
+          { title: 'Shampoo', href: '/collections/shampoo' },
+          { title: 'Serum', href: '/collections/serum' },
+        ],
+      },
+    ],
+  };
+  for (const base of BASE_THEMES) {
+    const header = await render(base.files()['sections/header.liquid'], chrome, { trusted: true });
+    assert.match(header, /Shampoo/, `${base.id} header renders a nested child link`);
+    assert.match(header, /href="\/collections\/shampoo"/, `${base.id} nested child keeps its href`);
+  }
+});
+
 test('the lineup offers Forma / Nova / Aura / Atelier', () => {
   const names = BASE_THEMES.map((b) => b.name);
   for (const n of ['Forma', 'Nova', 'Aura', 'Atelier'])
