@@ -5,40 +5,45 @@
       "params": {
         "first": 8
       }
+    },
+    "cats": {
+      "type": "COLLECTIONS",
+      "params": {
+        "first": 6
+      }
     }
   },
   "sections": [
     {
       "type": "nova-hero",
       "data": {
-        "kicker": "New season · 2025",
-        "heading": "Wear the drop.",
-        "subheading": "Limited runs, bold silhouettes, and colours that do the talking.",
-        "cta_label": "Shop new in",
-        "cta_href": "/collections/all"
+        "kicker": "Winter '26 — Just Dropped",
+        "heading": "Move Different.",
+        "subheading": "Performance basics engineered for everyday. Built bold, priced fair, made to last.",
+        "cta_label": "Shop the drop",
+        "cta_href": "/collections/all",
+        "cta2_label": "Lookbook",
+        "cta2_href": "/collections/all",
+        "stamp": "NOVA"
       }
     },
     {
-      "type": "tiles",
-      "data": {
-        "heading": "Shop by category",
-        "t1_label": "New in",
-        "t1_href": "/collections/all",
-        "t2_label": "Bestsellers",
-        "t2_href": "/collections/all",
-        "t3_label": "Sale",
-        "t3_href": "/collections/all"
-      }
+      "type": "nova-strip"
     },
     {
       "type": "collection-row",
       "dataSourceKey": "all",
       "data": {
-        "heading": "New drops"
+        "heading": "New Arrivals",
+        "cta_href": "/collections/all"
       }
     },
     {
-      "type": "brand-story"
+      "type": "nova-categories",
+      "dataSourceKey": "cats",
+      "data": {
+        "heading": "Shop by Category"
+      }
     }
   ]
 }

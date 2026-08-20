@@ -1,8 +1,10 @@
-<section class="nova-hero">
-  <div class="rt nova-hero-in">
-    {% if kicker %}<span class="nova-kicker">{{ kicker | escape }}</span>{% endif %}
-    <h1 class="nova-title">{{ heading | escape }}</h1>
-    {% if subheading %}<p class="nova-sub">{{ subheading | escape }}</p>{% endif %}
-    {% if cta_label %}<a class="btn nova-cta" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
+<section class="nova-hero rt">
+  {% if kicker %}<span class="nova-tag">{{ kicker | escape }}</span>{% endif %}
+  <h1>{{ heading | escape }}</h1>
+  {% if subheading %}<p>{{ subheading | escape }}</p>{% endif %}
+  <div class="nova-cta-row">
+    {% if cta_label %}<a class="btn" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }} →</a>{% endif %}
+    {% if cta2_label %}<a class="btn btn-dark" href="{{ cta2_href | default: '/collections/all' | escape }}">{{ cta2_label | escape }}</a>{% endif %}
   </div>
+  <div class="nova-hero-media">{% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% else %}<span class="stamp">{{ stamp | default: 'NOVA' | escape }}</span>{% endif %}</div>
 </section>
