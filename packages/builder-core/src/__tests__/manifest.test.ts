@@ -10,7 +10,10 @@ test('defaultWebManifest: a valid installable manifest from the store name + bra
   assert.equal(m.display, 'standalone');
   assert.equal(m.theme_color, '#2563eb');
   assert.equal(m.background_color, '#ffffff');
-  assert.deepEqual(m.icons, [{ src: '/favicon.ico', sizes: 'any', type: 'image/x-icon' }]);
+  assert.deepEqual(m.icons, [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+  ]);
 });
 
 test('defaultWebManifest: short_name is capped at 12 chars', () => {

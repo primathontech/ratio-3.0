@@ -236,10 +236,41 @@ test(
   }
 );
 
-test('404s /sw.js when the store ships no service worker (PWA is opt-in)', { skip }, async () => {
-  const res = await call('/sw.js', { 'x-ratio-tenant': T2 });
-  assert.equal(res.status, 404);
-});
+test(
+  'serves the conservative default /sw.js when the store ships none (default-on PWA)',
+  { skip },
+  async () => {
+    const res = await call('/sw.js', { 'x-ratio-tenant': T2 });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get('content-type') || '', /javascript/);
+    assert.match(
+      await res.text(),
+      /addEventListener\('fetch'/,
+      'the default worker has a fetch handler'
+    );
+  }
+);
+
+test(
+  'serves per-store PNG PWA icons at /icon-192.png + /icon-512.png (default-on)',
+  { skip },
+  async () => {
+    for (const [path, size] of [
+      ['/icon-192.png', 192],
+      ['/icon-512.png', 512],
+    ] as const) {
+      const res = await call(path, { 'x-ratio-tenant': T2 });
+      assert.equal(res.status, 200, `${path} served`);
+      assert.equal(res.headers.get('content-type'), 'image/png');
+      const buf = Buffer.from(await res.arrayBuffer());
+      assert.ok(
+        buf.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+        'PNG sig'
+      );
+      assert.equal(buf.readUInt32BE(16), size, 'IHDR dimension matches the requested size');
+    }
+  }
+);
 
 test(
   'synthesizes /manifest.json from the store name + brand colour when the theme ships none',

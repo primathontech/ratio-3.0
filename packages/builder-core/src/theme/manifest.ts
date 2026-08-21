@@ -7,12 +7,11 @@ const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 export interface WebManifestInput {
   name: string; // the store's display name
   themeColor?: string; // brand colour (hex); falls back when absent/invalid
-  iconUrl?: string; // an icon URL; defaults to the well-known /favicon.ico
 }
 
 // A minimal, valid installable manifest. short_name is capped at 12 chars (the home-screen label
 // budget). theme_color only takes a validated hex — an untrusted value can't inject into the JSON.
-function baseManifest({ name, themeColor, iconUrl }: WebManifestInput): Record<string, unknown> {
+function baseManifest({ name, themeColor }: WebManifestInput): Record<string, unknown> {
   return {
     name,
     short_name: name.slice(0, 12),
@@ -20,7 +19,13 @@ function baseManifest({ name, themeColor, iconUrl }: WebManifestInput): Record<s
     display: 'standalone',
     background_color: '#ffffff',
     theme_color: themeColor && HEX.test(themeColor) ? themeColor : '#000000',
-    icons: [{ src: iconUrl ?? '/favicon.ico', sizes: 'any', type: 'image/x-icon' }],
+    // PNG icons the origin generates per store (tinted with the brand colour) — a raster ≥192 AND a 512
+    // maskable is what browsers require for installability (an .ico does not qualify). A merchant icon
+    // set overrides via an authored manifest.json.
+    icons: [
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+    ],
   };
 }
 
