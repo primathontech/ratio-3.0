@@ -23,6 +23,8 @@ const skip = endpoint ? false : 'set BUNDLE_S3_ENDPOINT (MinIO) + a migrated DAT
 
 const T = 'themeasset_o1';
 const THEME = 'themeasset_o1_main';
+const T2 = 'themeasset_o2'; // a store whose theme ships NO manifest.json → the origin synthesizes one
+const THEME2 = 'themeasset_o2_main';
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 13, 10, 26, 10, 1, 2, 3, 4]);
 const ICO = new Uint8Array([0, 0, 1, 0, 1, 0, 16, 16, 0, 0]); // a (tiny) favicon, referenced as assets/favicon.ico
 const ORPHAN = new Uint8Array([9, 9, 9, 9]); // stored but NOT referenced by the live manifest
@@ -75,12 +77,31 @@ before(async () => {
     }
   );
   await store.publish({ themeId: THEME, tenantId: T }, { compile: (s) => s }); // makes it live
+
+  // A second store with a live theme but NO manifest.json, and a brand colour set in admin — the origin
+  // must SYNTHESIZE a manifest from its name + brand colour.
+  await pool.query('DELETE FROM theme WHERE id = $1', [THEME2]);
+  await pool.query('DELETE FROM tenants WHERE id = $1', [T2]);
+  await pool.query(
+    "INSERT INTO tenants (id, name, status, theme) VALUES ($1, 'Brandy', 'active', $2)",
+    [T2, JSON.stringify({ color: '#ff5722' })]
+  );
+  await store.ensureTheme(T2, THEME2);
+  await store.saveDraft(
+    { themeId: THEME2, tenantId: T2 },
+    {
+      'layout/theme.liquid':
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>t</title></head><body>{{ content_for_layout }}</body></html>',
+      'templates/index.json': JSON.stringify({ sections: [] }),
+    }
+  );
+  await store.publish({ themeId: THEME2, tenantId: T2 }, { compile: (s) => s });
 });
 
 after(async () => {
   if (skip) return;
-  await pool.query('DELETE FROM theme WHERE id = $1', [THEME]);
-  await pool.query('DELETE FROM tenants WHERE id = $1', [T]);
+  await pool.query('DELETE FROM theme WHERE id = ANY($1)', [[THEME, THEME2]]);
+  await pool.query('DELETE FROM tenants WHERE id = ANY($1)', [[T, T2]]);
 });
 
 test(
@@ -198,6 +219,22 @@ test(
     assert.match(res.headers.get('content-type') || '', /application\/json/);
     const body = JSON.parse(await res.text());
     assert.equal(body.name, 'Asset Store');
+  }
+);
+
+test(
+  'synthesizes /manifest.json from the store name + brand colour when the theme ships none',
+  { skip },
+  async () => {
+    const res = await call('/manifest.json', { 'x-ratio-tenant': T2 });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'well-known');
+    assert.match(res.headers.get('content-type') || '', /application\/json/);
+    const body = JSON.parse(await res.text());
+    assert.equal(body.name, 'Brandy', 'name from the store');
+    assert.equal(body.theme_color, '#ff5722', 'theme_color from the brand colour');
+    assert.equal(body.display, 'standalone');
+    assert.equal(body.start_url, '/');
   }
 );
 

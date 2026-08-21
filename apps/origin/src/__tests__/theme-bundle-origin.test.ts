@@ -234,6 +234,11 @@ test(
       /<h1>Welcome to bundles<\/h1>/,
       'the section Liquid rendered into the shell'
     );
+    assert.match(
+      body,
+      /<link rel="manifest" href="\/manifest.json">/,
+      'the PWA manifest link is injected into the head'
+    );
   }
 );
 

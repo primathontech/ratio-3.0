@@ -21,3 +21,8 @@ test('storefront CSP permits the same-origin CDN base stylesheet and inline them
 test('storefront CSP keeps script-src none (no first-party JS backstop)', () => {
   assert.deepEqual(STOREFRONT_BASE_CSP['script-src'], ["'none'"]);
 });
+
+test('storefront CSP allows the same-origin web app manifest (manifest-src self)', () => {
+  // Without manifest-src, /manifest.json falls back to default-src 'none' and the browser blocks it.
+  assert.deepEqual(STOREFRONT_BASE_CSP['manifest-src'], ["'self'"]);
+});
