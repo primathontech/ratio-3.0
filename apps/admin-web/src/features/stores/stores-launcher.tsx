@@ -31,7 +31,7 @@ export function StoresLauncher() {
       <div className="main-area">
         <header className="appbar">
           <span className="brand">
-            <img className="brand-logo" src="/logo.svg" alt="Ratio" />
+            <img className="brand-logo" src="/logo.png" alt="Ratio" />
             Ratio
           </span>
           <div className="right" style={{ marginLeft: 'auto' }}>
