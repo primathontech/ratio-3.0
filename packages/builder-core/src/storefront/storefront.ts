@@ -6,15 +6,8 @@ import { FORMA_THEME_FILES } from '../theme/library/forma-theme.generated';
 // The merchant token vocabulary + fixed scales are the single source of truth in @ratio/design-tokens
 // (shared with the admin-web editor, so backend and editor scales can't drift). Imported for local
 // use (rootVars) and re-exported so existing importers of these from storefront keep working.
-import {
-  FONTS,
-  BASE_SIZE,
-  RADIUS,
-  CONTAINER,
-  ELEVATION,
-  type ThemeTokens,
-} from '@ratio/design-tokens';
-export { FONTS, BASE_SIZE, RADIUS, CONTAINER } from '@ratio/design-tokens';
+import { FONTS, BASE_SIZE, RADIUS, ELEVATION, type ThemeTokens } from '@ratio/design-tokens';
+export { FONTS, BASE_SIZE, RADIUS } from '@ratio/design-tokens';
 export type { ThemeTokens } from '@ratio/design-tokens';
 
 const HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
@@ -48,7 +41,6 @@ function rootVars(t: ThemeTokens): string {
   if (t.headingFont && FONTS[t.headingFont]) vars.push(`--font-heading:${FONTS[t.headingFont]}`);
   if (t.baseSize && BASE_SIZE[t.baseSize]) vars.push(`--base:${BASE_SIZE[t.baseSize]}`);
   if (t.radius && RADIUS[t.radius]) vars.push(`--radius:${RADIUS[t.radius]}`);
-  if (t.container && CONTAINER[t.container]) vars.push(`--maxw:${CONTAINER[t.container]}`);
   if (t.elevation && ELEVATION[t.elevation]) vars.push(`--elevation:${ELEVATION[t.elevation]}`);
   return vars.length ? `:root{${vars.join(';')}}` : '';
 }

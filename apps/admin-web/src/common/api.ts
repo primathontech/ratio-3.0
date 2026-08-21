@@ -35,7 +35,6 @@ export interface StoreTheme {
   headingFont?: string;
   baseSize?: string;
   radius?: string;
-  container?: string;
   elevation?: string;
 }
 export interface ThemeVersion {

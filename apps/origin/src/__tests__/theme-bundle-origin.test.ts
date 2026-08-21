@@ -87,10 +87,10 @@ before(async () => {
     T7,
   ]);
   // A store whose theme sets its OWN brand tokens (config/tokens.json) while its tenant-level theme
-  // carries a brand colour + container the theme leaves unset — proves theme-wins + tenant-fallback.
+  // carries a brand colour the theme leaves unset — proves theme-wins + tenant-fallback.
   await pool.query(
     "INSERT INTO tenants (id, name, status, theme) VALUES ($1, 'Token Store', 'active', $2)",
-    [T8, JSON.stringify({ color: '#ff0000', container: 'wide' })]
+    [T8, JSON.stringify({ color: '#ff0000' })]
   );
   // A store onboarded the OFCE-616 way: no manual bundle: adoptAndPublishDefaultTheme (below) does the
   // adopt+publish+activate, so it must render the DEFAULT e-commerce home through the bundle path.
@@ -307,9 +307,8 @@ test(
     const body = await res.text();
     // The theme set radius:rounded → --radius:18px (the theme owns its look)...
     assert.match(body, /--radius:18px/, 'the theme radius token drives the head');
-    // ...and the tenant-level theme fills the keys the theme left unset (its brand colour + container).
+    // ...and the tenant-level theme fills the keys the theme left unset (its brand colour).
     assert.match(body, /--accent:#ff0000/, 'the tenant brand colour fills via fallback');
-    assert.match(body, /--maxw:1200px/, 'the tenant container:wide fills via fallback');
   }
 );
 
