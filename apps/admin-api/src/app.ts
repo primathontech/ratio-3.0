@@ -232,6 +232,7 @@ export interface AppOptions {
   assistantRateLimit?: number; // tighter per-user budget on /assistant
   internalToken?: string; // marks in-process (viaSelf) calls so they skip the limiter (tests inject)
   bundleThemes?: BundleThemeStore | null; // inject a fake-ObjectStore-backed store in tests
+  warmFetch?: typeof fetch; // origin pre-warm HTTP client — tests inject a spy for the origin GET
 }
 
 export function createApp(
@@ -281,6 +282,22 @@ export function createApp(
       compile: identityCompile,
       baseThemeId,
     });
+  }
+
+  // Pre-warm the origin for a just-launched store. The first real request to a brand-new store pays
+  // the origin's full cold cost — loadLiveCompiled fetches the compiled bundle from S3/CDN cold —
+  // which routinely exceeds the edge's 1500ms read budget; with no cached copy yet, that timeout goes
+  // straight to the branded 503 instead of serving stale. Issuing the SAME authenticated GET the edge
+  // sends (x-ratio-tenant + x-edge-auth) makes the origin render and populate its in-process
+  // compiledCache before the merchant's first "View store" click. No ORIGIN_URL ⇒ no-op. Best-effort:
+  // may throw (unreachable origin, non-2xx) — the caller fires it non-blocking and swallows failures.
+  const warmFetch = opts.warmFetch ?? fetch;
+  async function prewarmStore(tenantId: string): Promise<void> {
+    if (!config.originUrl) return;
+    const res = await warmFetch(new URL('/', config.originUrl), {
+      headers: { 'x-ratio-tenant': tenantId, 'x-edge-auth': resolveEdgeSecret(process.env) },
+    });
+    if (!res.ok) throw new Error(`origin pre-warm returned ${res.status}`);
   }
 
   // Per-user rate limits (OFCE-406 / audit M-1). In-memory per process — fine for the
@@ -395,6 +412,7 @@ export function createApp(
     mainThemeId,
     ensureStoreTheme,
     publishStoreThemeOnOnboard,
+    prewarmStore,
     assertThemeInStore,
     identityCompile,
     bundle503,

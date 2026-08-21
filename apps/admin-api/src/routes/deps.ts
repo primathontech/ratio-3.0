@@ -13,6 +13,7 @@ export interface RouteDeps {
   mainThemeId: (tenantId: string) => string;
   ensureStoreTheme: (tenantId: string) => Promise<void>;
   publishStoreThemeOnOnboard: (tenantId: string, baseThemeId?: string) => Promise<void>;
+  prewarmStore: (tenantId: string) => Promise<void>;
   assertThemeInStore: (themeId: string, storeId: string) => Promise<void>;
   identityCompile: (s: ThemeFiles) => ThemeFiles;
   bundle503: (c: Context<Vars>) => Response;
