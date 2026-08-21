@@ -112,7 +112,7 @@ export function MerchantLayout() {
           aria-label={multiStore ? `Current store: ${store.name}. Switch store.` : store.name}
           onClick={() => multiStore && setStorePickerOpen(true)}
         >
-          <img className="brand-logo" src="/logo.svg" alt="Ratio" />
+          <img className="brand-logo" src="/logo.png" alt="Ratio" />
           <span className="brand-meta">
             <span className="brand-name">{store.name}</span>
             <span className="brand-sub">
@@ -273,7 +273,7 @@ export function PlatformLayout() {
       <div className="main-area">
         <header className="appbar">
           <span className="brand">
-            <img className="brand-logo" src="/logo.svg" alt="Ratio" />
+            <img className="brand-logo" src="/logo.png" alt="Ratio" />
             Ratio Platform
             <span className="badge badge-accent">Super admin</span>
           </span>
