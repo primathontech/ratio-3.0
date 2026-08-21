@@ -59,6 +59,14 @@ for (const [name, files] of THEMES) {
   test(`${name} owns its content width — --maxw: 1440px in its base.css`, () => {
     assert.match(files['assets/base.css'], /--maxw:\s*1440px/, `${name} defines --maxw: 1440px`);
   });
+
+  test(`${name} uses responsive side gutters so content isn't edge-to-edge below 1440px`, () => {
+    assert.match(
+      files['assets/base.css'],
+      /clamp\(24px,\s*5vw,\s*80px\)/,
+      `${name} pads the container with clamp(24px, 5vw, 80px)`
+    );
+  });
 }
 
 // OFCE-701 (progressive @scope): the product-card section is isolated with native @scope so its rules

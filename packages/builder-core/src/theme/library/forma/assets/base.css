@@ -46,7 +46,7 @@
     --space-16: 64px;
     --space-20: 80px;
     --space-24: 96px;
-    --gutter: 24px;
+    --gutter: clamp(24px, 5vw, 80px);
 
     /* radius — --radius-md bridges the merchant radius knob (rootVars emits --radius); --r stays an
        alias of --radius-md so every rule follows the knob while the 12px default is unchanged. */
