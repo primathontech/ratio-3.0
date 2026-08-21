@@ -12,8 +12,8 @@ export interface WebManifestInput {
 
 // A minimal, valid installable manifest. short_name is capped at 12 chars (the home-screen label
 // budget). theme_color only takes a validated hex — an untrusted value can't inject into the JSON.
-export function defaultWebManifest({ name, themeColor, iconUrl }: WebManifestInput): string {
-  return JSON.stringify({
+function baseManifest({ name, themeColor, iconUrl }: WebManifestInput): Record<string, unknown> {
+  return {
     name,
     short_name: name.slice(0, 12),
     start_url: '/',
@@ -21,5 +21,30 @@ export function defaultWebManifest({ name, themeColor, iconUrl }: WebManifestInp
     background_color: '#ffffff',
     theme_color: themeColor && HEX.test(themeColor) ? themeColor : '#000000',
     icons: [{ src: iconUrl ?? '/favicon.ico', sizes: 'any', type: 'image/x-icon' }],
-  });
+  };
+}
+
+// The manifest served at /manifest.json. The synthesized defaults (store name + brand colour, from
+// admin) are the BASE; a theme's own manifest.json — a real file the merchant sees + edits in the code
+// editor — overrides any key. So a store is a valid PWA with zero config, AND name/theme_color still
+// auto-fill from admin unless the merchant deliberately sets them. A malformed authored file is ignored
+// (falls back to the synthesized base) so /manifest.json never breaks.
+export function webManifest(input: WebManifestInput, authored?: string | null): string {
+  const base = baseManifest(input);
+  let overrides: Record<string, unknown> = {};
+  if (typeof authored === 'string') {
+    try {
+      const parsed = JSON.parse(authored);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        overrides = parsed as Record<string, unknown>;
+    } catch {
+      // malformed authored manifest → serve the synthesized base
+    }
+  }
+  return JSON.stringify({ ...base, ...overrides });
+}
+
+// The synthesized manifest with no authored overrides (store name + brand colour only).
+export function defaultWebManifest(input: WebManifestInput): string {
+  return webManifest(input);
 }

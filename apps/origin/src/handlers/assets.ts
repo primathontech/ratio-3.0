@@ -7,7 +7,7 @@ import {
   tenantTag,
   ThemeStore,
   resolveThemeTokens,
-  defaultWebManifest,
+  webManifest,
 } from '@ratio/builder-core';
 import { type Vars } from './helpers';
 
@@ -103,16 +103,15 @@ export async function handleWellKnown(c: Context<Vars>, deps: AssetsDeps): Promi
       c.header('x-handler', 'well-known');
     };
     if (path === '/manifest.json') {
-      // A theme may ship its own manifest.json (author control) — serve it verbatim. Otherwise
-      // SYNTHESIZE a basic installable manifest from what the merchant already set in admin: the store
-      // name + brand colour (resolved: theme default, tenant override wins). So every store is a valid
-      // PWA with no separate form to fill in.
-      const authored = compiled['manifest.json'];
+      // Merge the synthesized defaults (store name + brand colour, from admin) with the theme's own
+      // manifest.json (a file the merchant edits in the code editor). Authored keys win; name/theme_color
+      // auto-fill from the store when the merchant hasn't set them. So every store is a valid PWA with no
+      // separate form, and editing the file still works.
       const tokens = resolveThemeTokens(compiled, tenant.theme);
-      const body =
-        typeof authored === 'string'
-          ? authored
-          : defaultWebManifest({ name: tenant.name, themeColor: tokens.color });
+      const body = webManifest(
+        { name: tenant.name, themeColor: tokens.color },
+        compiled['manifest.json']
+      );
       c.header('content-type', 'application/json; charset=utf-8');
       withTags();
       return c.body(body);

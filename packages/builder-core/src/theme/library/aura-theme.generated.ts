@@ -12,6 +12,8 @@ export const AURA_THEME_FILES: ThemeFiles = {
     '{\n  "color": "#c17f92",\n  "bodyFont": "sans",\n  "headingFont": "sans",\n  "baseSize": "m",\n  "radius": "rounded"\n}\n',
   'layout/theme.liquid':
     '<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>{{ page_title | default: site_name | default: \'Store\' | escape }}</title>\n  {% if base_css_url != blank %}<link rel="stylesheet" href="{{ base_css_url }}">{% else %}<style>{{ base_css }}</style>{% endif %}\n  <style>@layer tokens { {{ token_css }} }</style>\n  <style>@layer overrides { {{ theme_css }} }</style>\n  {{ content_for_header }}\n</head>\n<body>\n{{ header }}\n{{ content_for_layout }}\n{{ footer }}\n{{ content_for_body_end }}\n</body>\n</html>\n',
+  'manifest.json':
+    '{\n  "display": "standalone",\n  "background_color": "#ffffff",\n  "icons": [{ "src": "/favicon.ico", "sizes": "any", "type": "image/x-icon" }]\n}\n',
   'sections/aura-categories.liquid':
     '<section class="rt sec">\n  <div class="sec-head"><h2>{{ heading | default: \'Shop by category\' | escape }}</h2></div>\n  <div class="tiles">\n    {% for c in collections %}\n    {% assign img = c.image_url | default: c.image.src | default: c.image.url %}\n    <a class="tile" href="/collections/{{ c.handle | escape }}">\n      {% if img %}<img src="{{ img | escape }}" alt="{{ c.title | escape }}">{% endif %}\n      <div class="lbl"><b>{{ c.title | escape }}</b><span>Shop now</span></div>\n    </a>\n    {% endfor %}\n  </div>\n</section>\n',
   'sections/aura-hero.liquid':

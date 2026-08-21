@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultWebManifest } from '../theme/manifest';
+import { defaultWebManifest, webManifest } from '../theme/manifest';
 
 test('defaultWebManifest: a valid installable manifest from the store name + brand colour', () => {
   const m = JSON.parse(defaultWebManifest({ name: 'Clothes', themeColor: '#2563eb' }));
@@ -29,4 +29,36 @@ test('defaultWebManifest: a missing/invalid theme colour falls back (no injectio
     JSON.parse(defaultWebManifest({ name: 'S', themeColor: '#abc' })).theme_color,
     '#abc'
   );
+});
+
+test('webManifest: an authored file overrides any key; name/theme_color auto-fill when omitted', () => {
+  // The authored file omits name + theme_color → they auto-fill from the store; it overrides display
+  // and adds a new key.
+  const m = JSON.parse(
+    webManifest(
+      { name: 'Clothes', themeColor: '#2563eb' },
+      JSON.stringify({ display: 'fullscreen', orientation: 'portrait' })
+    )
+  );
+  assert.equal(m.name, 'Clothes', 'name auto-fills from the store');
+  assert.equal(m.theme_color, '#2563eb', 'theme_color auto-fills from the brand colour');
+  assert.equal(m.display, 'fullscreen', 'authored key wins');
+  assert.equal(m.orientation, 'portrait', 'authored can add keys');
+});
+
+test('webManifest: an authored name/theme_color deliberately override the store defaults', () => {
+  const m = JSON.parse(
+    webManifest(
+      { name: 'Clothes', themeColor: '#2563eb' },
+      JSON.stringify({ name: 'Custom PWA', theme_color: '#ff0000' })
+    )
+  );
+  assert.equal(m.name, 'Custom PWA');
+  assert.equal(m.theme_color, '#ff0000');
+});
+
+test('webManifest: a malformed or non-object authored file is ignored (serves the base)', () => {
+  assert.equal(JSON.parse(webManifest({ name: 'S' }, 'not json {')).name, 'S');
+  assert.equal(JSON.parse(webManifest({ name: 'S' }, '[1,2,3]')).display, 'standalone');
+  assert.equal(JSON.parse(webManifest({ name: 'S' }, null)).name, 'S');
 });
