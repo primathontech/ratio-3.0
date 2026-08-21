@@ -22,7 +22,7 @@ body{margin:0;font-family:var(--font);color:var(--ink);background:var(--wash);li
 h1,h2,h3,h4{font-family:var(--font-heading);margin:0;font-weight:300;letter-spacing:-.01em}
 img{max-width:100%;display:block}
 a{color:inherit;text-decoration:none}
-.rt{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+.rt{max-width:var(--maxw);margin:0 auto;padding:0 clamp(24px,5vw,80px)}
 
 /* announce */
 .announce{background:var(--blush);color:var(--ink);text-align:center;font-size:.76rem;letter-spacing:.14em;text-transform:uppercase;padding:10px 16px}
@@ -128,7 +128,7 @@ a{color:inherit;text-decoration:none}
 .news .field{display:inline-flex;max-width:420px;width:100%;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:5px 5px 5px 20px}
 .news input{flex:1;border:0;background:transparent;font:inherit;color:var(--ink);outline:none}
 .news .go{background:var(--accent);color:#fff;border:0;border-radius:999px;padding:11px 22px;font-family:var(--font);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
-.ftr-in{padding:0 28px}
+.ftr-in{padding:0 clamp(24px,5vw,80px)}
 .ftr-cols{display:grid;grid-template-columns:repeat(2,1fr);gap:28px;padding:44px 0;border-top:1px solid var(--line)}
 .ftr-brand{font-size:1.3rem;font-weight:300;letter-spacing:.3em;text-transform:uppercase}
 .ftr-about{color:var(--muted);font-size:.9rem;max-width:32ch;margin:14px 0 0}

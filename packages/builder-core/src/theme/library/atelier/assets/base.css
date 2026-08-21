@@ -61,7 +61,7 @@ img { max-width: 100%; display: block; }
 a { color: inherit; text-decoration: none; }
 h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 
-.rt { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; }
+.rt { max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(24px, 5vw, 80px); }
 .eyebrow, .ed-kicker {
   display: inline-block;
   font-size: 11px;
@@ -217,7 +217,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 .news input { flex: 1; background: transparent; border: 0; color: var(--footer-ink); font-size: 14px; padding: 10px 4px; outline: none; }
 .news input::placeholder { color: rgba(255, 255, 255, 0.5); }
 .news .go { background: transparent; border: 0; color: var(--footer-ink); text-transform: uppercase; letter-spacing: 0.14em; font-size: 12px; cursor: pointer; }
-.ftr-in { padding: 0 20px; }
+.ftr-in { padding: 0 clamp(24px, 5vw, 80px); }
 .ftr-cols { display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px; padding: 48px 0; }
 .ftr-brand { font-family: var(--font-heading); font-size: 22px; letter-spacing: 0.34em; text-transform: uppercase; }
 .ftr-about { color: rgba(255, 255, 255, 0.6); max-width: 34ch; margin: 16px 0 0; font-size: 14px; }
@@ -230,9 +230,7 @@ h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: 400; }
 
 /* ================= Larger screens (min-width, mobile-first) ================= */
 @media (min-width: 48rem) {
-  .rt { padding: 0 32px; }
-  .ftr-in { padding: 0 32px; }
-  .feat { padding: 0 32px; }
+  .feat { padding: 0 clamp(24px, 5vw, 80px); }
   .sec { padding: 80px 0; }
   .grid { grid-template-columns: repeat(3, 1fr); gap: 22px; }
   .ftr-cols { grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 40px; }
