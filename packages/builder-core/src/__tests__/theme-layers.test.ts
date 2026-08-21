@@ -68,14 +68,28 @@ for (const [name, files] of THEMES) {
     );
   });
 
-  test(`${name} section wrappers don't zero the .rt horizontal gutter`, () => {
-    // A .rt section modifier using the shorthand `padding: <v> 0` (or `<v> 0 <v>`) resets the horizontal
-    // padding to 0, wiping the .rt gutter → edge-to-edge content. They must use padding-block instead.
-    assert.doesNotMatch(
-      files['assets/base.css'],
-      /\.(sec|hero|pdp|order-main)\s*\{[^}]*padding:\s*[\d.]+(px|rem|em)\s+0(\s|;|\})/,
-      `${name} must not zero a section's horizontal padding (use padding-block)`
-    );
+  test(`${name}: no .rt-companion section zeroes the horizontal gutter`, () => {
+    // Any class sharing an element with .rt (its section modifier) that uses the `padding: <v> 0`
+    // shorthand resets the horizontal padding to 0, wiping the .rt gutter → edge-to-edge content. Such
+    // modifiers must use padding-block. Derive the companion classes from the theme's own markup so a
+    // NEW section (e.g. a band/newsletter) can't silently reintroduce the bug.
+    const css = files['assets/base.css'];
+    const companions = new Set<string>();
+    for (const [path, content] of Object.entries(files)) {
+      if (!path.endsWith('.liquid')) continue;
+      for (const m of content.matchAll(/class="([^"]*\brt\b[^"]*)"/g))
+        for (const cls of m[1].split(/\s+/)) if (cls && cls !== 'rt') companions.add(cls);
+    }
+    for (const cls of companions) {
+      const re = new RegExp(
+        `\\.${cls}\\s*\\{[^}]*padding:\\s*[\\d.]+(?:px|rem|em)\\s+0(?:\\s|;|\\})`
+      );
+      assert.doesNotMatch(
+        css,
+        re,
+        `${name}: .${cls} zeroes its horizontal padding (use padding-block)`
+      );
+    }
   });
 }
 
