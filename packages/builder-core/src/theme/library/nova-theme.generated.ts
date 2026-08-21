@@ -7,7 +7,7 @@ export const NOVA_THEME_FILES: ThemeFiles = {
   'assets/theme.css':
     "/* Your store's custom CSS — overrides the theme defaults. Example:\n   .hdr-brand { letter-spacing: .04em; }\n   .hero h1 { font-size: 3rem; }\n*/\n",
   'config/tokens.json':
-    '{\n  "color": "#ff4a00",\n  "bodyFont": "sans",\n  "headingFont": "sans",\n  "baseSize": "m",\n  "radius": "square",\n  "container": "normal"\n}\n',
+    '{\n  "color": "#ff4a00",\n  "bodyFont": "sans",\n  "headingFont": "sans",\n  "baseSize": "m",\n  "radius": "square"\n}\n',
   'layout/theme.liquid':
     '<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>{{ page_title | default: site_name | default: \'Store\' | escape }}</title>\n  {% if base_css_url != blank %}<link rel="stylesheet" href="{{ base_css_url }}">{% else %}<style>{{ base_css }}</style>{% endif %}\n  <style>@layer tokens { {{ token_css }} }</style>\n  <style>@layer overrides { {{ theme_css }} }</style>\n  {{ content_for_header }}\n</head>\n<body>\n{{ header }}\n{{ content_for_layout }}\n{{ footer }}\n{{ content_for_body_end }}\n</body>\n</html>\n',
   'sections/collection-row.liquid':

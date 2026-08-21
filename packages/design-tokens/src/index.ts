@@ -20,7 +20,6 @@ export interface ThemeTokens {
   headingFont?: string; // key of FONTS
   baseSize?: string; // key of BASE_SIZE
   radius?: string; // key of RADIUS
-  container?: string; // key of CONTAINER
   elevation?: string; // key of ELEVATION (theme-owned; only themes that bridge --elevation honour it)
 }
 
@@ -33,7 +32,6 @@ export const MERCHANT_TOKEN_KEYS = [
   'headingFont',
   'baseSize',
   'radius',
-  'container',
   'elevation',
 ] as const satisfies readonly (keyof ThemeTokens)[];
 
@@ -66,12 +64,6 @@ export const RADIUS_LABELS: Record<string, string> = {
 };
 export const RADIUS_ORDER = ['square', 'soft', 'rounded'] as const;
 
-export const CONTAINER: Record<string, string> = {
-  narrow: '960px',
-  normal: '1120px',
-  wide: '1200px',
-};
-
 // Card elevation — a THEME-OWNED knob. rootVars emits --elevation; a theme opts in by consuming
 // `var(--elevation, <its resting default>)` on its cards. Values re-point to the theme's own shadow
 // scale. Forma's cards rest flat, so 'flat' (the default) resolves to none → byte-identical until the
@@ -95,7 +87,6 @@ export const THEME_DEFAULTS: Required<ThemeTokens> = {
   bodyFont: 'system',
   baseSize: 'm',
   radius: 'soft',
-  container: 'normal',
   elevation: 'flat',
 };
 
@@ -121,7 +112,6 @@ export const THEME_PRESETS: ThemePreset[] = [
       bodyFont: 'serif',
       baseSize: 'm',
       radius: 'square',
-      container: 'normal',
       elevation: 'flat',
     },
     desc: 'Serif · square',
@@ -135,7 +125,6 @@ export const THEME_PRESETS: ThemePreset[] = [
       bodyFont: 'sans',
       baseSize: 'm',
       radius: 'rounded',
-      container: 'normal',
       elevation: 'flat',
     },
     desc: 'Sans · round',

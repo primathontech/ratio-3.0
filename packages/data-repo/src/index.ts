@@ -12,7 +12,6 @@ export interface TenantTheme {
   headingFont?: string;
   baseSize?: string;
   radius?: string;
-  container?: string;
 }
 export interface Tenant {
   id: string;

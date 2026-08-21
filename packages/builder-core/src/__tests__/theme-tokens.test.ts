@@ -22,14 +22,14 @@ test('parseThemeTokens returns {} for absent, malformed, or non-object input', (
 
 test('resolveThemeTokens: the theme is the default, an explicit merchant token overrides it', () => {
   const compiled = { [TOKENS_PATH]: JSON.stringify({ color: '#111827', radius: 'square' }) };
-  const tenant = { color: '#dc2626', bodyFont: 'serif', container: 'wide' };
-  // The merchant explicitly set color/bodyFont/container → those win. radius is only in the theme
+  const tenant = { color: '#dc2626', bodyFont: 'serif', baseSize: 'l' };
+  // The merchant explicitly set color/bodyFont/baseSize → those win. radius is only in the theme
   // → the theme default applies. (OFCE-699: theme = default look, merchant override wins.)
   assert.deepEqual(resolveThemeTokens(compiled, tenant), {
     color: '#dc2626',
     radius: 'square',
     bodyFont: 'serif',
-    container: 'wide',
+    baseSize: 'l',
   });
 });
 

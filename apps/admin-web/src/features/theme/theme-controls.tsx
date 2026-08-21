@@ -71,7 +71,6 @@ export function resolve(t: StoreTheme): Required<StoreTheme> {
     bodyFont: t.bodyFont || DEFAULTS.bodyFont,
     baseSize: t.baseSize || DEFAULTS.baseSize,
     radius: t.radius || DEFAULTS.radius,
-    container: t.container || DEFAULTS.container,
     elevation: t.elevation || DEFAULTS.elevation,
   };
 }
@@ -172,9 +171,7 @@ export function ThemeControls({
     onChange({ ...theme, [key]: value });
   // One typeface for the whole storefront: heading and body font stay in sync.
   const setFont = (v: string) => onChange({ ...theme, headingFont: v, bodyFont: v });
-  // A preset must not change content width (no control for it) — keep whatever the theme has.
-  const applyPreset = (p: ThemePreset) =>
-    onChange({ ...p.theme, container: theme.container ?? p.theme.container });
+  const applyPreset = (p: ThemePreset) => onChange({ ...p.theme });
 
   return (
     <div className="ts-controls">

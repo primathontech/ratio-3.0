@@ -516,13 +516,11 @@ test('theme: scale knobs map to tokens; off-scale values are ignored; ink auto-c
     bodyFont: 'serif',
     baseSize: 'l',
     radius: 'square',
-    container: 'wide',
   });
   assert.match(dark.html, /--accent-ink:#ffffff/, 'dark brand → white ink');
   assert.match(dark.html, /--font:Georgia/, 'serif body font stack applied');
   assert.match(dark.html, /--base:18px/, 'large base size applied');
   assert.match(dark.html, /--radius:0px/, 'square radius applied');
-  assert.match(dark.html, /--maxw:1200px/, 'wide container applied');
 
   const light = await composePage(doc, reg, { color: '#fef08a', bodyFont: 'comic-evil' });
   assert.match(light.html, /--accent-ink:#111827/, 'light brand → dark ink');
