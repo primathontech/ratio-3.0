@@ -67,6 +67,16 @@ for (const [name, files] of THEMES) {
       `${name} pads the container with clamp(24px, 5vw, 80px)`
     );
   });
+
+  test(`${name} section wrappers don't zero the .rt horizontal gutter`, () => {
+    // A .rt section modifier using the shorthand `padding: <v> 0` (or `<v> 0 <v>`) resets the horizontal
+    // padding to 0, wiping the .rt gutter → edge-to-edge content. They must use padding-block instead.
+    assert.doesNotMatch(
+      files['assets/base.css'],
+      /\.(sec|hero|pdp|order-main)\s*\{[^}]*padding:\s*[\d.]+(px|rem|em)\s+0(\s|;|\})/,
+      `${name} must not zero a section's horizontal padding (use padding-block)`
+    );
+  });
 }
 
 // OFCE-701 (progressive @scope): the product-card section is isolated with native @scope so its rules
