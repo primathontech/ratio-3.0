@@ -9,7 +9,7 @@
     </div>
   </div>
   <div class="hero-card">
-    {% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% endif %}
+    {% if image_url %}<img src="{{ image_url | asset_url | escape }}" alt="{{ heading | escape }}">{% endif %}
     {% if badge_title %}<div class="tagcard"><b>{{ badge_title | escape }}</b><span>{{ badge_sub | escape }}</span></div>{% endif %}
   </div>
 </section>

@@ -6,5 +6,5 @@
     {% if cta_label %}<a class="btn" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
     {% if cta2_label %}<a class="btn btn-ghost" href="{{ cta2_href | default: '/collections/all' | escape }}">{{ cta2_label | escape }}</a>{% endif %}
   </div>
-  <div class="hero-img">{% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
+  <div class="hero-img">{% if image_url %}<img src="{{ image_url | asset_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
 </section>
