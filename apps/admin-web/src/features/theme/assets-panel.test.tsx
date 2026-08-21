@@ -9,6 +9,7 @@ import {
   deleteAndList,
   humanSize,
   isImageAsset,
+  mergeAssetsManifest,
   uploadAndList,
 } from './asset-helpers';
 
@@ -37,6 +38,27 @@ function fakeApi(list: ThemeAsset[]) {
 describe('asset helpers', () => {
   test('assetReference builds the Liquid asset_url snippet', () => {
     expect(assetReference('assets/logo.png')).toBe("{{ 'assets/logo.png' | asset_url }}");
+  });
+
+  test('mergeAssetsManifest updates config/assets.json but keeps unsaved code edits', () => {
+    // Editor buffer has an UNSAVED edit to a section; the freshly-read draft has a NEW asset manifest
+    // (from an upload). The merge must take the manifest and leave the section edit intact.
+    const buffer = {
+      'sections/forma-hero.liquid': '<img src="{{ \'assets/hero.jpg\' | asset_url }}">', // unsaved edit
+      'config/assets.json': '{"assets/old.png":{"hash":"a"}}',
+    };
+    const draft = {
+      'sections/forma-hero.liquid': '<section>original</section>', // server's older section — must NOT win
+      'config/assets.json': '{"assets/old.png":{"hash":"a"},"assets/hero.jpg":{"hash":"b"}}',
+    };
+    const merged = mergeAssetsManifest(buffer, draft);
+    expect(merged['config/assets.json']).toBe(draft['config/assets.json']); // new manifest taken
+    expect(merged['sections/forma-hero.liquid']).toBe(buffer['sections/forma-hero.liquid']); // edit kept
+  });
+
+  test('mergeAssetsManifest returns the buffer unchanged when the draft has no manifest', () => {
+    const buffer = { 'sections/x.liquid': 'x' };
+    expect(mergeAssetsManifest(buffer, {})).toEqual(buffer);
   });
 
   test('assetPathFromFilename defaults under assets/, drops any directory, and sanitizes', () => {

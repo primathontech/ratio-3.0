@@ -21,10 +21,14 @@ export function AssetsPanel({
   storeId,
   themeId,
   api,
+  onDraftChanged,
 }: {
   storeId: string;
   themeId: string;
   api: Api;
+  // An upload/delete writes the theme's config/assets.json → advances the draft revision. Notify the
+  // code editor so it refreshes its revision + manifest, else its next save 409s ("changed elsewhere").
+  onDraftChanged?: () => void;
 }) {
   const toast = useToast();
   const [assets, setAssets] = useState<ThemeAsset[]>([]);
@@ -110,6 +114,7 @@ export function AssetsPanel({
     setError('');
     try {
       setAssets(await uploadAndList(api, storeId, themeId, path, pending));
+      onDraftChanged?.();
       cancelUpload();
     } catch (e) {
       // The server carries the reason (415 unsupported type, 413 too large, 409 conflict) — show it.
@@ -124,6 +129,7 @@ export function AssetsPanel({
     setError('');
     try {
       setAssets(await deleteAndList(api, storeId, themeId, path));
+      onDraftChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete the asset');
     }

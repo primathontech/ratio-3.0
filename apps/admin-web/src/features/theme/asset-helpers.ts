@@ -1,4 +1,14 @@
-import type { Api, ThemeAsset } from '../../common/api';
+import type { Api, ThemeAsset, ThemeFiles } from '../../common/api';
+
+// After an asset upload/delete changes the draft's config/assets.json (advancing the draft revision),
+// merge ONLY that file from the freshly-read draft into the code editor's buffer — so the manifest is
+// current without clobbering the user's other UNSAVED edits (e.g. a section they're mid-editing). If the
+// draft has no manifest, the buffer is returned unchanged.
+export function mergeAssetsManifest(buffer: ThemeFiles, draft: ThemeFiles): ThemeFiles {
+  const manifest = draft['config/assets.json'];
+  if (typeof manifest !== 'string') return buffer;
+  return { ...buffer, 'config/assets.json': manifest };
+}
 
 // The file types the asset picker accepts — images the theme can reference plus web fonts. Kept in
 // sync with the server's allow-list; an unsupported type still fails loudly with a 415 on upload.

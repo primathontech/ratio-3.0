@@ -14,6 +14,7 @@ import { groupByFolder, languageLabel, THEME_FOLDERS } from './editor-helpers';
 import { EditorTitleBar } from './editor-titlebar';
 import { EditorExplorer } from './editor-explorer';
 import { AssetsPanel } from './assets-panel';
+import { mergeAssetsManifest } from './asset-helpers';
 import { EditorTabs } from './editor-tabs';
 import { EditorPreview } from './editor-preview';
 import { EditorVersions } from './editor-versions';
@@ -313,6 +314,20 @@ export function ThemeCodeEditor({
     }
   }
 
+  // An asset upload/delete (Assets panel) writes config/assets.json server-side, advancing the draft
+  // revision. Re-read the draft to pick up the fresh revision + manifest — merging ONLY
+  // config/assets.json so the user's other unsaved edits survive — so the next code save doesn't 409
+  // ("changed elsewhere"). Best-effort: a failed refresh just leaves the manual Refresh as the fallback.
+  async function onAssetsChanged() {
+    try {
+      const d = await api.getBundleDraft(store.id, themeId);
+      revisionRef.current = d.revision;
+      setFiles((f) => mergeAssetsManifest(f, d.files));
+    } catch {
+      /* leave the revision stale; the user can still Discard/Refresh manually */
+    }
+  }
+
   async function publish() {
     if (Object.keys(files).length === 0) {
       toast('Add a file before publishing', 'error');
@@ -476,7 +491,12 @@ export function ThemeCodeEditor({
             </div>
 
             {activeView === 'assets' && (
-              <AssetsPanel storeId={store.id} themeId={themeId} api={api} />
+              <AssetsPanel
+                storeId={store.id}
+                themeId={themeId}
+                api={api}
+                onDraftChanged={onAssetsChanged}
+              />
             )}
 
             {(activeView === 'explorer' || activeView === 'search') && (
