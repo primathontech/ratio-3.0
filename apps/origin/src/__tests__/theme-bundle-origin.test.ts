@@ -283,7 +283,14 @@ test(
 
     const prod = await call('/products/air-max-90', edge({ 'x-ratio-tenant': T5 }));
     assert.equal(prod.headers.get('x-handler'), 'theme-bundle');
-    assert.match(await prod.text(), /Product template/); // one product.json serves every handle
+    const prodBody = await prod.text();
+    assert.match(prodBody, /Product template/); // one product.json serves every handle
+    // Entity SEO (@ratio/seo): a product page carries og:type product, og:title from the resolved
+    // product, and a schema.org Product JSON-LD block in the head.
+    assert.match(prodBody, /<meta property="og:type" content="product">/);
+    assert.match(prodBody, /<meta property="og:title" content="Sample: air-max-90">/);
+    assert.match(prodBody, /<script type="application\/ld\+json">/);
+    assert.match(prodBody, /"@type":"Product"/);
 
     // This bundle has no index.json → GET / has no matching template → falls through to legacy.
     const home = await call('/', edge({ 'x-ratio-tenant': T5 }));

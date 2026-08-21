@@ -34,6 +34,9 @@ export async function composePage(
     menu?: NavMenu | null;
     footer?: FooterMenu | null;
     siteName?: string;
+    // Overrides the document <title> — the origin passes the resolved entity name (e.g. a product)
+    // here so a shared-template page gets its own title, not the template's generic one.
+    title?: string;
     headExtra?: string;
     bodyEnd?: string;
     // The versioned runtime URL (/assets/islands.<hash>.js). Referenced ONLY when the page has an
@@ -78,7 +81,7 @@ export async function composePage(
   const html =
     `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>${esc(doc.title ?? '')}</title>` +
+    `<title>${esc(chrome.title ?? doc.title ?? '')}</title>` +
     storefrontHead(theme) +
     (chrome.headExtra ?? '') +
     `</head><body>\n` +

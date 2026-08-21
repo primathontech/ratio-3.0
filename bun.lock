@@ -134,6 +134,10 @@
       "name": "@ratio/observability-tracing",
       "version": "0.1.0",
     },
+    "packages/seo": {
+      "name": "@ratio/seo",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.111.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-1hUqKi+uJQoS5X90+InwHbFAXMvgq0DnsC5hVLEeSRaODiU5WvmqDAcVCmGS2wC0pN9Z8jtWCbWw7JLzeDdm/Q=="],
@@ -495,6 +499,8 @@
     "@ratio/observability-tracing": ["@ratio/observability-tracing@workspace:packages/observability-tracing"],
 
     "@ratio/origin": ["@ratio/origin@workspace:apps/origin"],
+
+    "@ratio/seo": ["@ratio/seo@workspace:packages/seo"],
 
     "@redocly/ajv": ["@redocly/ajv@8.11.2", "", { "dependencies": { "fast-deep-equal": "^3.1.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2", "uri-js-replace": "^1.0.1" } }, "sha512-io1JpnwtIcvojV7QKDUSIuMN/ikdOUd1ReEnUnMKGfDVridQZ31J0MmIuqwuRjWDZfmvr+Q0MqCcfHM2gTivOg=="],
 

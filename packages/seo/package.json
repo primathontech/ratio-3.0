@@ -1,0 +1,11 @@
+{
+  "name": "@ratio/seo",
+  "version": "0.1.0",
+  "description": "SEO utilities — structured data, meta/OG/Twitter head tags, breadcrumbs, sitemap/robots. Framework-agnostic (emits HTML head strings, not Next Metadata), pure and zero-dependency. Ported from the proven storefront-2.0 @shopkit/seo.",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "license": "UNLICENSED"
+}

@@ -148,6 +148,12 @@ test('data binding: the product PDP fills BOTH product and price bindings from a
     (res.headers.get('x-surrogate-keys') || '').includes('prod:air-max-90'),
     'product tag for purge'
   );
+  // Entity SEO on the page-builder fallback path (@ratio/seo): og:type/title + Product JSON-LD, and the
+  // resolved product name drives the document <title> (overriding the shared template's title).
+  assert.match(body, /<meta property="og:type" content="product">/);
+  assert.match(body, /<meta property="og:title" content="Sample: air-max-90">/);
+  assert.match(body, /<script type="application\/ld\+json">/);
+  assert.match(body, /<title>Sample: air-max-90<\/title>/, 'entity title wins over template title');
 });
 
 test('data binding: the collection template renders resolved products + a col:<handle> tag', async () => {
