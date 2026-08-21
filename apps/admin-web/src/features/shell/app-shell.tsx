@@ -17,9 +17,9 @@ export function MerchantLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // The Ask rail becomes an in-page column at 2xl (1536px, see layout.css); below that it's an
+  // The Ask rail becomes an in-page column at 3xl (1792px, see layout.css); below that it's an
   // overlay drawer. Keep this in sync with the .ask-rail min-width breakpoint.
-  const ASK_RAIL_WIDTH = 1536;
+  const ASK_RAIL_WIDTH = 1792;
   const [askOpen, setAskOpen] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= ASK_RAIL_WIDTH : true
   );
