@@ -177,8 +177,8 @@
   overflow: hidden;
 }
 /* Content area under the top bar: main scrolls on its own. Mobile-first: the Ask rail is an overlay
-   drawer by default, and becomes an in-page column at the 2xl breakpoint (96rem/1536px, matching
-   ASK_RATIO_WIDTH in app-shell). All media queries are min-width only (Tailwind scale). */
+   drawer by default, and becomes an in-page column at the 3xl breakpoint (112rem/1792px, matching
+   ASK_RAIL_WIDTH in app-shell). All media queries are min-width only (Tailwind scale). */
 .shell-body {
   flex: 1;
   min-height: 0;
@@ -194,7 +194,7 @@
   z-index: 40;
   box-shadow: var(--shadow-lg);
 }
-@media (min-width: 96rem) {
+@media (min-width: 112rem) {
   .shell-body.with-ask {
     grid-template-columns: minmax(0, 1fr) 344px;
   }
