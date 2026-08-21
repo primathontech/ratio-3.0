@@ -100,7 +100,7 @@ export function platformSubdomainAllowed(host: string, isAdmin: boolean): boolea
 }
 
 export function registerStoresRoutes(app: Hono<Vars>, deps: RouteDeps) {
-  const { publishStoreThemeOnOnboard, pbStore } = deps;
+  const { publishStoreThemeOnOnboard, prewarmStore, pbStore } = deps;
 
   // The stores the signed-in user may manage (drives the admin portal's home screen).
   // Platform admins see every store; everyone else sees only their memberships.
@@ -191,6 +191,12 @@ export function registerStoresRoutes(app: Hono<Vars>, deps: RouteDeps) {
     // (or degrade-only) parallel storefront.
     await publishStoreThemeOnOnboard(tenantId, baseThemeId).catch((e) => {
       console.error('publishStoreThemeOnOnboard failed for', tenantId, e);
+    });
+    // Warm the origin now the store is live, so the merchant's first "View store" click doesn't pay
+    // the cold bundle-load cost and trip the edge's read timeout → branded 503 (a fresh store has no
+    // cached copy to serve stale). Fire-and-forget: warming must never delay or fail the launch.
+    void prewarmStore(tenantId).catch((e) => {
+      console.warn('prewarmStore failed for', tenantId, e);
     });
     // Free a reclaimed host's stale CF custom hostname so the new owner can connect it (OFCE-422).
     // Only reach for Cloudflare when a host was actually reclaimed: cfConfig() fails closed on a

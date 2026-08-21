@@ -37,4 +37,7 @@ export const config = {
   databaseUrl: required('DATABASE_URL'),
   // Optional — null disables the bundle-theme authoring endpoints.
   bundleStore: bundleStore(),
+  // The private origin's base URL. Optional — unset disables the launch pre-warm (the origin can't be
+  // reached, so a just-launched store's first request pays the cold bundle-load cost as before).
+  originUrl: process.env.ORIGIN_URL,
 };
