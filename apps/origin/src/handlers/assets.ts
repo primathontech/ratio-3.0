@@ -8,6 +8,7 @@ import {
   ThemeStore,
   resolveThemeTokens,
   webManifest,
+  SERVICE_WORKER_PATH,
 } from '@ratio/builder-core';
 import { type Vars } from './helpers';
 
@@ -115,6 +116,15 @@ export async function handleWellKnown(c: Context<Vars>, deps: AssetsDeps): Promi
       c.header('content-type', 'application/json; charset=utf-8');
       withTags();
       return c.body(body);
+    } else if (path === '/sw.js') {
+      // The service worker is OPT-IN: only a store whose theme ships sw.js gets one. Served at /sw.js
+      // (root scope) as JS. No sw.js → fall through to the 404 below (no worker, strict CSP unchanged).
+      const sw = compiled[SERVICE_WORKER_PATH];
+      if (typeof sw === 'string') {
+        c.header('content-type', 'text/javascript; charset=utf-8');
+        withTags();
+        return c.body(sw);
+      }
     } else if (path === '/favicon.ico') {
       // The theme references a favicon under any path whose basename is favicon.ico (e.g. the editor
       // uploads assets under `assets/`), so match on the basename, not an exact key.

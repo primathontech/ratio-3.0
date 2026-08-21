@@ -71,6 +71,8 @@ before(async () => {
       }),
       // A PWA manifest rides the bundle as text (application/json isn't an allowed binary-asset type).
       'manifest.json': JSON.stringify({ name: 'Asset Store', display: 'standalone' }),
+      // Opt-in service worker (OFCE-726): shipping sw.js makes /sw.js serve it (root scope).
+      'sw.js': "self.addEventListener('fetch',function(){});",
       // The section REFERENCES the asset via asset_url (OFCE-647) — the page must render /assets/<hash>.
       'sections/hero.liquid': `<h1>hi</h1><img src="{{ 'images/logo.png' | asset_url }}">`,
       'templates/index.json': JSON.stringify({ sections: [{ type: 'hero' }] }),
@@ -221,6 +223,23 @@ test(
     assert.equal(body.name, 'Asset Store');
   }
 );
+
+test(
+  'serves /sw.js from the live theme bundle as JS when the store ships one (OFCE-726)',
+  { skip },
+  async () => {
+    const res = await call('/sw.js', { 'x-ratio-tenant': T });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('x-handler'), 'well-known');
+    assert.match(res.headers.get('content-type') || '', /javascript/);
+    assert.match(await res.text(), /addEventListener\('fetch'/);
+  }
+);
+
+test('404s /sw.js when the store ships no service worker (PWA is opt-in)', { skip }, async () => {
+  const res = await call('/sw.js', { 'x-ratio-tenant': T2 });
+  assert.equal(res.status, 404);
+});
 
 test(
   'synthesizes /manifest.json from the store name + brand colour when the theme ships none',

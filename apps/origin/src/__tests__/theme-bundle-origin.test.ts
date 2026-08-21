@@ -108,6 +108,9 @@ before(async () => {
       'templates/index.json': JSON.stringify({
         sections: [{ type: 'hero', data: { heading: 'Welcome to bundles' } }],
       }),
+      // Opt-in PWA (OFCE-726): this store ships a service worker → the head gets the registration
+      // snippet and the CSP is relaxed by exactly its hash + worker-src.
+      'sw.js': "self.addEventListener('fetch',function(){});",
     }
   );
   await store.publish({ themeId: THEME, tenantId: T }, { compile: (s) => s });
@@ -238,6 +241,20 @@ test(
       body,
       /<link rel="manifest" href="\/manifest.json">/,
       'the PWA manifest link is injected into the head'
+    );
+    // Opt-in service worker (OFCE-726): this store ships sw.js → the registration snippet is in the head
+    // and the CSP is relaxed by exactly its hash + worker-src (script-src stays otherwise locked down).
+    assert.match(
+      body,
+      /navigator\.serviceWorker\.register\('\/sw\.js'\)/,
+      'the SW registration snippet is injected'
+    );
+    const csp = res.headers.get('content-security-policy') || '';
+    assert.match(csp, /worker-src 'self'/, 'worker-src allows the same-origin SW');
+    assert.match(
+      csp,
+      /script-src[^;]*'sha256-/,
+      'script-src authorizes exactly the snippet by hash'
     );
   }
 );
