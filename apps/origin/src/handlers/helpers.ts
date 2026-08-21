@@ -58,7 +58,9 @@ export const STOREFRONT_BASE_CSP: CspDirectives = {
   'default-src': ["'none'"],
   'script-src': ["'none'"],
   'style-src': ["'self'", "'unsafe-inline'"],
-  'img-src': ['https:', 'data:'],
+  // 'self' allows same-origin images regardless of scheme — needed for http://localhost in local dev
+  // (and for the generated PWA icons + theme assets); in prod same-origin is https, so nothing loosens.
+  'img-src': ["'self'", 'https:', 'data:'],
   'font-src': ["'self'", 'data:'],
   // The web app manifest (/manifest.json) is same-origin; without this it falls back to default-src
   // 'none' and the browser refuses to fetch it.

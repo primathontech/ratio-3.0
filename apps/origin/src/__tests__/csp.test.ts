@@ -26,3 +26,10 @@ test('storefront CSP allows the same-origin web app manifest (manifest-src self)
   // Without manifest-src, /manifest.json falls back to default-src 'none' and the browser blocks it.
   assert.deepEqual(STOREFRONT_BASE_CSP['manifest-src'], ["'self'"]);
 });
+
+test('storefront CSP allows same-origin images (img-src self) — http://localhost + generated icons', () => {
+  const imgSrc = STOREFRONT_BASE_CSP['img-src'];
+  assert.ok(imgSrc.includes("'self'"), "img-src must allow 'self' (http localhost + /icon-*.png)");
+  assert.ok(imgSrc.includes('https:'), 'https images (product CDN) still allowed');
+  assert.ok(imgSrc.includes('data:'), 'data: images still allowed');
+});
