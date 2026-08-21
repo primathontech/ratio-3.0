@@ -23,7 +23,6 @@ import {
   DATA_SOURCE_TYPES,
   SW_REGISTER_TAG,
   SW_CSP,
-  SERVICE_WORKER_PATH,
 } from '@ratio/builder-core';
 import {
   renderSeoHead,
@@ -254,9 +253,9 @@ export async function renderStorefront(
         // (merchantInfo + a runtime cookie-token bridge), so the page stays edge-cacheable.
         const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
         const themeTokens = resolveThemeTokens(compiled, (tenant.theme ?? {}) as ThemeTokens);
-        // Opt-in PWA service worker (OFCE-726): only a store whose theme ships sw.js gets the registration
-        // snippet (authorized by its CSP hash) + the worker-src relaxation. No sw.js → nothing changes.
-        const hasSw = typeof compiled[SERVICE_WORKER_PATH] === 'string';
+        // Default-on PWA (OFCE-726): every bundle store gets the manifest link + the SW registration
+        // snippet (authorized by its CSP hash) + the worker-src relaxation. /sw.js serves the theme's own
+        // service worker or a conservative default, so registration always resolves.
         // The theme owns the whole document → render its layout/theme.liquid with the chrome + sections +
         // the platform-only slices (content_for_header/body_end) + brand tokens.
         const html = await timed(c, 'layout', () =>
@@ -265,10 +264,7 @@ export async function renderStorefront(
             header,
             footer: footerHtml,
             content_for_header:
-              ix.head +
-              seo.head +
-              '<link rel="manifest" href="/manifest.json">' +
-              (hasSw ? SW_REGISTER_TAG : ''),
+              ix.head + seo.head + '<link rel="manifest" href="/manifest.json">' + SW_REGISTER_TAG,
             content_for_body_end: ix.bodyEnd,
             token_css: tokenCss(themeTokens),
             site_name: tenant.name,
@@ -293,7 +289,7 @@ export async function renderStorefront(
         c.header('cache-control', 'public, s-maxage=300, stale-while-revalidate=86400');
         setStorefrontSecurity(
           c,
-          cspToString(mergeCsp(mergeCsp(STOREFRONT_BASE_CSP, ix.csp), hasSw ? SW_CSP : {}))
+          cspToString(mergeCsp(mergeCsp(STOREFRONT_BASE_CSP, ix.csp), SW_CSP))
         );
         return c.html(html);
       }

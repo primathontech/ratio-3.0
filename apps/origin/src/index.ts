@@ -190,7 +190,13 @@ app.all('*', async (c) => {
   // Well-known root paths served from the live theme, tenant-scoped: /favicon.ico + /manifest.json
   // (OFCE-631), and /sw.js (OFCE-726) — the service worker MUST sit at root so its scope is the whole
   // store. A store whose theme ships no sw.js 404s here (the PWA is opt-in).
-  if (path === '/favicon.ico' || path === '/manifest.json' || path === '/sw.js') {
+  if (
+    path === '/favicon.ico' ||
+    path === '/manifest.json' ||
+    path === '/sw.js' ||
+    path === '/icon-192.png' ||
+    path === '/icon-512.png'
+  ) {
     return handleWellKnown(c, { themeStore, islandsUrl: ISLANDS_URL, islandsJs: ISLANDS_JS });
   }
 

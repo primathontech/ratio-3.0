@@ -10,6 +10,7 @@ export * from './theme/theme-render';
 export * from './theme/theme-tokens';
 export * from './theme/manifest';
 export * from './theme/service-worker';
+export * from './theme/icon';
 export * from './theme/theme-settings';
 export * from './theme/token-spec';
 export * from './theme/theme-store';

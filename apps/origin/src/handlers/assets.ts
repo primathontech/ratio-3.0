@@ -9,6 +9,8 @@ import {
   resolveThemeTokens,
   webManifest,
   SERVICE_WORKER_PATH,
+  DEFAULT_SERVICE_WORKER,
+  solidIconPng,
 } from '@ratio/builder-core';
 import { type Vars } from './helpers';
 
@@ -117,14 +119,22 @@ export async function handleWellKnown(c: Context<Vars>, deps: AssetsDeps): Promi
       withTags();
       return c.body(body);
     } else if (path === '/sw.js') {
-      // The service worker is OPT-IN: only a store whose theme ships sw.js gets one. Served at /sw.js
-      // (root scope) as JS. No sw.js → fall through to the 404 below (no worker, strict CSP unchanged).
-      const sw = compiled[SERVICE_WORKER_PATH];
-      if (typeof sw === 'string') {
-        c.header('content-type', 'text/javascript; charset=utf-8');
-        withTags();
-        return c.body(sw);
-      }
+      // Default-on PWA: every store gets a service worker at /sw.js (root scope). A theme's own sw.js
+      // wins; otherwise the conservative default (network-first HTML, cache-first immutable assets).
+      const authored = compiled[SERVICE_WORKER_PATH];
+      const sw = typeof authored === 'string' ? authored : DEFAULT_SERVICE_WORKER;
+      c.header('content-type', 'text/javascript; charset=utf-8');
+      withTags();
+      return c.body(sw);
+    } else if (path === '/icon-192.png' || path === '/icon-512.png') {
+      // Default maskable PWA icons, generated per store tinted with its brand colour (a raster ≥192 + a
+      // 512 is what browsers require to install). A merchant-uploaded icon set overrides via the manifest.
+      const size = path === '/icon-512.png' ? 512 : 192;
+      const tokens = resolveThemeTokens(compiled, tenant.theme);
+      const png = solidIconPng(tokens.color ?? '#000000', size);
+      c.header('content-type', 'image/png');
+      withTags();
+      return c.body(png.slice().buffer as ArrayBuffer);
     } else if (path === '/favicon.ico') {
       // The theme references a favicon under any path whose basename is favicon.ico (e.g. the editor
       // uploads assets under `assets/`), so match on the basename, not an exact key.
