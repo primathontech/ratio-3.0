@@ -133,6 +133,19 @@ test('compose: sections render in order; title escapes; islands runtime ships; t
   assert.equal(page.cacheable, true);
 });
 
+test('compose: chrome.title overrides the doc title (entity name on a shared template)', async () => {
+  const reg = defaultRegistry();
+  const doc = validatePageDoc({ path: '/products/:handle', title: 'Product', sections: [] }, reg);
+  const page = await composePage(doc, reg, {}, { title: 'Air Max 90' });
+  assert.match(
+    page.html,
+    /<title>Air Max 90<\/title>/,
+    'entity title wins over the template title'
+  );
+  const fallback = await composePage(doc, reg, {}, {});
+  assert.match(fallback.html, /<title>Product<\/title>/, 'doc title used when no override');
+});
+
 test('compose: the islands runtime is referenced ONLY when the page has an island section', async () => {
   const reg = defaultRegistry();
   reg.register(

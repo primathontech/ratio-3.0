@@ -11,7 +11,6 @@ import {
   type ThemeTokens,
   resolveThemeTokens,
   canonicalPath,
-  seoHead,
   pageTag,
   tenantTag,
   matchRoute,
@@ -21,7 +20,18 @@ import {
   renderThemeLayout,
   layoutOwnsDocument,
   tokenCss,
+  DATA_SOURCE_TYPES,
 } from '@ratio/builder-core';
+import {
+  renderSeoHead,
+  extractProductSeo,
+  productSchema,
+  breadcrumbSchema,
+  productBreadcrumbs,
+  organizationSchema,
+  websiteSchema,
+  type ProductLike,
+} from '@ratio/seo';
 import { composeGokwik, mergeCsp, cspToString, type CspDirectives } from '@ratio/gokwik';
 import { defaultRegistry, renderSection, islandPlaceholder } from '@ratio/builder-registry';
 import { renderUntrusted } from '@ratio/builder-render/isolate';
@@ -40,6 +50,86 @@ import { type Stats } from './ops';
 // An island page relaxes the strict no-JS CSP by exactly what the first-party runtime needs and no
 // more: run the self-hosted script, and let it fetch the same-origin island endpoints.
 const ISLANDS_CSP: CspDirectives = { 'script-src': ["'self'"], 'connect-src': ["'self'"] };
+
+type ResolverT = ReturnType<typeof storefrontResolver>;
+type ResolveCtx = Parameters<ResolverT['fetch']>[1];
+
+// Build the <head> SEO block for a page via @ratio/seo. A product page gets the entity layer —
+// og:title/description/image + Product & Breadcrumb JSON-LD, resolved from the page's product — and its
+// <title> (pageTitle); the home page gets WebSite + Organization JSON-LD; every other page type falls
+// back to the site-level head. Wrapped so SEO can NEVER 500 a page — any resolver/build error degrades
+// to the plain site-level head (the page-builder branch calls this outside the bundle branch's
+// try/catch, so the guarantee lives here). NOTE: the product resolve is a SECOND fetch (the main-product
+// section resolves it too); threading the section's resolved value out to the head is a follow-up.
+async function buildSeoHead(
+  resolver: ResolverT,
+  matched: RouteMatch | null,
+  ctx: ResolveCtx,
+  reqUrl: string,
+  siteName: string
+): Promise<{ head: string; pageTitle?: string }> {
+  // Parse the request URL ONCE, before the try, with its own guard — so the catch below can reuse the
+  // derived canonical without re-parsing (a re-parse of a malformed reqUrl would throw twice and escape
+  // the must-not-500 guarantee). reqUrl from Hono is always valid, so the fallbacks are belt-and-braces.
+  let origin = '';
+  let canonicalPathname = '/';
+  let canonicalUrl = reqUrl;
+  try {
+    const u = new URL(reqUrl);
+    origin = u.origin;
+    canonicalPathname = canonicalPath(u.pathname);
+    canonicalUrl = `${origin}${canonicalPathname}`;
+  } catch {
+    // keep the raw reqUrl as the canonical fallback
+  }
+
+  try {
+    const config = { siteName, siteUrl: origin };
+
+    if (matched?.pageType === 'product' && matched.params?.handle) {
+      const resolved = await resolver
+        .fetch({ type: DATA_SOURCE_TYPES.PRODUCT, params: { handle: matched.params.handle } }, ctx)
+        .catch(() => null);
+      const fields = resolved?.value ? extractProductSeo(resolved.value as ProductLike) : null;
+      if (fields?.title) {
+        return {
+          head: renderSeoHead({
+            url: reqUrl,
+            canonicalUrl,
+            siteName,
+            title: fields.title,
+            description: fields.description,
+            imageUrl: fields.images[0],
+            type: 'product',
+            jsonLd: [
+              productSchema({ ...fields, name: fields.title, url: canonicalUrl }, config),
+              breadcrumbSchema(productBreadcrumbs(origin, canonicalPathname, fields.title)),
+            ],
+          }),
+          pageTitle: fields.title,
+        };
+      }
+    }
+
+    if (matched?.pageType === 'home') {
+      return {
+        head: renderSeoHead({
+          url: reqUrl,
+          canonicalUrl,
+          siteName,
+          jsonLd: [websiteSchema(config), organizationSchema(config)],
+        }),
+      };
+    }
+
+    return { head: renderSeoHead({ url: reqUrl, canonicalUrl, siteName }) };
+  } catch (e) {
+    logger.warn({ evt: 'seo_head_error', err: e instanceof Error ? e.message : 'unknown' });
+    // Degrade to the plain site head using the already-parsed canonical — no re-parse, so this path
+    // cannot throw. renderSeoHead is itself total (a bad url just means no facet-noindex).
+    return { head: renderSeoHead({ url: reqUrl, canonicalUrl, siteName }) };
+  }
+}
 
 export type StorefrontDeps = {
   themeStore: ThemeStore | null;
@@ -91,7 +181,7 @@ export async function renderStorefront(
         // bundle-miss fall-through. The body is rendered WITHOUT its layout (applyLayout:false); the
         // layout is applied as a final step below, once the chrome is ready — so header/footer flow
         // INTO the layout's {{ header }}/{{ footer }} slots from one nav read.
-        const [{ html: sections, tags: dataTags }, [menu, footerData]] = await Promise.all([
+        const [{ html: sections, tags: dataTags }, [menu, footerData], seo] = await Promise.all([
           timed(c, 'compose', () =>
             renderThemePage(
               compiled,
@@ -131,6 +221,19 @@ export async function renderStorefront(
           timed(c, 'nav', () =>
             Promise.all([fetchMainMenu(merchantId, navUrl), fetchFooter(merchantId, navUrl)])
           ),
+          timed(c, 'seo', () =>
+            buildSeoHead(
+              resolver,
+              matched,
+              {
+                tenantId: tenantId as string,
+                routeParams: matched?.params,
+                commerce: tenant.commerce,
+              },
+              c.req.url,
+              tenant.name
+            )
+          ),
         ]);
         // Header/footer are rendered from the THEME's editable header/footer sections (renderChrome)
         // with the store's real name + nav — the same header/footer the order page uses — and flow into
@@ -155,10 +258,11 @@ export async function renderStorefront(
             content_for_layout: sections,
             header,
             footer: footerHtml,
-            content_for_header: ix.head + seoHead({ url: c.req.url, siteName: tenant.name }),
+            content_for_header: ix.head + seo.head,
             content_for_body_end: ix.bodyEnd,
             token_css: tokenCss(themeTokens),
             site_name: tenant.name,
+            page_title: seo.pageTitle,
           })
         );
         c.header('x-tenant', tenantId as string);
@@ -240,12 +344,22 @@ export async function renderStorefront(
         return [m, f] as const;
       });
       const ix = composeGokwik(integrationContext(tenant.commerce, matched?.pageType ?? 'page'));
+      const seo = await timed(c, 'seo', () =>
+        buildSeoHead(
+          resolver,
+          matched,
+          { tenantId: tenantId as string, routeParams: matched?.params, commerce: tenant.commerce },
+          c.req.url,
+          tenant.name
+        )
+      );
       const composed = await timed(c, 'compose', () =>
         composePage(resolvedDoc, pbRegistry, tenant.theme ?? {}, {
           menu,
           footer,
           siteName: tenant.name,
-          headExtra: ix.head + seoHead({ url: c.req.url, siteName: tenant.name }),
+          title: seo.pageTitle,
+          headExtra: ix.head + seo.head,
           bodyEnd: ix.bodyEnd,
           islandsRuntimeUrl: islandsUrl,
         })

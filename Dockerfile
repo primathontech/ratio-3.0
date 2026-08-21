@@ -24,6 +24,7 @@ COPY packages/observability/package.json ./packages/observability/package.json
 COPY packages/observability-core/package.json ./packages/observability-core/package.json
 COPY packages/observability-edge/package.json ./packages/observability-edge/package.json
 COPY packages/observability-tracing/package.json ./packages/observability-tracing/package.json
+COPY packages/seo/package.json ./packages/seo/package.json
 COPY apps/admin-api/package.json ./apps/admin-api/package.json
 COPY apps/admin-web/package.json ./apps/admin-web/package.json
 COPY apps/edge/package.json ./apps/edge/package.json
