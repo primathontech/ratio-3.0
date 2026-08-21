@@ -6,6 +6,6 @@
       {% if subheading %}<p class="ed-sub">{{ subheading | escape }}</p>{% endif %}
       {% if cta_label %}<a class="btn" href="{{ cta_href | default: '/collections/all' | escape }}">{{ cta_label | escape }}</a>{% endif %}
     </div>
-    <div class="ed-hero-img ph">{% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
+    <div class="ed-hero-img ph">{% if image_url %}<img src="{{ image_url | asset_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
   </div>
 </section>

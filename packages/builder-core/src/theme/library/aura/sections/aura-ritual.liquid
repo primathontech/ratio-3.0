@@ -1,6 +1,6 @@
 <section class="rt sec">
   <div class="feat">
-    <div class="feat-media">{% if image_url %}<img src="{{ image_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
+    <div class="feat-media">{% if image_url %}<img src="{{ image_url | asset_url | escape }}" alt="{{ heading | escape }}">{% endif %}</div>
     <div class="feat-body">
       {% if kicker %}<span class="eyebrow">{{ kicker | escape }}</span>{% endif %}
       <h2>{{ heading | escape }}</h2>
