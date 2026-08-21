@@ -56,8 +56,8 @@ for (const [name, files] of THEMES) {
     }
   });
 
-  test(`${name} uses the platform default --maxw of 1440px (OFCE-701)`, () => {
-    assert.match(files['assets/base.css'], /--maxw:\s*1440px/, `${name} --maxw default is 1440px`);
+  test(`${name} owns its content width — --maxw: 1440px in its base.css`, () => {
+    assert.match(files['assets/base.css'], /--maxw:\s*1440px/, `${name} defines --maxw: 1440px`);
   });
 }
 

@@ -203,7 +203,6 @@ export const SEMANTIC_DEFAULTS: Record<string, string> = {
   base: '16px',
   leading: '1.55',
   gutter: '24px',
-  maxw: '1440px',
 };
 
 // Legacy var aliases → new semantic names, so a theme mid-migration using --accent/--r resolves.

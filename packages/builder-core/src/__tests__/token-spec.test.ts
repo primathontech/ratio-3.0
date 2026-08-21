@@ -16,7 +16,6 @@ test('defaultTokensCss emits a valid :root spanning every token tier', () => {
   // semantic defaults
   assert.ok(css.includes('--color-accent:#2563eb'), 'semantic accent');
   assert.ok(css.includes('--color-ink:#0f172a'), 'semantic ink');
-  assert.ok(css.includes('--maxw:1440px'), 'default content width is 1440px');
   assert.ok(css.includes('--font:'), 'body font role');
   // legacy aliases point at the new semantic vars, so a theme mid-migration using --accent/--r resolves
   assert.ok(css.includes('--accent:var(--color-accent)'), 'legacy --accent alias');
@@ -26,6 +25,5 @@ test('defaultTokensCss emits a valid :root spanning every token tier', () => {
 test('the token spec is data-driven (primitive + semantic maps are the source)', () => {
   assert.equal(PRIMITIVES.space['4'], '16px');
   assert.equal(PRIMITIVES.radius.md, '12px');
-  assert.equal(SEMANTIC_DEFAULTS.maxw, '1440px');
   assert.equal(SEMANTIC_DEFAULTS['color-accent'], '#2563eb');
 });
