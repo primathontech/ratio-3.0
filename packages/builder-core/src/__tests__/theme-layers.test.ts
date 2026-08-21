@@ -56,11 +56,11 @@ for (const [name, files] of THEMES) {
     }
   });
 
-  test(`${name} owns its content width — --maxw: 1440px in its base.css`, () => {
-    assert.match(files['assets/base.css'], /--maxw:\s*1440px/, `${name} defines --maxw: 1440px`);
+  test(`${name} owns its content width — --maxw: 1536px in its base.css`, () => {
+    assert.match(files['assets/base.css'], /--maxw:\s*1536px/, `${name} defines --maxw: 1536px`);
   });
 
-  test(`${name} uses responsive side gutters so content isn't edge-to-edge below 1440px`, () => {
+  test(`${name} uses responsive side gutters so content isn't edge-to-edge below 1536px`, () => {
     assert.match(
       files['assets/base.css'],
       /clamp\(24px,\s*5vw,\s*80px\)/,
