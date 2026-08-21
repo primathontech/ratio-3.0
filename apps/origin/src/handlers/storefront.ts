@@ -258,7 +258,7 @@ export async function renderStorefront(
             content_for_layout: sections,
             header,
             footer: footerHtml,
-            content_for_header: ix.head + seo.head,
+            content_for_header: ix.head + seo.head + '<link rel="manifest" href="/manifest.json">',
             content_for_body_end: ix.bodyEnd,
             token_css: tokenCss(themeTokens),
             site_name: tenant.name,

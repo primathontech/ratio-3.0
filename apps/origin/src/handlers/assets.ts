@@ -6,6 +6,8 @@ import {
   safeAssetContentType,
   tenantTag,
   ThemeStore,
+  resolveThemeTokens,
+  defaultWebManifest,
 } from '@ratio/builder-core';
 import { type Vars } from './helpers';
 
@@ -101,12 +103,19 @@ export async function handleWellKnown(c: Context<Vars>, deps: AssetsDeps): Promi
       c.header('x-handler', 'well-known');
     };
     if (path === '/manifest.json') {
-      const body = compiled['manifest.json'];
-      if (typeof body === 'string') {
-        c.header('content-type', 'application/json; charset=utf-8');
-        withTags();
-        return c.body(body);
-      }
+      // A theme may ship its own manifest.json (author control) — serve it verbatim. Otherwise
+      // SYNTHESIZE a basic installable manifest from what the merchant already set in admin: the store
+      // name + brand colour (resolved: theme default, tenant override wins). So every store is a valid
+      // PWA with no separate form to fill in.
+      const authored = compiled['manifest.json'];
+      const tokens = resolveThemeTokens(compiled, tenant.theme);
+      const body =
+        typeof authored === 'string'
+          ? authored
+          : defaultWebManifest({ name: tenant.name, themeColor: tokens.color });
+      c.header('content-type', 'application/json; charset=utf-8');
+      withTags();
+      return c.body(body);
     } else if (path === '/favicon.ico') {
       // The theme references a favicon under any path whose basename is favicon.ico (e.g. the editor
       // uploads assets under `assets/`), so match on the basename, not an exact key.

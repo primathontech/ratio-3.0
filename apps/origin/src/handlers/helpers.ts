@@ -60,6 +60,9 @@ export const STOREFRONT_BASE_CSP: CspDirectives = {
   'style-src': ["'self'", "'unsafe-inline'"],
   'img-src': ['https:', 'data:'],
   'font-src': ["'self'", 'data:'],
+  // The web app manifest (/manifest.json) is same-origin; without this it falls back to default-src
+  // 'none' and the browser refuses to fetch it.
+  'manifest-src': ["'self'"],
   'base-uri': ["'none'"],
   'form-action': ["'self'"],
   'frame-ancestors': ["'none'"],
